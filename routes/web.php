@@ -2,8 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Mail;
 
+// Controllers
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminUsersController;
@@ -37,6 +37,8 @@ Route::middleware('guest')->group(function () {
 /*
 |--------------------------------------------------------------------------
 | توجيه موحّد بعد أي توثيق (Login / Register / OTP)
+| يعتمد على دوال isAdmin()/isPartner() في موديل User
+| ⚠️ تأكد أن الدوال تستخدم عمود roles.name (وليس role_name)
 |--------------------------------------------------------------------------
 */
 Route::get('/post-auth-redirect', function () {
@@ -46,7 +48,12 @@ Route::get('/post-auth-redirect', function () {
     if ($user && method_exists($user, 'isAdmin') && $user->isAdmin()) {
         return redirect()->route('admin.dashboard');
     }
-    return redirect()->route('partner.dashboard');
+
+    if ($user && method_exists($user, 'isPartner') && $user->isPartner()) {
+        return redirect()->route('partner.dashboard');
+    }
+
+    return redirect()->route('dashboard');
 })->middleware('auth')->name('post.auth.redirect');
 
 /*
@@ -54,7 +61,9 @@ Route::get('/post-auth-redirect', function () {
 | Dashboard عام
 |--------------------------------------------------------------------------
 */
-Route::view('/dashboard', 'dashboard')->middleware(['auth', 'verified'])->name('dashboard');
+Route::view('/dashboard', 'dashboard')
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
 
 /*
 |--------------------------------------------------------------------------
@@ -91,11 +100,19 @@ Route::middleware('auth')->group(function () {
 /*
 |--------------------------------------------------------------------------
 | منطقة الشريك Partner
+| ⚠️ RoleMiddleware هنا يستخدم اسم الدور كما في roles.name
+|     - Partner فقط
+|     - لو تبغى تسمح للأدمن يدخل منطقة الشريك أيضًا:
+|       استبدل RoleMiddleware بـ ':Partner,Admin,Super Admin'
 |--------------------------------------------------------------------------
 */
 Route::prefix('partner')
     ->name('partner.')
-    ->middleware(['auth', 'verified'])
+    ->middleware([
+        'auth',
+        'verified',
+        \App\Http\Middleware\RoleMiddleware::class . ':Partner',
+    ])
     ->group(function () {
         Route::get('/type', [PartnerOnboardingController::class, 'typeForm'])->name('type.form');
         Route::post('/type', [PartnerOnboardingController::class, 'typeStore'])->name('type.store');
@@ -114,12 +131,14 @@ Route::prefix('partner')
 /*
 |--------------------------------------------------------------------------
 | منطقة الأدمن Admin
+| ⚠️ RoleMiddleware هنا يسمح لـ Super Admin و Admin
+|    وتقدر تبقيه كما هو (الموصى به)
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')
     ->middleware([
         'auth',
-        \App\Http\Middleware\RoleMiddleware::class . ':Super Admin,Admin', // 👈 نستخدم الكلاس مباشرة
+        \App\Http\Middleware\RoleMiddleware::class . ':Super Admin,Admin',
     ])
     ->name('admin.')
     ->group(function () {
@@ -159,4 +178,9 @@ Route::prefix('admin')
         Route::get('/reports/export/summary.pdf', [ReportsController::class, 'exportSummaryPdf'])->name('reports.export.summary.pdf');
     });
 
+/*
+|--------------------------------------------------------------------------
+| auth scaffolding routes (إن وجدت مثل Breeze/Jetstream)
+|--------------------------------------------------------------------------
+*/
 require __DIR__ . '/auth.php';

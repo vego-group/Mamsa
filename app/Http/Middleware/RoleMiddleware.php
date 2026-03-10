@@ -7,22 +7,27 @@ use Illuminate\Http\Request;
 
 class RoleMiddleware
 {
+    /**
+     * التأكد من امتلاك المستخدم لأحد الأدوار المطلوبة.
+     * مثال الاستعمال:
+     *   RoleMiddleware:Super Admin,Admin
+     *   RoleMiddleware:Partner
+     */
     public function handle(Request $request, Closure $next, ...$roles)
     {
         $user = $request->user();
 
-        if (! $user) {
+        if (!$user) {
             return redirect()->route('login');
         }
 
-        // super_admin -> Super Admin (تطبيع)
+        // تطبيع أسماء الأدوار
         $normalized = array_map(function ($r) {
             return ucwords(str_replace('_', ' ', trim($r)));
         }, $roles);
 
-        $has = $user->roles()->whereIn('role_name', $normalized)->exists();
-
-        if (! $has) {
+        // استخدم دالة الموديل
+        if (!$user->hasAnyRole($normalized)) {
             abort(403, 'ليس لديك الصلاحية لدخول هذه الصفحة.');
         }
 
