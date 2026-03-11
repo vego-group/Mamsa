@@ -22,7 +22,7 @@ class AdminUsersController extends Controller
 
         /** جدول المدراء فقط */
         $admins = User::query()
-            ->whereHas('roles', fn($r) => $r->where('name', 'admin'))
+            ->whereHas('roles', fn($r) => $r->where('name', 'Admin'))
             ->when($q !== '', fn($query) =>
                 $query->where(function ($sub) use ($q) {
                     $sub->where('name', 'like', "%$q%")
@@ -34,10 +34,10 @@ class AdminUsersController extends Controller
             ->paginate(10, ['*'], $adminsPageName)
             ->withQueryString();
 
-        /** جدول المستخدمين العاديين (بدون super_admin) */
+        /** جدول المستخدمين العاديين (بدون Super Admin) */
         $users = User::query()
-            ->whereDoesntHave('roles', fn($r) => $r->where('name', 'admin'))
-            ->whereDoesntHave('roles', fn($r) => $r->where('name', 'super_admin'))
+            ->whereDoesntHave('roles', fn($r) => $r->where('name', 'Admin'))
+            ->whereDoesntHave('roles', fn($r) => $r->where('name', 'Super Admin'))
             ->when($q !== '', fn($query) =>
                 $query->where(function ($sub) use ($q) {
                     $sub->where('name', 'like', "%$q%")
@@ -89,12 +89,12 @@ class AdminUsersController extends Controller
         $user = User::create([
             'name'      => $validated['name'],
             'email'     => $validated['email'],
-            'phone'     => $validated['phone'],
+            'phone'     => $validated['phone'] ?? null,
             'password'  => Hash::make($validated['password']),
             'is_active' => $isActive,
         ]);
 
-        // دايم مدير
+        // دايم مدير — الآن تعمل لأن assignRole أضفناها داخل الموديل وتطبّع الاسم تلقائيًا
         $user->assignRole('admin');
 
         return redirect()->route('admin.users.index')

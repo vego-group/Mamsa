@@ -4,44 +4,75 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Str;
 
 class Unit extends Model
 {
     use HasFactory;
 
+    protected $table = 'units';
+
     protected $fillable = [
         'user_id',
-        'name',
-        'code',
+        'name',          // اسم الوحدة
+        'code',          // الكود
         'description',
-        'status',
+        'status',        // available | unavailable | reserved
         'price',
+        'calendar_token'
     ];
 
-    // مالك الوحدة (المشرف الذي أنشأها)
+    protected static function booted(): void
+    {
+        // توليد calendar_token تلقائيًا إذا مفقود
+        static::creating(function (Unit $unit) {
+            if (empty($unit->calendar_token)) {
+                $unit->calendar_token = Str::random(40);
+            }
+        });
+    }
+
     public function owner()
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
-    // بادجات جاهزة للعرض
+    public function images()
+    {
+        // FK: unit_images.unit_id --> units.id
+        return $this->hasMany(UnitImage::class, 'unit_id', 'id');
+    }
+
+    public function bookings()
+    {
+        return $this->hasMany(Booking::class, 'unit_id', 'id');
+    }
+
+    // بادجات
     public function getStatusLabelAttribute(): string
     {
         return match ($this->status) {
             'available'   => 'متاحة',
             'unavailable' => 'غير متاحة',
             'reserved'    => 'محجوزة',
-            default       => $this->status,
+            default       => (string)$this->status,
         };
     }
 
     public function getStatusClassAttribute(): string
     {
         return match ($this->status) {
-            'available'   => 'bg-green-100 text-green-700 border-green-300',
-            'unavailable' => 'bg-gray-200 text-gray-700 border-gray-300',
-            'reserved'    => 'bg-yellow-100 text-yellow-800 border-yellow-300',
-            default       => 'bg-gray-100 text-gray-700 border-gray-200',
+            'available'   => 'badge bg-success-subtle text-success',
+            'unavailable' => 'badge bg-secondary-subtle text-secondary',
+            'reserved'    => 'badge bg-warning-subtle text-warning',
+            default       => 'badge bg-light text-body',
         };
+    }
+
+    // رابط التقويم العام (ICS)
+    public function getCalendarPublicUrlAttribute(): ?string
+    {
+        if (!$this->calendar_token) return null;
+        return route('units.calendar.ics', ['unit' => $this->id, 'token' => $this->calendar_token]);
     }
 }

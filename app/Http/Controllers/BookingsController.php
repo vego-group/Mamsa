@@ -11,54 +11,54 @@ class BookingsController extends Controller
 {
     use AuthorizesRequests;
 
-   public function index(Request $request)
-{
-    $this->authorize('viewAny', \App\Models\Booking::class);
+    public function index(Request $request)
+    {
+        $this->authorize('viewAny', \App\Models\Booking::class);
 
-    $q        = trim((string) $request->get('q', ''));
-    $status   = $request->get('status');          // new | confirmed | completed | cancelled | null
-    $unitId   = $request->get('unit_id');         // فلترة حسب وحدة معينة
-    $dateFrom = $request->get('from');            // YYYY-MM-DD
-    $dateTo   = $request->get('to');              // YYYY-MM-DD
+        $q        = trim((string) $request->get('q', ''));
+        $status   = $request->get('status');          // new | confirmed | completed | cancelled | null
+        $unitId   = $request->get('unit_id');         // فلترة حسب وحدة معينة
+        $dateFrom = $request->get('from');            // YYYY-MM-DD
+        $dateTo   = $request->get('to');              // YYYY-MM-DD
 
-    $query = \App\Models\Booking::query()
-        ->with(['unit.owner', 'customer'])
-        ->when($q !== '', function ($qb) use ($q) {
-            $qb->where(function ($sub) use ($q) {
-                $sub->whereHas('unit', function ($u) use ($q) {
-                        $u->where('name', 'like', "%{$q}%")
-                          ->orWhere('code', 'like', "%{$q}%");
-                    })
-                    ->orWhereHas('customer', function ($c) use ($q) {
-                        $c->where('name', 'like', "%{$q}%")
-                          ->orWhere('email', 'like', "%{$q}%");
-                    });
-            });
-        })
-        ->when($status, fn($qb) => $qb->where('status', $status))
-        ->when($unitId, fn($qb)   => $qb->where('unit_id', $unitId))
-        ->when($dateFrom, fn($qb) => $qb->whereDate('start_date', '>=', $dateFrom))
-        ->when($dateTo, fn($qb)   => $qb->whereDate('end_date', '<=', $dateTo))
-        ->orderByDesc('id');
+        $query = \App\Models\Booking::query()
+            ->with(['unit.owner', 'customer'])
+            ->when($q !== '', function ($qb) use ($q) {
+                $qb->where(function ($sub) use ($q) {
+                    $sub->whereHas('unit', function ($u) use ($q) {
+                            $u->where('name', 'like', "%{$q}%")
+                              ->orWhere('code', 'like', "%{$q}%");
+                        })
+                        ->orWhereHas('customer', function ($c) use ($q) {
+                            $c->where('name', 'like', "%{$q}%")
+                              ->orWhere('email', 'like', "%{$q}%");
+                        });
+                });
+            })
+            ->when($status, fn($qb) => $qb->where('status', $status))
+            ->when($unitId, fn($qb)   => $qb->where('unit_id', $unitId))
+            ->when($dateFrom, fn($qb) => $qb->whereDate('start_date', '>=', $dateFrom))
+            ->when($dateTo, fn($qb)   => $qb->whereDate('end_date', '<=', $dateTo))
+            ->orderByDesc('id');
 
-    // admin يشوف حجوزات وحداته فقط
-    if ($request->user()->hasRole('admin') && !$request->user()->hasRole('super_admin')) {
-        $query->whereHas('unit', fn($u) => $u->where('user_id', $request->user()->id));
+        // admin يشوف حجوزات وحداته فقط
+        if ($request->user()->hasRole('admin') && !$request->user()->hasRole('super_admin')) {
+            $query->whereHas('unit', fn($u) => $u->where('user_id', $request->user()->id));
+        }
+
+        $bookings = $query->paginate(12)->withQueryString();
+
+        // قائمة الوحدات للفلترة في أعلى الصفحة:
+        $unitsList = \App\Models\Unit::query()
+            ->when($request->user()->hasRole('admin') && !$request->user()->hasRole('super_admin'),
+                fn($u) => $u->where('user_id', $request->user()->id))
+            ->orderBy('name')
+            ->get(['id','name','code']);
+
+        return view('admin.bookings.index', compact(
+            'bookings', 'q', 'status', 'unitId', 'dateFrom', 'dateTo', 'unitsList'
+        ));
     }
-
-    $bookings = $query->paginate(12)->withQueryString();
-
-    // قائمة الوحدات للفلترة في أعلى الصفحة:
-    $unitsList = \App\Models\Unit::query()
-        ->when($request->user()->hasRole('admin') && !$request->user()->hasRole('super_admin'),
-            fn($u) => $u->where('user_id', $request->user()->id))
-        ->orderBy('name')
-        ->get(['id','name','code']);
-
-    return view('admin.bookings.index', compact(
-        'bookings', 'q', 'status', 'unitId', 'dateFrom', 'dateTo', 'unitsList'
-    ));
-}
 
     public function store(Request $request)
     {

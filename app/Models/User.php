@@ -9,43 +9,30 @@ class User extends Authenticatable
 {
     use Notifiable;
 
-    /**
-     * الحقول القابلة للتعبئة
-     */
     protected $fillable = [
         'phone',
         'name',
         'email',
         'password',
         'email_verified_at',
+        'is_active',
     ];
 
-    /**
-     * إخفاء الحقول عند التحويل لمصفوفة/JSON
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * التحويلات (Casts)
-     */
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'password' => 'hashed', // يشفر تلقائيًا في Laravel 10/11/12
+        'password' => 'hashed',
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | العلاقات
-    |--------------------------------------------------------------------------
-    */
+    // العلاقات
     public function roles()
     {
-        // جدول الأدوار: roles
-        // جدول الربط: user_roles
-        return $this->belongsToMany(Role::class, 'user_roles');
+        // pivot: user_roles(user_id, role_id) -> roles(id, name)
+        return $this->belongsToMany(Role::class, 'user_roles', 'user_id', 'role_id');
     }
 
     public function partner()
@@ -63,54 +50,71 @@ class User extends Authenticatable
         return $this->hasMany(Review::class);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | مساعدات الأدوار
-    |--------------------------------------------------------------------------
-    */
+    // ====== مساعدات الأدوار (تعتمد على عمود roles.name) ======
+    protected function normalizeRoleName(string $name): string
+    {
+        return ucwords(str_replace('_', ' ', trim($name)));
+    }
 
-    /**
-     * هل يملك المستخدم دورًا محددًا (بالاسم)؟
-     * يقبل نصًا واحدًا مثل: 'Super Admin'
-     */
     public function hasRole(string $roleName): bool
     {
         return $this->roles()->where('name', $this->normalizeRoleName($roleName))->exists();
     }
 
-    /**
-     * هل يملك المستخدم أيًا من الأدوار الممررة؟
-     * يقبل مصفوفة مثل: ['Admin', 'Super Admin']
-     */
     public function hasAnyRole(array $roleNames): bool
     {
         $normalized = array_map([$this, 'normalizeRoleName'], $roleNames);
         return $this->roles()->whereIn('name', $normalized)->exists();
     }
 
-    /**
-     * تسهيل: هل هو شريك؟
-     */
+    public function assignRole(string $name, bool $createIfMissing = false): void
+    {
+        $roleName = $this->normalizeRoleName($name);
+        $role = Role::where('name', $roleName)->first();
+
+        if (!$role && $createIfMissing) {
+            $role = Role::create(['name' => $roleName, 'guard_name' => 'web']);
+        }
+        if ($role) {
+            $this->roles()->syncWithoutDetaching([$role->id]);
+        }
+    }
+
+    public function syncRoles(array|string $names, bool $createIfMissing = false): void
+    {
+        $names = is_array($names) ? $names : array_map('trim', explode(',', $names));
+        $ids   = [];
+
+        foreach ($names as $name) {
+            $roleName = $this->normalizeRoleName($name);
+            $role = Role::where('name', $roleName)->first();
+            if (!$role && $createIfMissing) {
+                $role = Role::create(['name' => $roleName, 'guard_name' => 'web']);
+            }
+            if ($role) {
+                $ids[] = $role->id;
+            }
+        }
+
+        $this->roles()->sync($ids);
+    }
+
+    public function removeRole(string $name): void
+    {
+        $roleName = $this->normalizeRoleName($name);
+        $role = Role::where('name', $roleName)->first();
+        if ($role) {
+            $this->roles()->detach($role->id);
+        }
+    }
+
     public function isPartner(): bool
     {
         return $this->hasRole('Partner');
     }
 
-    /**
-     * تسهيل: هل هو أدمن (Admin أو Super Admin)؟
-     */
     public function isAdmin(): bool
     {
         return $this->hasAnyRole(['Admin', 'Super Admin']);
-    }
-
-    /**
-     * تطبيع أسماء الأدوار:
-     *  super_admin  -> Super Admin
-     *  admin        -> Admin
-     */
-    protected function normalizeRoleName(string $name): string
-    {
-        return ucwords(str_replace('_', ' ', trim($name)));
     }
 }

@@ -38,7 +38,6 @@ Route::middleware('guest')->group(function () {
 |--------------------------------------------------------------------------
 | توجيه موحّد بعد أي توثيق (Login / Register / OTP)
 | يعتمد على دوال isAdmin()/isPartner() في موديل User
-| ⚠️ تأكد أن الدوال تستخدم عمود roles.name (وليس role_name)
 |--------------------------------------------------------------------------
 */
 Route::get('/post-auth-redirect', function () {
@@ -100,10 +99,8 @@ Route::middleware('auth')->group(function () {
 /*
 |--------------------------------------------------------------------------
 | منطقة الشريك Partner
-| ⚠️ RoleMiddleware هنا يستخدم اسم الدور كما في roles.name
+| RoleMiddleware هنا يستخدم أسماء الأدوار كما هي في roles.name
 |     - Partner فقط
-|     - لو تبغى تسمح للأدمن يدخل منطقة الشريك أيضًا:
-|       استبدل RoleMiddleware بـ ':Partner,Admin,Super Admin'
 |--------------------------------------------------------------------------
 */
 Route::prefix('partner')
@@ -131,8 +128,7 @@ Route::prefix('partner')
 /*
 |--------------------------------------------------------------------------
 | منطقة الأدمن Admin
-| ⚠️ RoleMiddleware هنا يسمح لـ Super Admin و Admin
-|    وتقدر تبقيه كما هو (الموصى به)
+| RoleMiddleware هنا يسمح لـ Super Admin و Admin
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')
@@ -157,9 +153,15 @@ Route::prefix('admin')
 
         // الوحدات
         Route::get('/units', [UnitsController::class, 'index'])->name('units.index');
+        Route::get('/units/create', [UnitsController::class, 'create'])->name('units.create');
+        Route::post('/units', [UnitsController::class, 'store'])->name('units.store');
         Route::get('/units/{unit}/edit', [UnitsController::class, 'edit'])->name('units.edit');
         Route::put('/units/{unit}', [UnitsController::class, 'update'])->name('units.update');
         Route::delete('/units/{unit}', [UnitsController::class, 'destroy'])->name('units.destroy');
+
+        // تدوير توكن التقويم للوحدة
+        Route::put('/units/{unit}/calendar/rotate', [UnitsController::class, 'rotateCalendarToken'])
+            ->name('units.calendar.rotate');
 
         // الحجوزات
         Route::get('/bookings', [BookingsController::class, 'index'])->name('bookings.index');
@@ -169,14 +171,22 @@ Route::prefix('admin')
 
         // التقارير
         Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
-        Route::get('/reports/export/bookings.csv', [ReportsController::class, 'exportBookingsCsv'])->name('reports.export.bookings.csv');
-        Route::get('/reports/export/bookings.excel', [ReportsController::class, 'exportBookingsExcel'])->name('reports.export.bookings.excel');
-        Route::get('/reports/export/bookings.pdf', [ReportsController::class, 'exportBookingsPdf'])->name('reports.export.bookings.pdf');
+        Route::get('/reports/export/bookings.csv',  [ReportsController::class, 'exportBookingsCsv'])->name('reports.export.bookings.csv');
+        Route::get('/reports/export/bookings.excel',[ReportsController::class, 'exportBookingsExcel'])->name('reports.export.bookings.excel');
+        Route::get('/reports/export/bookings.pdf',  [ReportsController::class, 'exportBookingsPdf'])->name('reports.export.bookings.pdf');
 
-        Route::get('/reports/export/summary.csv', [ReportsController::class, 'exportSummaryCsv'])->name('reports.export.summary.csv');
+        Route::get('/reports/export/summary.csv',   [ReportsController::class, 'exportSummaryCsv'])->name('reports.export.summary.csv');
         Route::get('/reports/export/summary.excel', [ReportsController::class, 'exportSummaryExcel'])->name('reports.export.summary.excel');
-        Route::get('/reports/export/summary.pdf', [ReportsController::class, 'exportSummaryPdf'])->name('reports.export.summary.pdf');
+        Route::get('/reports/export/summary.pdf',   [ReportsController::class, 'exportSummaryPdf'])->name('reports.export.summary.pdf');
     });
+
+/*
+|--------------------------------------------------------------------------
+| مسار التقويم العام (ICS) — خارج الـ Auth للاشتراك الخارجي
+|--------------------------------------------------------------------------
+*/
+Route::get('/calendar/unit/{unit}/{token}.ics', [UnitsController::class, 'calendarIcs'])
+    ->name('units.calendar.ics');
 
 /*
 |--------------------------------------------------------------------------
