@@ -39,7 +39,7 @@ body {
 .header--hero{
   position: relative;
   padding-block: 16px;
-  padding-inline-end: 333px;
+  padding-inline-end: 320px;
    /* مساحة احتياط للشعار (300 + هامش) */
   border-bottom-left-radius: 30px;
   border-bottom-right-radius: 30px;
@@ -56,7 +56,7 @@ body {
 }
 /* ✔ تكبير الشعار بدون ما يكبر الهيدر ولا تتغير الخلفية */
 .logo img{
-  width: 140px;
+  width: 130px;
   height: auto;
   display: block;
   transform: translateX(-3px);
