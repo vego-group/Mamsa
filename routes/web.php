@@ -49,7 +49,7 @@ Route::get('/post-auth-redirect', function () {
     }
 
     if ($user && method_exists($user, 'isPartner') && $user->isPartner()) {
-        return redirect()->route('partner.dashboard');
+    return redirect()->route('partner.type.form');
     }
 
     return redirect()->route('dashboard');

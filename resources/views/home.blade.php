@@ -21,9 +21,9 @@
     <!-- أزرار يسار الهيدر (كبسولات) -->
     <div class="header-actions">
      
-      <a href="{{ route('auth.phone', ['intent' => 'partner']) }}" class="header-pill">
-       تسجيل الدخول
-      </a>
+      <a href="{{ route('auth.phone', ['intent' => 'login']) }}" class="header-pill">
+      تسجيل الدخول
+     </a>
 
     
       <a href="{{ route('auth.phone', ['intent' => 'partner']) }}" class="header-pill">

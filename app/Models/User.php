@@ -32,7 +32,8 @@ class User extends Authenticatable
     public function roles()
     {
         // pivot: user_roles(user_id, role_id) -> roles(id, name)
-        return $this->belongsToMany(Role::class, 'user_roles', 'user_id', 'role_id');
+        return $this->belongsToMany(Role::class, 'user_roles', 'user_id', 'role_id')
+            ->select(['roles.id','roles.role_name as name']);
     }
 
     public function partner()
@@ -58,19 +59,19 @@ class User extends Authenticatable
 
     public function hasRole(string $roleName): bool
     {
-        return $this->roles()->where('name', $this->normalizeRoleName($roleName))->exists();
+        return $this->roles()->where('role_name', $this->normalizeRoleName($roleName))->exists();
     }
 
     public function hasAnyRole(array $roleNames): bool
     {
         $normalized = array_map([$this, 'normalizeRoleName'], $roleNames);
-        return $this->roles()->whereIn('name', $normalized)->exists();
+        return $this->roles()->whereIn('role_name', $normalized)->exists();
     }
 
     public function assignRole(string $name, bool $createIfMissing = false): void
     {
         $roleName = $this->normalizeRoleName($name);
-        $role = Role::where('name', $roleName)->first();
+        $role = Role::where('role_name', $roleName)->first();
 
         if (!$role && $createIfMissing) {
             $role = Role::create(['name' => $roleName, 'guard_name' => 'web']);

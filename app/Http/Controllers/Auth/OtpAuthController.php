@@ -61,7 +61,6 @@ class OtpAuthController extends Controller
             ['phone' => $validated['phone']],
             [
                 'name'     => null,
-                'password' => bcrypt(str()->random(16)),
             ]
         );
 

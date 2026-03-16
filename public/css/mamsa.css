@@ -158,8 +158,7 @@ textarea.input{ resize:vertical; }
 .header--hero{
   position: relative;
   padding-block: 16px;
-  padding-inline-end: 320px; /* مساحة للشعار يمينًا */
-  padding-inline-start: 16px; /* مساحة يسار للأزرار */
+  padding-inline: 20px;
 }
 
 /* الحاوية الداخلية */
@@ -169,8 +168,8 @@ textarea.input{ resize:vertical; }
   padding-inline: 8px;
   display: flex;
   align-items: center;
-  justify-content: flex-start;   /* بدل space-between */
-  gap: 16px;
+  justify-content: space-between;
+
 }
 
 /* الشعار في أقصى اليمين (RTL) */
