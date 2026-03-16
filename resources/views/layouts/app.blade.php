@@ -6,6 +6,9 @@
     <title>مَمْسَى</title>
 
     <link rel="stylesheet" href="{{ asset('css/mamsa.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </head>
 
 <body>
@@ -47,5 +50,6 @@
     © {{ date('Y') }} مَمْسَى — جميع الحقوق محفوظة
 </footer>
 
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </body>
 </html>

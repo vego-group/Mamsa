@@ -17,13 +17,29 @@ use App\Http\Controllers\Auth\CompleteProfileController;
 use App\Http\Controllers\Partner\PartnerOnboardingController;
 use App\Http\Controllers\Partner\PartnerUnitController;
 
+use App\Http\Controllers\UnitDetailsController;
+
+use App\Models\Unit;
+
+
+
 /*
 |--------------------------------------------------------------------------
 | الصفحة الرئيسية
 |--------------------------------------------------------------------------
 */
-Route::view('/', 'home')->name('home');
+Route::get('/', function () {
 
+    $units = Unit::with('images')
+        ->where('approval_status','approved')
+        ->where('unit_status','available')
+        ->latest()
+        ->take(8)
+        ->get();
+
+    return view('home', compact('units'));
+
+})->name('home');
 /*
 |--------------------------------------------------------------------------
 | تسجيل الدخول بالبريد (اختبار)
@@ -179,6 +195,12 @@ Route::prefix('admin')
         Route::get('/reports/export/summary.excel', [ReportsController::class, 'exportSummaryExcel'])->name('reports.export.summary.excel');
         Route::get('/reports/export/summary.pdf',   [ReportsController::class, 'exportSummaryPdf'])->name('reports.export.summary.pdf');
     });
+     /*
+|--------------------------------------------------------------------------
+|    عرض تفاصيل الوحدة
+|--------------------------------------------------------------------------
+*/
+       Route::get('/units/{unit}', [UnitDetailsController::class, 'show'])->name('units.details');
 
 /*
 |--------------------------------------------------------------------------

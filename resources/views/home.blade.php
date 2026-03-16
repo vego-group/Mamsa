@@ -183,14 +183,41 @@
 
 <!-- الكروت -->
 <div class="cards-section">
-  <button class="show-all">عرض الجميع</button>
 
-  <div class="cards">
-    <div class="card"></div>
-    <div class="card"></div>
-    <div class="card"></div>
-    <div class="card"></div>
-  </div>
+    <button class="show-all">عرض الجميع</button>
+
+    <div class="cards">
+
+        @foreach($units as $unit)
+
+        <a href="{{ route('units.details', $unit->id) }}" class="card">
+
+            @if($unit->images->first())
+            <img src="{{ asset($unit->images->first()->image_url) }}">
+            @endif
+
+            <div class="card-content">
+
+                <div class="card-title">
+                    {{ $unit->unit_name }}
+                </div>
+
+                <div class="card-location">
+                    {{ $unit->city }} • {{ $unit->bedrooms }} غرف
+                </div>
+
+                <div class="card-price">
+                    {{ $unit->price }} ريال / ليلة
+                </div>
+
+            </div>
+
+        </a>
+
+        @endforeach
+
+    </div>
+
 </div>
 
 <!-- الفوتر -->
