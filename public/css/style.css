@@ -430,3 +430,53 @@ div,
 div * {
     text-decoration: none !important;
 }
+/* حجم أيقونة الحساب */
+.login img{
+  width: 28px;        /* عدّلي 24/32 حسب رغبتك */
+  height: 28px;
+  display: block;
+  transform: translateX(-300px);
+}
+/* ترتيب أزرار الضيف */
+.header-actions{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+/* داخل style.css */
+.header-container{
+  width: min(1200px, 100%);
+  margin-inline: auto;
+  padding-inline: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* الشعار يثبت يمين، الأيقونة/الأزرار يسار */
+}
+
+.logo { order: 1; }   /* يمين */
+.login{ order: 2; }   /* يسار */
+:root{
+  --green: #3E5A50;  /* لون خلفية الهيدر */
+  --light: #B7C4B1;
+}
+
+/* حبة دائرية حول الأيقونة */
+.login .login-pill{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 70px;
+  border-radius: 999px;
+  background: var(--green);     /* نفس لون خلفية الهيدر */
+  box-shadow: 0 1px 0 rgba(0,0,0,.08);
+}
+
+/* حجم الأيقونة */
+.login .login-pill img{
+  width: 50px;
+  height: 50px;
+  display: block;
+  /* فلتر اختياري لتقريب لون الأيقونة (لو PNG أحادي اللون) */
+  /* filter: brightness(0) saturate(100%) invert(30%) sepia(7%) saturate(531%) hue-rotate(111deg) brightness(91%) contrast(87%); */
+}
