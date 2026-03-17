@@ -70,7 +70,7 @@ class OtpAuthController extends Controller
 
         if ($validated['intent'] === 'partner') {
 
-            $partnerRole = Role::where('role_name', 'Partner')->first();
+            $partnerRole = Role::where('name', 'Partner')->first();
 
             if ($partnerRole) {
                 $user->roles()->syncWithoutDetaching([$partnerRole->id]);
@@ -78,7 +78,7 @@ class OtpAuthController extends Controller
 
         } else {
 
-            $userRole = Role::where('role_name', 'User')->first();
+            $userRole = Role::where('name', 'User')->first();
 
             if ($userRole) {
                 $user->roles()->syncWithoutDetaching([$userRole->id]);
