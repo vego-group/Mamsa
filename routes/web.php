@@ -17,16 +17,31 @@ use App\Http\Controllers\Auth\CompleteProfileController;
 use App\Http\Controllers\Partner\PartnerOnboardingController;
 use App\Http\Controllers\Partner\PartnerUnitController;
 
-/*
-|--------------------------------------------------------------------------
-| الصفحة الرئيسية
-|--------------------------------------------------------------------------
-*/
-Route::view('/', 'home')->name('home');
+use App\Http\Controllers\UnitDetailsController;
+
+use App\Models\Unit;
 
 /*
 |--------------------------------------------------------------------------
-| تسجيل الدخول بالبريد (اختبار)
+| الصفحة الرئيسية (Homepage)
+|--------------------------------------------------------------------------
+*/
+Route::get('/', function () {
+
+    // ✔ جلب الوحدات (من قاعدة بياناتك أنت)
+    $units = Unit::with('images')
+        ->where('status', 'available')   // الوحدات المتاحة فقط
+        ->latest()
+        ->take(12)
+        ->get();
+
+    return view('home', compact('units'));
+
+})->name('home');
+
+/*
+|--------------------------------------------------------------------------
+| تسجيل الدخول
 |--------------------------------------------------------------------------
 */
 Route::middleware('guest')->group(function () {
@@ -36,11 +51,11 @@ Route::middleware('guest')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| توجيه موحّد بعد أي توثيق (Login / Register / OTP)
-| يعتمد على دوال isAdmin()/isPartner() في موديل User
+| توجيه بعد تسجيل الدخول
 |--------------------------------------------------------------------------
 */
 Route::get('/post-auth-redirect', function () {
+
     /** @var \App\Models\User|null $user */
     $user = Auth::user();
 
@@ -49,10 +64,11 @@ Route::get('/post-auth-redirect', function () {
     }
 
     if ($user && method_exists($user, 'isPartner') && $user->isPartner()) {
-        return redirect()->route('partner.dashboard');
+        return redirect()->route('partner.type.form');
     }
 
     return redirect()->route('dashboard');
+
 })->middleware('auth')->name('post.auth.redirect');
 
 /*
@@ -75,6 +91,7 @@ Route::post('/logout', function () {
     request()->session()->regenerateToken();
     return redirect()->route('home');
 })->middleware('auth')->name('logout');
+
 
 /*
 |--------------------------------------------------------------------------
@@ -99,8 +116,6 @@ Route::middleware('auth')->group(function () {
 /*
 |--------------------------------------------------------------------------
 | منطقة الشريك Partner
-| RoleMiddleware هنا يستخدم أسماء الأدوار كما هي في roles.name
-|     - Partner فقط
 |--------------------------------------------------------------------------
 */
 Route::prefix('partner')
@@ -111,6 +126,7 @@ Route::prefix('partner')
         \App\Http\Middleware\RoleMiddleware::class . ':Partner',
     ])
     ->group(function () {
+
         Route::get('/type', [PartnerOnboardingController::class, 'typeForm'])->name('type.form');
         Route::post('/type', [PartnerOnboardingController::class, 'typeStore'])->name('type.store');
 
@@ -128,7 +144,6 @@ Route::prefix('partner')
 /*
 |--------------------------------------------------------------------------
 | منطقة الأدمن Admin
-| RoleMiddleware هنا يسمح لـ Super Admin و Admin
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')
@@ -139,10 +154,10 @@ Route::prefix('admin')
     ->name('admin.')
     ->group(function () {
 
-        // لوحة التحكم
+        // Dashboard
         Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
 
-        // إدارة المستخدمين (للسوبر فقط)
+        // إدارة المستخدمين (Super admin فقط)
         Route::middleware([\App\Http\Middleware\RoleMiddleware::class . ':Super Admin'])->group(function () {
             Route::get('/users', [AdminUsersController::class, 'index'])->name('users.index');
             Route::get('/users/create', [AdminUsersController::class, 'create'])->name('users.create');
@@ -159,7 +174,6 @@ Route::prefix('admin')
         Route::put('/units/{unit}', [UnitsController::class, 'update'])->name('units.update');
         Route::delete('/units/{unit}', [UnitsController::class, 'destroy'])->name('units.destroy');
 
-        // تدوير توكن التقويم للوحدة
         Route::put('/units/{unit}/calendar/rotate', [UnitsController::class, 'rotateCalendarToken'])
             ->name('units.calendar.rotate');
 
@@ -171,18 +185,18 @@ Route::prefix('admin')
 
         // التقارير
         Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
-        Route::get('/reports/export/bookings.csv',  [ReportsController::class, 'exportBookingsCsv'])->name('reports.export.bookings.csv');
-        Route::get('/reports/export/bookings.excel',[ReportsController::class, 'exportBookingsExcel'])->name('reports.export.bookings.excel');
-        Route::get('/reports/export/bookings.pdf',  [ReportsController::class, 'exportBookingsPdf'])->name('reports.export.bookings.pdf');
-
-        Route::get('/reports/export/summary.csv',   [ReportsController::class, 'exportSummaryCsv'])->name('reports.export.summary.csv');
-        Route::get('/reports/export/summary.excel', [ReportsController::class, 'exportSummaryExcel'])->name('reports.export.summary.excel');
-        Route::get('/reports/export/summary.pdf',   [ReportsController::class, 'exportSummaryPdf'])->name('reports.export.summary.pdf');
     });
 
 /*
 |--------------------------------------------------------------------------
-| مسار التقويم العام (ICS) — خارج الـ Auth للاشتراك الخارجي
+| صفحة تفاصيل الوحدة
+|--------------------------------------------------------------------------
+*/
+Route::get('/units/{unit}', [UnitDetailsController::class, 'show'])->name('units.details');
+
+/*
+|--------------------------------------------------------------------------
+| مسار التقويم العام (ICS)
 |--------------------------------------------------------------------------
 */
 Route::get('/calendar/unit/{unit}/{token}.ics', [UnitsController::class, 'calendarIcs'])
@@ -190,7 +204,7 @@ Route::get('/calendar/unit/{unit}/{token}.ics', [UnitsController::class, 'calend
 
 /*
 |--------------------------------------------------------------------------
-| auth scaffolding routes (إن وجدت مثل Breeze/Jetstream)
+| Auth Scaffolding
 |--------------------------------------------------------------------------
 */
 require __DIR__ . '/auth.php';

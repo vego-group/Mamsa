@@ -10,8 +10,13 @@
 </head>
 <body>
 
-    {{-- الهيدر المشترك فقط --}}
     @include('partials.header')
+    <!-- أزرار يسار الهيدر (كبسولات) -->
+    <div class="header-actions">
+     
+      <a href="{{ route('auth.phone', ['intent' => 'login']) }}" class="header-pill">
+      تسجيل الدخول
+     </a>
 
     {{-- شريط البحث والفلاتر --}}
     <section class="search-wrapper">
@@ -121,8 +126,114 @@
     </div>
 
     <script>
-      /* unitType dropdown و city dropdown و calendar و counter ... */
-      /* اتركي سكربتاتك كما كانت، لم تتغير */
+    (function() {
+      const btn   = document.getElementById('unitTypeBtn');
+      const menu  = document.getElementById('unitTypeMenu');
+      const input = document.getElementById('selectedUnitType');
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const isOpen = menu.style.display === 'block';
+        document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
+        menu.style.display = isOpen ? 'none' : 'block';
+      });
+
+      menu.addEventListener('click', function (e) {
+        const item = e.target.closest('.dropdown-item');
+        if (!item) return;
+
+        const selectedValue = item.getAttribute('data-value');
+
+        btn.textContent = selectedValue;
+        input.value = selectedValue;
+
+        menu.style.display = 'none';
+      });
+
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('#unitTypeDropdown')) {
+          menu.style.display = 'none';
+        }
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          menu.style.display = 'none';
+        }
+      });
+    })();
     </script>
+
+    <!-- المدينة -->
+    <div class="dropdown" id="cityDropdown">
+      <button type="button" class="filter-btn city" id="cityDropdownBtn">المدينة</button>
+
+      <input type="hidden" name="city_id" id="selectedCityId" value="">
+
+      <div class="dropdown-menu" id="cityDropdownMenu">
+        <div class="dropdown-item" data-id="1">الرياض</div>
+      </div>
+    </div>
+
+  </div> <!-- /search-filters -->
+</section>
+
+<!-- الكروت -->
+<div class="cards-section">
+
+    <button class="show-all">عرض الجميع</button>
+
+    <div class="cards">
+
+        @foreach($units as $unit)
+
+        <a href="{{ route('units.details', $unit->id) }}" class="card">
+
+            @if($unit->images->first())
+            <img src="{{ asset('storage/' . $unit->images->first()->image_url) }}">
+            @else
+            <img src="{{ asset('images/no-image.jpg') }}">
+            @endif
+
+            <div class="card-content">
+
+                <div class="card-title">
+                    {{ $unit->name }}
+                </div>
+
+                <div class="card-location">
+                    {{ $unit->city ?? 'غير محدد' }} • {{ $unit->bedrooms ?? '—' }} غرف
+                </div>
+
+                <div class="card-price">
+                    {{ number_format($unit->price) }} ريال / ليلة
+                </div>
+
+            </div>
+
+        </a>
+
+        @endforeach
+
+    </div>
+
+</div>
+
+<!-- الفوتر -->
+<div class="footer">
+  <div class="footer-links">
+    <a>نبذة عن ممسى</a>
+    <a>طريقة عملنا</a>
+    <a>شروط الاستخدام</a>
+    <a>تواصل معنا</a>
+  </div>
+  <div class="footer-copy">MAMSA©2026. All rights reserved.</div>
+</div>
+
+<!-- بقية الـ JS بالكامل كما هو (ما عدلته) -->
+<script>
+/* كل السكربتات الطويلة حق التقويم والفلاتر — أنا ما غيرتها */
+</script>
+
 </body>
 </html>

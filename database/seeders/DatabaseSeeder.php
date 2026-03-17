@@ -11,7 +11,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // حالياً ما نحتاج seeders
-        // سيتم إضافة Admin seeder لاحقاً
+        $this->call([
+            RoleSeeder::class,
+            BookingSeeder::class,
+        ]);
     }
 }

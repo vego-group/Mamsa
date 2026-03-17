@@ -32,7 +32,8 @@ class User extends Authenticatable
     public function roles()
     {
         // pivot: user_roles(user_id, role_id) -> roles(id, name)
-        return $this->belongsToMany(Role::class, 'user_roles', 'user_id', 'role_id');
+        return $this->belongsToMany(Role::class, 'user_roles', 'user_id', 'role_id')
+            ->select(['roles.id','roles.name as name']);
     }
 
     public function partner()

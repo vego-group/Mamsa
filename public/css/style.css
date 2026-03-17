@@ -293,42 +293,95 @@ body {
   cursor: pointer;
 }
 
-
 /* =========================
      قسم الكروت  
 ========================= */
-.cards-section {
-    width: 90%;
-    margin: 30px auto;
-    background: var(--green);
-    padding: 25px;
-    border-radius: 40px;
-    color: #fff;
+
+/* =========================
+     قسم الكروت
+========================= */
+
+.cards-section{
+    width:90%;
+    margin:40px auto;
+    background:var(--green);
+    padding:40px;
+    border-radius:40px;
 }
 
-.show-all {
-    background: var(--light);
-    padding: 8px 18px;
-    border-radius: 20px;
-    border: none;
-    cursor: pointer;
-    color: var(--green);
-    font-weight: 500;
+.show-all{
+    background:var(--light);
+    padding:8px 18px;
+    border-radius:20px;
+    border:none;
+    cursor:pointer;
+    color:var(--green);
+    font-weight:500;
 }
 
-.cards {
-    display: flex;
-    gap: 20px;
-    margin-top: 20px;
+/* ترتيب الكروت */
+
+.cards{
+    display:flex;
+    gap:25px;
+    margin-top:25px;
+    flex-wrap:wrap;
 }
 
-.card {
-    width: 23%;
-    height: 180px;
-    background: white;
-    border-radius: 20px;
+/* الكارد */
+
+.card{
+    width:260px;
+    background:white;
+    border-radius:20px;
+    overflow:hidden;
+    text-decoration:none;
+    transition:0.3s;
+    box-shadow:0 10px 25px rgba(0,0,0,0.12);
 }
 
+.card:hover{
+    transform:translateY(-6px);
+    box-shadow:0 18px 35px rgba(0,0,0,0.18);
+}
+
+/* الصورة */
+
+.card img{
+    width:100%;
+    height:170px;
+    object-fit:cover;
+}
+
+/* محتوى الكارد */
+
+.card-content{
+    padding:16px;
+}
+
+/* العنوان */
+
+.card-title{
+    font-size:15px;
+    font-weight:700;
+    color:#2f1a8c;
+    margin-bottom:6px;
+}
+
+/* الموقع */
+
+.card-location{
+    font-size:13px;
+    color:#6b7280;
+}
+
+/* السعر */
+
+.card-price{
+    margin-top:8px;
+    font-weight:700;
+    color:var(--green);
+}
 /* =========================
           الفوتر  
 ========================= */
@@ -430,6 +483,7 @@ div,
 div * {
     text-decoration: none !important;
 }
+
 /* حجم أيقونة الحساب */
 .login img{
   width: 28px;        /* عدّلي 24/32 حسب رغبتك */
@@ -479,4 +533,420 @@ div * {
   display: block;
   /* فلتر اختياري لتقريب لون الأيقونة (لو PNG أحادي اللون) */
   /* filter: brightness(0) saturate(100%) invert(30%) sepia(7%) saturate(531%) hue-rotate(111deg) brightness(91%) contrast(87%); */
+}
+
+/* =========================
+    صفحه تفاصيل الوحدة  
+========================= */
+
+.unit-page{
+width:90%;
+margin:40px auto;
+}
+
+
+/* =========================
+    Layout الصفحة
+========================= */
+
+.unit-layout{
+display:grid;
+grid-template-columns: 1fr 340px;
+gap:40px;
+align-items:start;
+}
+
+.unit-main{
+width:100%;
+}
+
+
+/* =========================
+        العنوان
+========================= */
+
+.unit-header{
+margin-bottom:25px;
+}
+
+.unit-title{
+font-size:28px;
+font-weight:700;
+color:#1f4f46;
+}
+
+.unit-rating{
+display:flex;
+gap:10px;
+align-items:center;
+margin-top:8px;
+font-size:14px;
+color:#555;
+}
+
+.stars{
+color:#f59e0b;
+font-size:16px;
+}
+
+.rating-number{
+font-weight:700;
+color:#111;
+}
+
+.reviews-count{
+color:#777;
+}
+
+.unit-meta{
+color:#777;
+}
+
+
+/* =========================
+            الصور
+========================= */
+
+.unit-gallery{
+margin-top:25px;
+}
+
+.gallery-grid{
+display:grid;
+grid-template-columns:2fr 1fr;
+gap:12px;
+}
+
+.gallery-side{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:12px;
+}
+
+.main-photo{
+width:100%;
+height:420px;
+object-fit:cover;
+border-radius:16px;
+}
+
+.gallery-thumb{
+width:100%;
+height:200px;
+object-fit:cover;
+border-radius:12px;
+}
+
+.show-photos-btn{
+margin-top:10px;
+background:var(--green);
+color:white;
+padding:8px 14px;
+border-radius:8px;
+font-size:13px;
+border:none;
+cursor:pointer;
+}
+
+
+/* =========================
+        وصف الوحدة
+========================= */
+
+.unit-description{
+margin-top:30px;
+}
+
+.unit-description h2{
+font-size:20px;
+margin-bottom:10px;
+}
+
+
+/* =========================
+            التبويبات
+========================= */
+
+.tabs{
+display:flex;
+gap:25px;
+margin-top:30px;
+border-bottom:2px solid #eee;
+}
+
+.tab{
+background:none;
+border:none;
+padding:12px 0;
+font-weight:600;
+cursor:pointer;
+color:#777;
+}
+
+.tab.active{
+color:#1f4f46;
+border-bottom:3px solid #1f4f46;
+}
+
+
+/* =========================
+        محتوى التبويب
+========================= */
+
+.tab-content{
+display:none;
+margin-top:20px;
+}
+
+.tab-content.active{
+display:block;
+}
+
+
+/* =========================
+        المميزات
+========================= */
+
+.features-grid{
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:14px;
+}
+
+.feature{
+background:#f3f3f3;
+padding:12px;
+border-radius:10px;
+text-align:center;
+}
+
+
+/* =========================
+        التقييمات
+========================= */
+
+.review-card{
+background:#f6f7f6;
+border-radius:12px;
+padding:16px;
+margin-bottom:12px;
+}
+
+.review-stars{
+color:#f59e0b;
+font-size:14px;
+margin-bottom:6px;
+}
+
+.review-text{
+font-size:14px;
+color:#444;
+margin-bottom:6px;
+}
+
+.review-author{
+font-size:12px;
+color:#777;
+}
+
+
+/* =========================
+        كارد الحجز
+========================= */
+
+.booking-card{
+width:340px;
+background:white;
+border-radius:18px;
+padding:25px;
+box-shadow:0 10px 35px rgba(0,0,0,0.12);
+position:sticky;
+top:120px;
+height:fit-content;
+}
+
+.price-row{
+display:flex;
+align-items:center;
+gap:6px;
+font-size:22px;
+font-weight:700;
+margin-bottom:20px;
+}
+
+.per-night{
+font-size:14px;
+color:#777;
+}
+
+.total-price{
+margin-top:12px;
+font-weight:700;
+font-size:16px;
+color:var(--green);
+text-align:center;
+}
+
+
+/* =========================
+        التواريخ
+========================= */
+
+.booking-dates{
+display:flex;
+gap:10px;
+margin-bottom:15px;
+}
+
+.date-box{
+flex:1;
+display:flex;
+flex-direction:column;
+}
+
+.date-box label{
+font-size:12px;
+color:#666;
+margin-bottom:4px;
+}
+
+.date-box input{
+padding:8px;
+border-radius:8px;
+border:1px solid #ddd;
+}
+
+
+/* =========================
+        عدد الليالي
+========================= */
+
+.guests{
+margin-bottom:15px;
+}
+
+.guests input{
+width:100%;
+padding:8px;
+border-radius:8px;
+border:1px solid #ddd;
+}
+.nights-box{
+margin-bottom:15px;
+font-size:14px;
+color:#555;
+}
+
+.nights-box span{
+font-weight:700;
+color:var(--green);
+}
+
+
+/* =========================
+        زر الحجز
+========================= */
+
+.booking-btn{
+width:100%;
+background:var(--green);
+color:white;
+padding:12px;
+border-radius:10px;
+border:none;
+font-weight:600;
+cursor:pointer;
+}
+
+.booking-note{
+text-align:center;
+margin-top:10px;
+font-size:12px;
+color:#777;
+}
+
+
+/* =========================
+        الموبايل
+========================= */
+
+@media(max-width:900px){
+
+.unit-layout{
+grid-template-columns:1fr;
+}
+
+.booking-card{
+position:relative;
+top:auto;
+width:100%;
+}
+
+.gallery-grid{
+grid-template-columns:1fr;
+}
+
+.gallery-side{
+grid-template-columns:1fr 1fr;
+}
+
+}
+
+/* =========================
+       معرض الصور
+========================= */
+
+.gallery-modal{
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.9);
+display:none;
+align-items:center;
+justify-content:center;
+z-index:9999;
+}
+
+.gallery-content{
+position:relative;
+max-width:90%;
+max-height:90%;
+}
+
+#galleryImage{
+max-width:100%;
+max-height:80vh;
+border-radius:10px;
+}
+
+.close-gallery{
+position:absolute;
+top:30px;
+right:40px;
+font-size:40px;
+color:white;
+cursor:pointer;
+}
+
+.gallery-nav{
+position:absolute;
+top:50%;
+transform:translateY(-50%);
+background:rgba(255,255,255,0.2);
+border:none;
+font-size:40px;
+color:white;
+cursor:pointer;
+padding:10px 18px;
+border-radius:10px;
+}
+
+.gallery-nav.prev{
+left:-60px;
+}
+
+.gallery-nav.next{
+right:-60px;
 }
