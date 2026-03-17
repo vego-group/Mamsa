@@ -18,7 +18,6 @@ class UnitsController extends Controller
 {
     use AuthorizesRequests;
 
-    // ============ قائمة + فلاتر ============
     public function index(Request $request)
     {
         $this->authorize('viewAny', Unit::class);
@@ -40,7 +39,7 @@ class UnitsController extends Controller
             })
             ->when($status, fn($qb) => $qb->where('status', $status))
             ->when($priceFrom !== null && $priceFrom !== '', fn($qb) => $qb->where('price', '>=', (float)$priceFrom))
-            ->when($priceTo !== null && $priceTo !== '',     fn($qb) => $qb->where('price', '<=', (float)$priceTo))
+            ->when($priceTo   !== null && $priceTo   !== '', fn($qb) => $qb->where('price', '<=', (float)$priceTo))
             ->orderByDesc('id');
 
         if ($request->user()->hasRole('admin') && !$request->user()->hasRole('super_admin')) {
@@ -58,31 +57,17 @@ class UnitsController extends Controller
                 ->orderBy('name')->get(['id','name']);
         }
 
-        return view('admin.units.index', [
-            'units'     => $units,
-            'q'         => $q,
-            'status'    => $status,
-            'priceFrom' => $priceFrom,
-            'priceTo'   => $priceTo,
-            'ownerId'   => $ownerId,
-            'ownersList'=> $ownersList,
-        ]);
+        return view('admin.units.index', compact('units','q','status','priceFrom','priceTo','ownerId','ownersList'));
     }
 
-    // ============ إنشاء ============
     public function create()
     {
         $this->authorize('create', Unit::class);
 
-        // نولّد كود مسبق ونعرِضه للمدير (مقفل) ثم نرسله hidden للحفظ
         $generatedCode = $this->generateUniqueCode();
-
         $statuses  = ['available'=>'متاحة','unavailable'=>'غير متاحة','reserved'=>'محجوزة'];
 
-        return view('admin.units.create', [
-            'statuses'      => $statuses,
-            'generatedCode' => $generatedCode,
-        ]);
+        return view('admin.units.create', compact('statuses','generatedCode'));
     }
 
     public function store(Request $request)
@@ -90,28 +75,44 @@ class UnitsController extends Controller
         $this->authorize('create', Unit::class);
 
         $validated = $request->validate([
-            'name'        => ['required','string','max:255'],
-            // لا نطلبه من المستخدم، لكن نتحقق من uniqueness لو مرّ من الـ hidden
-            'code'        => ['nullable','string','max:100','unique:units,code'],
-            'description' => ['nullable','string','max:2000'],
-            'status'      => ['required','in:available,unavailable,reserved'],
-            'price'       => ['nullable','numeric','min:0'],
-            'images.*'    => ['nullable','image','mimes:jpg,jpeg,png,webp','max:4096'],
+            'name'                 => ['required','string','max:255'],
+            'code'                 => ['nullable','string','max:100','unique:units,code'],
+            'description'          => ['nullable','string','max:2000'],
+            'status'               => ['required','in:available,unavailable,reserved'],
+            'price'                => ['nullable','numeric','min:0'],
+            'calendar_external_url'=> ['nullable','url','max:2048'],
+
+            // الحقول الإضافية (اختيارية)
+            'type'     => ['nullable','in:apartment,villa,studio'],
+            'bedrooms' => ['nullable','integer','min:0','max:50'],
+            'capacity' => ['nullable','integer','min:1','max:100'],
+            'city'     => ['nullable','string','max:100'],
+            'district' => ['nullable','string','max:100'],
+            'lat'      => ['nullable','numeric','between:-90,90'],
+            'lng'      => ['nullable','numeric','between:-180,180'],
+
+            'images.*' => ['nullable','image','mimes:jpg,jpeg,png,webp','max:4096'],
         ]);
 
-        // لو ما وصل (نادرًا)، نولّده هنا
         $code = $validated['code'] ?? $this->generateUniqueCode();
 
         $unit = Unit::create([
-            'user_id'     => $request->user()->id,
-            'name'        => $validated['name'],
-            'code'        => $code,
-            'description' => $validated['description'] ?? null,
-            'status'      => $validated['status'],
-            'price'       => $validated['price'] ?? null,
+            'user_id'              => $request->user()->id,
+            'name'                 => $validated['name'],
+            'code'                 => $code,
+            'description'          => $validated['description'] ?? null,
+            'status'               => $validated['status'],
+            'price'                => $validated['price'] ?? null,
+            'calendar_external_url'=> $validated['calendar_external_url'] ?? null,
+            'type'                 => $validated['type'] ?? null,
+            'bedrooms'             => $validated['bedrooms'] ?? null,
+            'capacity'             => $validated['capacity'] ?? null,
+            'city'                 => $validated['city'] ?? null,
+            'district'             => $validated['district'] ?? null,
+            'lat'                  => $validated['lat'] ?? null,
+            'lng'                  => $validated['lng'] ?? null,
         ]);
 
-        // صور
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $img) {
                 if (!$img) continue;
@@ -127,7 +128,6 @@ class UnitsController extends Controller
         return redirect()->route('admin.units.index')->with('success', 'تم إضافة الوحدة بنجاح.');
     }
 
-    // ============ تعديل ============
     public function edit(Unit $unit)
     {
         $this->authorize('update', $unit);
@@ -142,22 +142,32 @@ class UnitsController extends Controller
     {
         $this->authorize('update', $unit);
 
-        $validated = $request->validate([
-            'name'        => ['required','string','max:255'],
-            // الكود لا يتغير؛ لا نتحقق منه
-            'description' => ['nullable','string','max:2000'],
-            'status'      => ['required','in:available,unavailable,reserved'],
-            'price'       => ['nullable','numeric','min:0'],
+        $imagePk = Schema::hasColumn('unit_images', 'image_id') ? 'image_id' : 'id';
 
-            'images.*'       => ['nullable','image','mimes:jpg,jpeg,png,webp','max:4096'],
-            'delete_images'  => ['nullable','array'],
-            'delete_images.*'=> ['integer'],
+        $validated = $request->validate([
+            'name'                 => ['required','string','max:255'],
+            'description'          => ['nullable','string','max:2000'],
+            'status'               => ['required','in:available,unavailable,reserved'],
+            'price'                => ['nullable','numeric','min:0'],
+            'calendar_external_url'=> ['nullable','url','max:2048'],
+
+            'type'     => ['nullable','in:apartment,villa,studio'],
+            'bedrooms' => ['nullable','integer','min:0','max:50'],
+            'capacity' => ['nullable','integer','min:1','max:100'],
+            'city'     => ['nullable','string','max:100'],
+            'district' => ['nullable','string','max:100'],
+            'lat'      => ['nullable','numeric','between:-90,90'],
+            'lng'      => ['nullable','numeric','between:-180,180'],
+
+            'images.*'        => ['nullable','image','mimes:jpg,jpeg,png,webp','max:4096'],
+            'delete_images'   => ['nullable','array'],
+            'delete_images.*' => ["exists:unit_images,{$imagePk}"],
         ]);
 
-        // حذف صور محددة
         if (!empty($validated['delete_images'])) {
-            $images = UnitImage::whereIn('image_id', $validated['delete_images'])
+            $images = UnitImage::whereIn($imagePk, $validated['delete_images'])
                 ->where('unit_id', $unit->id)->get();
+
             foreach ($images as $img) {
                 if ($img->image_url && Storage::disk('public')->exists($img->image_url)) {
                     Storage::disk('public')->delete($img->image_url);
@@ -166,15 +176,21 @@ class UnitsController extends Controller
             }
         }
 
-        // تحديث
         $unit->update([
-            'name'        => $validated['name'],
-            'description' => $validated['description'] ?? null,
-            'status'      => $validated['status'],
-            'price'       => $validated['price'] ?? null,
+            'name'                 => $validated['name'],
+            'description'          => $validated['description'] ?? null,
+            'status'               => $validated['status'],
+            'price'                => $validated['price'] ?? null,
+            'calendar_external_url'=> $validated['calendar_external_url'] ?? null,
+            'type'                 => $validated['type'] ?? null,
+            'bedrooms'             => $validated['bedrooms'] ?? null,
+            'capacity'             => $validated['capacity'] ?? null,
+            'city'                 => $validated['city'] ?? null,
+            'district'             => $validated['district'] ?? null,
+            'lat'                  => $validated['lat'] ?? null,
+            'lng'                  => $validated['lng'] ?? null,
         ]);
 
-        // صور جديدة
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $img) {
                 if (!$img) continue;
@@ -190,7 +206,6 @@ class UnitsController extends Controller
         return redirect()->route('admin.units.index')->with('success', 'تم تحديث بيانات الوحدة.');
     }
 
-    // ============ حذف ============
     public function destroy(Unit $unit)
     {
         $this->authorize('delete', $unit);
@@ -206,7 +221,6 @@ class UnitsController extends Controller
         return back()->with('success', 'تم حذف الوحدة.');
     }
 
-    // ============ تقويم ICS ============
     public function calendarIcs(Request $request, Unit $unit, string $token)
     {
         if (!hash_equals((string)$unit->calendar_token, (string)$token)) {
@@ -291,10 +305,8 @@ class UnitsController extends Controller
         return back()->with('success','تم تجديد رابط التقويم لهذه الوحدة.');
     }
 
-    // ============ Helpers ============
     private function generateUniqueCode(int $length = 8): string
     {
-        // كود مقروء: حروف + أرقام بدون لبس (نستبعد O/0 و I/1 إذا تبين)
         $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         do {
             $code = '';

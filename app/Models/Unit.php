@@ -14,17 +14,24 @@ class Unit extends Model
 
     protected $fillable = [
         'user_id',
-        'name',          // اسم الوحدة
-        'code',          // الكود
+        'name',
+        'code',
         'description',
-        'status',        // available | unavailable | reserved
+        'status',
         'price',
-        'calendar_token'
+        'calendar_token',
+        'calendar_external_url', // جديد
+        'type',                  // جديد
+        'bedrooms',              // جديد
+        'capacity',              // جديد
+        'city',                  // جديد
+        'district',              // جديد
+        'lat',                   // جديد
+        'lng',                   // جديد
     ];
 
     protected static function booted(): void
     {
-        // توليد calendar_token تلقائيًا إذا مفقود
         static::creating(function (Unit $unit) {
             if (empty($unit->calendar_token)) {
                 $unit->calendar_token = Str::random(40);
@@ -32,23 +39,10 @@ class Unit extends Model
         });
     }
 
-    public function owner()
-    {
-        return $this->belongsTo(User::class, 'user_id');
-    }
+    public function owner(){ return $this->belongsTo(User::class, 'user_id'); }
+    public function images(){ return $this->hasMany(UnitImage::class, 'unit_id', 'id'); }
+    public function bookings(){ return $this->hasMany(Booking::class, 'unit_id', 'id'); }
 
-    public function images()
-    {
-        // FK: unit_images.unit_id --> units.id
-        return $this->hasMany(UnitImage::class, 'unit_id', 'id');
-    }
-
-    public function bookings()
-    {
-        return $this->hasMany(Booking::class, 'unit_id', 'id');
-    }
-
-    // بادجات
     public function getStatusLabelAttribute(): string
     {
         return match ($this->status) {
@@ -69,10 +63,9 @@ class Unit extends Model
         };
     }
 
-    // رابط التقويم العام (ICS)
     public function getCalendarPublicUrlAttribute(): ?string
     {
         if (!$this->calendar_token) return null;
-        return route('units.calendar.ics', ['unit' => $this->id, 'token' => $this->calendar_token]);
+        return route('units.calendar.ics', ['unit'=>$this->id, 'token'=>$this->calendar_token]);
     }
 }

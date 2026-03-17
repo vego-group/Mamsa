@@ -7,39 +7,72 @@ use App\Models\User;
 
 class BookingPolicy
 {
-    // super_admin له كل الصلاحيات
+    /**
+     * before(): يتم استدعاؤها قبل كل الدوال
+     * - إذا المستخدم سوبر أدمن → كل شيء مسموح
+     * - إذا المستخدم مدير ولكن غير نشط is_active != 1 → يمنع كل شيء (ماعدا view/viewAny حسب الدوال الأخرى)
+     */
     public function before(User $user, string $ability)
     {
+        // سوبر أدمن = جميع الصلاحيات دائمًا
         if ($user->hasRole('super_admin')) {
             return true;
         }
-        return null;
+
+        // مدير غير نشط → يمنع الإضافة/التعديل/الحذف
+        if ($user->hasRole('admin') && intval($user->is_active) !== 1) {
+            return false;
+        }
+
+        return null; // يكمل باقي الشروط
     }
 
-    // يستطيع أي admin رؤية حجوزات وحداته فقط (فلترة في Controller + تحقق هنا عند العرض المفرد)
+    /**
+     * عرض جميع الحجوزات (index)
+     * المدير + السوبر أدمن يشوفون
+     */
     public function viewAny(User $user): bool
     {
-        return $user->hasAnyRole(['super_admin','admin']);
+        return $user->hasAnyRole(['super_admin', 'admin']);
     }
 
+    /**
+     * عرض حجز واحد
+     * المدير يشوف فقط حجوزات الوحدات اللي يملكها
+     */
     public function view(User $user, Booking $booking): bool
     {
-        // المالك هو مالك الوحدة المرتبطة بالحجز
         return $booking->unit && $booking->unit->user_id === $user->id;
     }
 
+    /**
+     * إنشاء حجز
+     * المدير النشط فقط (is_active = 1)
+     */
     public function create(User $user): bool
     {
-        return $user->hasAnyRole(['super_admin','admin']);
+        return $user->hasRole('admin') && intval($user->is_active) === 1;
     }
 
+    /**
+     * تعديل حجز
+     * فقط لو الحجز يتبع وحدة يملكها — والمدير نشط
+     */
     public function update(User $user, Booking $booking): bool
     {
-        return $booking->unit && $booking->unit->user_id === $user->id;
+        return $booking->unit &&
+               $booking->unit->user_id === $user->id &&
+               intval($user->is_active) === 1;
     }
 
+    /**
+     * حذف حجز
+     * نفس شروط التعديل
+     */
     public function delete(User $user, Booking $booking): bool
     {
-        return $booking->unit && $booking->unit->user_id === $user->id;
+        return $booking->unit &&
+               $booking->unit->user_id === $user->id &&
+               intval($user->is_active) === 1;
     }
 }

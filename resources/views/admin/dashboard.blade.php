@@ -12,10 +12,13 @@
             <div class="mt-2 text-sm text-gray-600">عدد الوحدات {{ $isSuper ? '(الكل)' : '(الخاصة بي)' }}</div>
         </div>
 
-        <div class="bg-white rounded-2xl border border-[#2f4b46]/30 p-6">
-            <div class="text-4xl font-semibold text-[#2f4b46]">{{ number_format($usersCount) }}</div>
-            <div class="mt-2 text-sm text-gray-600">عدد المستخدمين</div>
-        </div>
+        {{-- بطاقة عدد المستخدمين — تظهر للسوبر أدمن فقط --}}
+        @if($isSuper)
+            <div class="bg-white rounded-2xl border border-[#2f4b46]/30 p-6">
+                <div class="text-4xl font-semibold text-[#2f4b46]">{{ number_format($usersCount) }}</div>
+                <div class="mt-2 text-sm text-gray-600">عدد المستخدمين</div>
+            </div>
+        @endif
 
         <div class="bg-white rounded-2xl border border-[#2f4b46]/30 p-6">
             <div class="text-4xl font-semibold text-[#2f4b46]">

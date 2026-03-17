@@ -104,36 +104,59 @@
                             @endif
                         </td>
                         <td class="py-3 px-4">{{ optional($u->owner)->name ?? '-' }}</td>
+
+                        {{-- التقويم --}}
                         <td class="py-3 px-4 text-center">
-                            @if($u->calendar_public_url)
-                                <div class="inline-flex items-center gap-2">
-                                    <a href="{{ $u->calendar_public_url }}"
-                                       class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs"
-                                       target="_blank" rel="noopener">
-                                        iCal (ICS)
-                                    </a>
-                                    @can('update', $u)
-                                        <button type="button"
-                                            class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs"
-                                            onclick="navigator.clipboard.writeText('{{ $u->calendar_public_url }}').then(()=>alert('تم نسخ رابط التقويم'));">
-                                            نسخ الرابط
-                                        </button>
-                                        <form action="{{ route('admin.units.calendar.rotate', $u->id) }}"
-                                              method="POST"
-                                              onsubmit="return confirm('تأكيد: تجديد الرابط سيُبطل الرابط السابق. متابعة؟');"
-                                              class="inline">
-                                            @csrf
-                                            @method('PUT')
-                                            <button class="px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border border-yellow-300 text-xs">
-                                                تجديد الرابط
+                            <div class="flex flex-col items-center gap-2">
+
+                                {{-- رابط iCal الداخلي --}}
+                                @if($u->calendar_public_url)
+                                    <div class="inline-flex items-center gap-2">
+                                        <a href="{{ $u->calendar_public_url }}"
+                                           class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs"
+                                           target="_blank" rel="noopener">
+                                            iCal (ICS)
+                                        </a>
+                                        @can('update', $u)
+                                            <button type="button"
+                                                    class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs"
+                                                    onclick="navigator.clipboard.writeText('{{ $u->calendar_public_url }}').then(()=>alert('تم نسخ رابط التقويم'));">
+                                                نسخ
                                             </button>
-                                        </form>
-                                    @endcan
-                                </div>
-                            @else
-                                <span class="text-gray-400">—</span>
-                            @endif
+                                            <form action="{{ route('admin.units.calendar.rotate', $u->id) }}"
+                                                  method="POST"
+                                                  onsubmit="return confirm('تأكيد: تجديد الرابط سيُبطل الرابط السابق. متابعة؟');"
+                                                  class="inline">
+                                                @csrf
+                                                @method('PUT')
+                                                <button class="px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border border-yellow-300 text-xs">
+                                                    تجديد
+                                                </button>
+                                            </form>
+                                        @endcan
+                                    </div>
+                                @else
+                                    <span class="text-gray-400">—</span>
+                                @endif
+
+                                {{-- رابط تقويم خارجي (اختياري) --}}
+                                @if(!empty($u->calendar_external_url))
+                                    <div class="inline-flex items-center gap-2">
+                                        <a href="{{ $u->calendar_external_url }}" target="_blank" rel="noopener"
+                                           class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200 text-xs">
+                                           تقويم خارجي
+                                        </a>
+                                        <button type="button"
+                                                class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200 text-xs"
+                                                onclick="navigator.clipboard.writeText('{{ $u->calendar_external_url }}').then(()=>alert('تم نسخ الرابط الخارجي'));">
+                                            نسخ
+                                        </button>
+                                    </div>
+                                @endif
+                            </div>
                         </td>
+
+                        {{-- إجراءات --}}
                         <td class="py-3 px-4 text-center">
                             <div class="inline-flex items-center gap-2">
                                 @can('update', $u)

@@ -1,129 +1,125 @@
 ﻿<!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <title>{{ $title }}</title>
 <style>
-  /* ===== Brand ===== */
-  :root {
-    --brand: #2f4b46;
-    --brand-50: #eef5f3;
-    --text: #111;
-    --muted: #6b7280;
-    --border: #e5e7eb;
-    --th-bg: #f3f4f6;
-  }
+  /* ==== ألوان ثابتة (بدون CSS variables) ==== */
   @page { margin: 28px 28px 40px 28px; }
-  body { font-family: sans-serif; color: var(--text); font-size: 12px; }
+  body { font-family: DejaVu Sans, sans-serif; color: #111; font-size: 12px; }
 
   /* Header Bar */
   .bar {
-    background: var(--brand);
+    background: #2f4b46;
     color: #fff;
     padding: 10px 12px;
     display: flex; align-items: center; justify-content: space-between;
     border-radius: 6px;
   }
-  .brand {
-    display:flex; align-items:center; gap:10px; font-weight: 700; letter-spacing:.3px;
-  }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.3px; }
   .brand img { height: 22px; }
   .meta { font-size: 11px; text-align:right; }
 
   /* Table */
   table { width:100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { border:1px solid var(--border); padding: 6px 8px; }
-  th { background: var(--th-bg); color: var(--brand); text-align: left; }
-  tr:nth-child(even) td { background: var(--brand-50); }
+  th, td { border:1px solid #e5e7eb; padding: 6px 8px; }
+  th { background: #f3f4f6; color: #2f4b46; text-align: left; }
+  tr:nth-child(even) td { background: #eef5f3; }
 
   /* Footer (fixed) */
   .footer {
     position: fixed; left:28px; right:28px; bottom:10px;
-    color: var(--muted); font-size: 11px; text-align: center;
+    color: #6b7280; font-size: 11px; text-align: center;
   }
 </style>
 </head>
 <body>
 
-  <!-- Header -->
+  {{-- Header --}}
   <div class="bar">
     <div class="brand">
-      @if(file_exists(public_path('assets/mamsa-logo.png')))
-        {{ public_path(
+      @php
+        $logoPath = public_path('assets/mamsa-logo.png');
+      @endphp
+
+      @if(is_file($logoPath))
+        <img src="{{ $logoPath }}" alt="Mamsa Logo">
       @else
         <span>Mamsa</span>
       @endif
-      <span>| Reports</span>
+
+      <span>| التقارير</span>
     </div>
     <div class="meta">
       <div>{{ $title }}</div>
-      <div>Generated at: {{ $generated_at }}</div>
+      <div>وقت التوليد: {{ $generated_at }}</div>
     </div>
   </div>
 
-  <!-- (Optional) Filters note -->
+  {{-- Filters (اختياري) --}}
   @if(!empty($filters))
-    <div style="margin:10px 0; font-size:11px; color:var(--muted);">
-      <strong>Filters:</strong>
-      @php $f=$filters; @endphp
+    @php $f = $filters; @endphp
+    <div style="margin:10px 0; font-size:11px; color:#6b7280;">
+      <strong>المرشِّحات:</strong>
       q={{ $f['q'] ?: '-' }} |
-      status={{ $f['status'] ?: 'all' }} |
-      unit={{ $f['unit_id'] ?: 'all' }} |
-      from={{ $f['from'] ?: '-' }} |
-      to={{ $f['to'] ?: '-' }}
+      الحالة={{ $f['status'] ?: 'الكل' }} |
+      الوحدة={{ $f['unit_id'] ?: 'الكل' }} |
+      من={{ $f['from'] ?: '-' }} |
+      إلى={{ $f['to'] ?: '-' }}
     </div>
   @endif
 
-  <!-- Table -->
+  {{-- Table --}}
   <table>
     <thead>
       <tr>
         <th>ID</th>
-        <th>Unit</th>
-        <th>Code</th>
-        <th>Owner</th>
-        <th>Customer</th>
-        <th>Status</th>
-        <th>From</th>
-        <th>To</th>
-        <th>Total (SAR)</th>
+        <th>الوحدة</th>
+        <th>الكود</th>
+        <th>المالك</th>
+        <th>الحاجز</th>
+        <th>الحالة</th>
+        <th>من</th>
+        <th>إلى</th>
+        <th>الإجمالي (ر.س)</th>
       </tr>
     </thead>
     <tbody>
       @forelse($rows as $b)
         <tr>
           <td>{{ $b->id }}</td>
-          <td>{{ $b->unit?->name }}</td>
-          <td>{{ $b->unit?->code }}</td>
-          <td>{{ $b->unit?->owner?->name }}</td>
-          <td>{{ $b->customer?->name }}</td>
+          <td>{{ optional($b->unit)->name }}</td>
+          <td>{{ optional($b->unit)->code }}</td>
+          <td>{{ optional(optional($b->unit)->owner)->name }}</td>
+          <td>{{ optional($b->customer)->name }}</td>
           <td>{{ $b->status }}</td>
-          <td>{{ $b->start_date?->format('Y-m-d') }}</td>
-          <td>{{ $b->end_date?->format('Y-m-d') }}</td>
-          <td>{{ $b->total_amount !== null ? number_format($b->total_amount,2) : '-' }}</td>
+          <td>{{ optional($b->start_date)?->format('Y-m-d') }}</td>
+          <td>{{ optional($b->end_date)?->format('Y-m-d') }}</td>
+          <td>{{ $b->total_amount !== null ? number_format((float)$b->total_amount, 2) : '-' }}</td>
         </tr>
       @empty
-        <tr><td colspan="9" style="text-align:center; color:var(--muted);">No data.</td></tr>
+        <tr>
+          <td colspan="9" style="text-align:center; color:#6b7280;">لا توجد بيانات.</td>
+        </tr>
       @endforelse
     </tbody>
   </table>
 
   <div class="footer">
-    © {{ date('Y') }} Mamsa — Detailed Bookings Report | Page <span class="pageNumber"></span> / <span class="totalPages"></span>
+    © {{ date('Y') }} Mamsa — تقرير الحجوزات التفصيلي | صفحة
+    <span class="pageNumber"></span> / <span class="totalPages"></span>
   </div>
 
+  {{-- dompdf page_script --}}
   <script type="text/php">
     if (isset($pdf)) {
-      $font = $fontMetrics->getFont("helvetica", "normal");
       $pdf->page_script('
-        $font = $fontMetrics->get_font("helvetica", "normal");
+        $font = $fontMetrics->get_font("DejaVu Sans", "normal");
         $size = 8;
         $page = $PAGE_NUM;
         $pages = $PAGE_COUNT;
-        $text = "'.$title.'";
-        $pdf->text(28, 18, "", $font, 8); // reserved
-        // Footer page numbers
-        $pdf->text(520, 810, "Page $page / $pages", $font, 8);
+        // أرقام الصفحات (الأسفل يمين/يسار حسب اتجاه الصفحة)
+        $pdf->text(520, 810, "Page $page / $pages", $font, $size);
       ');
     }
   </script>

@@ -7,18 +7,22 @@ use App\Models\Unit;
 
 class UnitPolicy
 {
-    // super_admin له كل الصلاحيات
     public function before(User $user, string $ability)
     {
         if ($user->hasRole('super_admin')) {
             return true;
         }
+
+        // المدير غير النشط لا يسمح له إلا بالعرض
+        if ($user->hasRole('admin') && intval($user->is_active) !== 1) {
+            return false;
+        }
+
         return null;
     }
 
     public function viewAny(User $user): bool
     {
-        // admin يقدر يشوف وحداته فقط (يتم تطبيق ذلك في الـController عبر فلترة)
         return $user->hasAnyRole(['super_admin','admin']);
     }
 
@@ -29,16 +33,18 @@ class UnitPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole('admin') || $user->hasRole('super_admin');
+        return $user->hasRole('admin') && intval($user->is_active) === 1;
     }
 
     public function update(User $user, Unit $unit): bool
     {
-        return $user->id === $unit->user_id;
+        return $user->id === $unit->user_id &&
+               intval($user->is_active) === 1;
     }
 
     public function delete(User $user, Unit $unit): bool
     {
-        return $user->id === $unit->user_id;
+        return $user->id === $unit->user_id &&
+               intval($user->is_active) === 1;
     }
 }
