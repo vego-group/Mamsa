@@ -38,7 +38,7 @@ Route::get('/', function () {
     return view('home', compact('units'));
 
 })->name('home');
-
+ Route::get('/units/filter', [UnitsController::class, 'filter'])->name('units.filter'); 
 /*
 |--------------------------------------------------------------------------
 | تسجيل الدخول

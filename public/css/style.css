@@ -97,22 +97,29 @@ body {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 15px;
     background: #FFFFFF;
+}
+
+.search-icon-btn {
+    background: transparent;   /* خلفية شفافة */
+    border: none;              /* بدون حدود */
+    padding: 0;                /* بدون مساحة داخلية */
+    display: flex;             /* يجعل العدسة تتوسط الزر */
+    align-items: center; 
+    justify-content: center;
+    cursor: pointer;           /* مؤشر اليد */
 }
 
 /* أيقونة البحث */
 .search-icon {
-    position: absolute;
-    left: 20px;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     stroke: var(--green);
     fill: none;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-    pointer-events: none;
 }
 
 /* =========================
@@ -293,9 +300,7 @@ body {
   cursor: pointer;
 }
 
-/* =========================
-     قسم الكروت  
-========================= */
+
 
 /* =========================
      قسم الكروت
