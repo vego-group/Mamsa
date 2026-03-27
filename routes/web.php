@@ -18,6 +18,7 @@ use App\Http\Controllers\Partner\PartnerOnboardingController;
 use App\Http\Controllers\Partner\PartnerUnitController;
 
 use App\Http\Controllers\UnitDetailsController;
+use App\Http\Controllers\UserController;
 
 use App\Models\Unit;
 
@@ -39,6 +40,12 @@ Route::get('/', function () {
 
 })->name('home');
  Route::get('/units/filter', [UnitsController::class, 'filter'])->name('units.filter'); 
+ Route::get('/profile', function () {
+    return view('user.profile');
+})->middleware('auth')->name('user.profile');
+Route::put('/profile/update', [UserController::class, 'updateProfile'])
+     ->middleware('auth')
+     ->name('user.update');
 /*
 |--------------------------------------------------------------------------
 | تسجيل الدخول
@@ -67,7 +74,7 @@ Route::get('/post-auth-redirect', function () {
         return redirect()->route('partner.type.form');
     }
 
-    return redirect()->route('dashboard');
+    return redirect()->route('user.profile');
 
 })->middleware('auth')->name('post.auth.redirect');
 
@@ -76,9 +83,19 @@ Route::get('/post-auth-redirect', function () {
 | Dashboard عام
 |--------------------------------------------------------------------------
 */
-Route::view('/dashboard', 'dashboard')
-    ->middleware(['auth', 'verified'])
-    ->name('dashboard');
+Route::get('/dashboard', function () {
+
+    $user = Auth::user();
+
+    // لو المستخدم أدمن → يروح للوحة التحكم
+    if ($user && method_exists($user, 'isAdmin') && $user->isAdmin()) {
+        return redirect()->route('admin.dashboard');
+    }
+
+    // لو مستخدم عادي → يروح لصفحته
+    return redirect()->route('user.profile');
+
+})->middleware(['auth', 'verified'])->name('dashboard');
 
 /*
 |--------------------------------------------------------------------------
