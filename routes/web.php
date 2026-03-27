@@ -184,7 +184,26 @@ Route::prefix('admin')
         Route::delete('/bookings/{booking}', [BookingsController::class, 'destroy'])->name('bookings.destroy');
 
         // التقارير
-        Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
+       
+Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
+
+Route::get('/reports/export/bookings.csv',  [ReportsController::class, 'exportBookingsCsv'])
+    ->name('reports.export.bookings.csv');
+
+Route::get('/reports/export/bookings.excel',[ReportsController::class, 'exportBookingsExcel'])
+    ->name('reports.export.bookings.excel');
+
+Route::get('/reports/export/bookings.pdf',  [ReportsController::class, 'exportBookingsPdf'])
+    ->name('reports.export.bookings.pdf');
+
+Route::get('/reports/export/summary.csv',   [ReportsController::class, 'exportSummaryCsv'])
+    ->name('reports.export.summary.csv');
+
+Route::get('/reports/export/summary.excel', [ReportsController::class, 'exportSummaryExcel'])
+    ->name('reports.export.summary.excel');
+
+Route::get('/reports/export/summary.pdf',   [ReportsController::class, 'exportSummaryPdf'])
+    ->name('reports.export.summary.pdf');
     });
 
 /*
