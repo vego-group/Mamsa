@@ -2,12 +2,13 @@
 
 @section('content')
 
-<h2 style="text-align:right; margin-top:20px">نتائج البحث</h2>
-
+<h2 style="text-align:right; margin-top:20px">{{ $title }}</h2>
 <div class="cards">
     @forelse($units as $unit)
+
         <a href="{{ route('units.details', $unit->id) }}" class="card">
 
+            {{-- صورة --}}
             @if($unit->images->first())
                 <img src="{{ asset('storage/' . $unit->images->first()->image_url) }}">
             @else
@@ -19,7 +20,8 @@
                 <div class="card-title">{{ $unit->name }}</div>
 
                 <div class="card-location">
-                    {{ $unit->city ?? 'غير محدد' }} • {{ $unit->bedrooms ?? '-' }} غرف
+                    {{ $unit->city ?? 'غير محدد' }} •
+                    {{ $unit->bedrooms ?? '-' }} غرف
                 </div>
 
                 <div class="card-price">
@@ -29,8 +31,11 @@
             </div>
 
         </a>
+
     @empty
+
         <p style="text-align:right; color:#555">لا توجد وحدات مطابقة لبحثك</p>
+
     @endforelse
 </div>
 

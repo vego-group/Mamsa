@@ -3,7 +3,6 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 
-// Controllers
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminUsersController;
@@ -24,14 +23,13 @@ use App\Models\Unit;
 
 /*
 |--------------------------------------------------------------------------
-| الصفحة الرئيسية (Homepage)
+| الصفحة الرئيسية
 |--------------------------------------------------------------------------
 */
 Route::get('/', function () {
 
-    // ✔ جلب الوحدات (من قاعدة بياناتك أنت)
     $units = Unit::with('images')
-        ->where('status', 'available')   // الوحدات المتاحة فقط
+        ->where('status', 'available')
         ->latest()
         ->take(12)
         ->get();
@@ -39,13 +37,28 @@ Route::get('/', function () {
     return view('home', compact('units'));
 
 })->name('home');
- Route::get('/units/filter', [UnitsController::class, 'filter'])->name('units.filter'); 
- Route::get('/profile', function () {
+
+/*
+|--------------------------------------------------------------------------
+| عرض الجميع + الفلترة
+|--------------------------------------------------------------------------
+*/
+Route::get('/units/all', [UnitsController::class, 'all'])->name('units.all');
+Route::get('/units/filter', [UnitsController::class, 'filter'])->name('units.filter');
+
+/*
+|--------------------------------------------------------------------------
+| صفحة البروفايل
+|--------------------------------------------------------------------------
+*/
+Route::get('/profile', function () {
     return view('user.profile');
 })->middleware('auth')->name('user.profile');
+
 Route::put('/profile/update', [UserController::class, 'updateProfile'])
-     ->middleware('auth')
-     ->name('user.update');
+    ->middleware('auth')
+    ->name('user.update');
+
 /*
 |--------------------------------------------------------------------------
 | تسجيل الدخول
@@ -58,19 +71,19 @@ Route::middleware('guest')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| توجيه بعد تسجيل الدخول
+| إعادة توجيه بعد تسجيل الدخول
 |--------------------------------------------------------------------------
 */
 Route::get('/post-auth-redirect', function () {
 
-    /** @var \App\Models\User|null $user */
+    /** @var \App\Models\User $user */
     $user = Auth::user();
 
-    if ($user && method_exists($user, 'isAdmin') && $user->isAdmin()) {
+    if ($user && $user->isAdmin()) {
         return redirect()->route('admin.dashboard');
     }
 
-    if ($user && method_exists($user, 'isPartner') && $user->isPartner()) {
+    if ($user && $user->isPartner()) {
         return redirect()->route('partner.type.form');
     }
 
@@ -85,21 +98,20 @@ Route::get('/post-auth-redirect', function () {
 */
 Route::get('/dashboard', function () {
 
+    /** @var \App\Models\User $user */
     $user = Auth::user();
 
-    // لو المستخدم أدمن → يروح للوحة التحكم
-    if ($user && method_exists($user, 'isAdmin') && $user->isAdmin()) {
+    if ($user && $user->isAdmin()) {
         return redirect()->route('admin.dashboard');
     }
 
-    // لو مستخدم عادي → يروح لصفحته
     return redirect()->route('user.profile');
 
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 /*
 |--------------------------------------------------------------------------
-| Logout
+| تسجيل الخروج
 |--------------------------------------------------------------------------
 */
 Route::post('/logout', function () {
@@ -109,10 +121,9 @@ Route::post('/logout', function () {
     return redirect()->route('home');
 })->middleware('auth')->name('logout');
 
-
 /*
 |--------------------------------------------------------------------------
-| تدفّق OTP
+| نظام OTP
 |--------------------------------------------------------------------------
 */
 Route::get('/auth', [OtpAuthController::class, 'showPhoneForm'])->name('auth.phone');
@@ -126,13 +137,16 @@ Route::post('/auth/verify', [OtpAuthController::class, 'verifyCode'])->name('aut
 |--------------------------------------------------------------------------
 */
 Route::middleware('auth')->group(function () {
-    Route::get('/complete-profile', [CompleteProfileController::class, 'show'])->name('auth.complete-profile');
-    Route::post('/complete-profile', [CompleteProfileController::class, 'submit'])->name('auth.complete-profile.submit');
+    Route::get('/complete-profile', [CompleteProfileController::class, 'show'])
+        ->name('auth.complete-profile');
+
+    Route::post('/complete-profile', [CompleteProfileController::class, 'submit'])
+        ->name('auth.complete-profile.submit');
 });
 
 /*
 |--------------------------------------------------------------------------
-| منطقة الشريك Partner
+| الشريك Partner
 |--------------------------------------------------------------------------
 */
 Route::prefix('partner')
@@ -160,7 +174,7 @@ Route::prefix('partner')
 
 /*
 |--------------------------------------------------------------------------
-| منطقة الأدمن Admin
+| لوحة التحكم Admin
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')
@@ -174,8 +188,10 @@ Route::prefix('admin')
         // Dashboard
         Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
 
-        // إدارة المستخدمين (Super admin فقط)
-        Route::middleware([\App\Http\Middleware\RoleMiddleware::class . ':Super Admin'])->group(function () {
+        // المستخدمين (سوبر فقط)
+        Route::middleware([\App\Http\Middleware\RoleMiddleware::class . ':Super Admin'])
+            ->group(function () {
+
             Route::get('/users', [AdminUsersController::class, 'index'])->name('users.index');
             Route::get('/users/create', [AdminUsersController::class, 'create'])->name('users.create');
             Route::post('/users', [AdminUsersController::class, 'store'])->name('users.store');
@@ -200,27 +216,30 @@ Route::prefix('admin')
         Route::put('/bookings/{booking}', [BookingsController::class, 'update'])->name('bookings.update');
         Route::delete('/bookings/{booking}', [BookingsController::class, 'destroy'])->name('bookings.destroy');
 
-        // التقارير
-       
-Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
+        /*
+        |--------------------------------------------------------------------------
+        | التقارير Reports
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
 
-Route::get('/reports/export/bookings.csv',  [ReportsController::class, 'exportBookingsCsv'])
-    ->name('reports.export.bookings.csv');
+        Route::get('/reports/export/bookings.csv',  [ReportsController::class, 'exportBookingsCsv'])
+            ->name('reports.export.bookings.csv');
 
-Route::get('/reports/export/bookings.excel',[ReportsController::class, 'exportBookingsExcel'])
-    ->name('reports.export.bookings.excel');
+        Route::get('/reports/export/bookings.excel', [ReportsController::class, 'exportBookingsExcel'])
+            ->name('reports.export.bookings.excel');
 
-Route::get('/reports/export/bookings.pdf',  [ReportsController::class, 'exportBookingsPdf'])
-    ->name('reports.export.bookings.pdf');
+        Route::get('/reports/export/bookings.pdf', [ReportsController::class, 'exportBookingsPdf'])
+            ->name('reports.export.bookings.pdf');
 
-Route::get('/reports/export/summary.csv',   [ReportsController::class, 'exportSummaryCsv'])
-    ->name('reports.export.summary.csv');
+        Route::get('/reports/export/summary.csv', [ReportsController::class, 'exportSummaryCsv'])
+            ->name('reports.export.summary.csv');
 
-Route::get('/reports/export/summary.excel', [ReportsController::class, 'exportSummaryExcel'])
-    ->name('reports.export.summary.excel');
+        Route::get('/reports/export/summary.excel', [ReportsController::class, 'exportSummaryExcel'])
+            ->name('reports.export.summary.excel');
 
-Route::get('/reports/export/summary.pdf',   [ReportsController::class, 'exportSummaryPdf'])
-    ->name('reports.export.summary.pdf');
+        Route::get('/reports/export/summary.pdf', [ReportsController::class, 'exportSummaryPdf'])
+            ->name('reports.export.summary.pdf');
     });
 
 /*
@@ -228,19 +247,16 @@ Route::get('/reports/export/summary.pdf',   [ReportsController::class, 'exportSu
 | صفحة تفاصيل الوحدة
 |--------------------------------------------------------------------------
 */
-Route::get('/units/{unit}', [UnitDetailsController::class, 'show'])->name('units.details');
+Route::get('/units/{unit}', [UnitDetailsController::class, 'show'])
+    ->name('units.details');
 
 /*
 |--------------------------------------------------------------------------
-| مسار التقويم العام (ICS)
+| Calendar ICS
 |--------------------------------------------------------------------------
 */
 Route::get('/calendar/unit/{unit}/{token}.ics', [UnitsController::class, 'calendarIcs'])
     ->name('units.calendar.ics');
 
-/*
-|--------------------------------------------------------------------------
-| Auth Scaffolding
-|--------------------------------------------------------------------------
-*/
+
 require __DIR__ . '/auth.php';

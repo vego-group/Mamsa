@@ -5,6 +5,10 @@ namespace App\Models;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
+/**
+ * @method bool isAdmin()
+ * @method bool isPartner()
+ */
 class User extends Authenticatable
 {
     use Notifiable;
@@ -25,15 +29,14 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'password' => 'hashed',
+        'password'          => 'hashed',
     ];
 
     // العلاقات
     public function roles()
     {
-        // pivot: user_roles(user_id, role_id) -> roles(id, name)
         return $this->belongsToMany(Role::class, 'user_roles', 'user_id', 'role_id')
-            ->select(['roles.id','roles.name as name']);
+            ->select(['roles.id', 'roles.name as name']);
     }
 
     public function partner()
@@ -51,7 +54,7 @@ class User extends Authenticatable
         return $this->hasMany(Review::class);
     }
 
-    // ====== مساعدات الأدوار (تعتمد على عمود roles.name) ======
+    // normalize
     protected function normalizeRoleName(string $name): string
     {
         return ucwords(str_replace('_', ' ', trim($name)));
@@ -59,7 +62,9 @@ class User extends Authenticatable
 
     public function hasRole(string $roleName): bool
     {
-        return $this->roles()->where('name', $this->normalizeRoleName($roleName))->exists();
+        return $this->roles()
+            ->where('name', $this->normalizeRoleName($roleName))
+            ->exists();
     }
 
     public function hasAnyRole(array $roleNames): bool
@@ -74,8 +79,9 @@ class User extends Authenticatable
         $role = Role::where('name', $roleName)->first();
 
         if (!$role && $createIfMissing) {
-            $role = Role::create(['name' => $roleName, 'guard_name' => 'web']);
+            $role = Role::create(['name' => $roleName]);
         }
+
         if ($role) {
             $this->roles()->syncWithoutDetaching([$role->id]);
         }
@@ -83,15 +89,18 @@ class User extends Authenticatable
 
     public function syncRoles(array|string $names, bool $createIfMissing = false): void
     {
-        $names = is_array($names) ? $names : array_map('trim', explode(',', $names));
-        $ids   = [];
+        $names = is_array($names) ? $names : explode(',', $names);
+
+        $ids = [];
 
         foreach ($names as $name) {
             $roleName = $this->normalizeRoleName($name);
             $role = Role::where('name', $roleName)->first();
+
             if (!$role && $createIfMissing) {
-                $role = Role::create(['name' => $roleName, 'guard_name' => 'web']);
+                $role = Role::create(['name' => $roleName]);
             }
+
             if ($role) {
                 $ids[] = $role->id;
             }
@@ -104,16 +113,24 @@ class User extends Authenticatable
     {
         $roleName = $this->normalizeRoleName($name);
         $role = Role::where('name', $roleName)->first();
+
         if ($role) {
             $this->roles()->detach($role->id);
         }
     }
 
+
+    /*=====================
+        أدوار النظام
+    =====================*/
+
+    // شريك
     public function isPartner(): bool
     {
         return $this->hasRole('Partner');
     }
 
+    // أدمن + سوبر
     public function isAdmin(): bool
     {
         return $this->hasAnyRole(['Admin', 'Super Admin']);
