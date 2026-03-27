@@ -97,22 +97,29 @@ body {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 15px;
     background: #FFFFFF;
+}
+
+.search-icon-btn {
+    background: transparent;   /* خلفية شفافة */
+    border: none;              /* بدون حدود */
+    padding: 0;                /* بدون مساحة داخلية */
+    display: flex;             /* يجعل العدسة تتوسط الزر */
+    align-items: center; 
+    justify-content: center;
+    cursor: pointer;           /* مؤشر اليد */
 }
 
 /* أيقونة البحث */
 .search-icon {
-    position: absolute;
-    left: 20px;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     stroke: var(--green);
     fill: none;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-    pointer-events: none;
 }
 
 /* =========================
@@ -293,9 +300,7 @@ body {
   cursor: pointer;
 }
 
-/* =========================
-     قسم الكروت  
-========================= */
+
 
 /* =========================
      قسم الكروت
@@ -483,6 +488,58 @@ div,
 div * {
     text-decoration: none !important;
 }
+
+/* حجم أيقونة الحساب */
+.login img{
+  width: 28px;        /* عدّلي 24/32 حسب رغبتك */
+  height: 28px;
+  display: block;
+  transform: translateX(-300px);
+}
+/* ترتيب أزرار الضيف */
+.header-actions{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+/* داخل style.css */
+.header-container{
+  width: min(1200px, 100%);
+  margin-inline: auto;
+  padding-inline: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* الشعار يثبت يمين، الأيقونة/الأزرار يسار */
+}
+
+.logo { order: 1; }   /* يمين */
+.login{ order: 2; }   /* يسار */
+:root{
+  --green: #3E5A50;  /* لون خلفية الهيدر */
+  --light: #B7C4B1;
+}
+
+/* حبة دائرية حول الأيقونة */
+.login .login-pill{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 70px;
+  border-radius: 999px;
+  background: var(--green);     /* نفس لون خلفية الهيدر */
+  box-shadow: 0 1px 0 rgba(0,0,0,.08);
+}
+
+/* حجم الأيقونة */
+.login .login-pill img{
+  width: 50px;
+  height: 50px;
+  display: block;
+  /* فلتر اختياري لتقريب لون الأيقونة (لو PNG أحادي اللون) */
+  /* filter: brightness(0) saturate(100%) invert(30%) sepia(7%) saturate(531%) hue-rotate(111deg) brightness(91%) contrast(87%); */
+}
+
 /* =========================
     صفحه تفاصيل الوحدة  
 ========================= */
@@ -897,4 +954,72 @@ left:-60px;
 
 .gallery-nav.next{
 right:-60px;
+}
+
+.profile-page {
+    width: 85%;
+    margin: 40px auto;
+    direction: rtl;
+}
+
+.profile-title {
+    color: var(--green);
+    font-size: 26px;
+    margin-bottom: 30px;
+    text-align: right;
+}
+
+.profile-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.field-box label {
+    color: var(--green);
+    font-size: 14px;
+    margin-bottom: 5px;
+    display: block;
+}
+
+.field-box input {
+    width: 100%;
+    padding: 14px 20px;
+    border: 2px solid var(--green);
+    border-radius: 30px;
+    outline: none;
+    font-size: 15px;
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    color: var(--green);
+    font-weight: bold;
+    cursor: pointer;
+    text-align: right;
+}
+
+.password-hidden {
+    display: none;
+}
+
+.save-btn {
+    margin-top: 25px;
+    width: 100%;
+    background: var(--green);
+    color: white;
+    padding: 14px;
+    border: none;
+    border-radius: 30px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.logout-btn {
+    display: block;
+    margin-top: 15px;
+    text-align: center;
+    color: var(--green);
+    font-size: 14px;
 }

@@ -328,4 +328,52 @@ class UnitsController extends Controller
         }
         return $out;
     }
+    public function filter(Request $request)
+{
+    // نبدأ الاستعلام
+    $query = Unit::query()->with('images');
+
+    // 🔹 فلترة المدينة
+    if ($request->city_id) {
+        $query->where('city', $request->city_id);
+    }
+
+    // 🔹 فلترة نوع الوحدة (شقة / فيلا / استديو)
+    if ($request->unit_type) {
+        $query->where('type', $request->unit_type);
+    }
+
+    // 🔹 فلترة عدد الأشخاص
+    if ($request->capacity) {
+        $query->where('capacity', '>=', $request->capacity);
+    }
+
+    // 🔹 فلترة التواريخ  
+    // لو عندك جدول الحجوزات
+    if ($request->start_date && $request->end_date) {
+        $start = $request->start_date;
+        $end   = $request->end_date;
+
+        $query->whereDoesntHave('bookings', function ($q) use ($start, $end) {
+            $q->where(function ($overlap) use ($start, $end) {
+
+                // يتعارض مع بداية ونهاية الحجز
+                $overlap->whereBetween('start_date', [$start, $end])
+                        ->orWhereBetween('end_date', [$start, $end])
+
+                        // يغطي الفترة كاملة
+                        ->orWhere(function ($wrap) use ($start, $end) {
+                            $wrap->where('start_date', '<=', $start)
+                                 ->where('end_date', '>=', $end);
+                        });
+            });
+        });
+    }
+
+    // جلب النتائج
+    $units = $query->get();
+
+    // صفحة عرض النتائج
+    return view('units.results', compact('units'));
+}
 }
