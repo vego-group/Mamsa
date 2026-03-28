@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Mail;
 
 class CompleteProfileController extends Controller
 {
@@ -39,23 +40,58 @@ class CompleteProfileController extends Controller
         }
 
         $user->name = $data['name'];
-        if ($intent === 'partner') {
+
+        // ✅ لا نحط ايميل فاضي
+        if ($intent === 'partner' && $newEmail) {
             $user->email = $newEmail;
         } elseif (!empty($newEmail)) {
-            // لو تبين حتى المستخدم العادي يحفظ ايميل (اختياري)
             $user->email = $newEmail;
         }
 
         $user->save();
 
-        // ✅ فقط الشريك نرسل له Verification (حسب طلبك)
+        /* =====================================
+           إرسال OTP للإيميل (الشريك فقط)
+        ===================================== */
+
         if ($intent === 'partner') {
-            if ($user->email && is_null($user->email_verified_at)) {
-                $user->sendEmailVerificationNotification();
-                return redirect()->route('verification.notice');
+
+            // 🔥 أهم شرط عشان ما يعلق
+            if (!$user->email) {
+                return back()->withErrors(['email' => 'الإيميل مطلوب']);
             }
 
-            // بعد التوثيق نوديه لفلو الشريك (اختاري المسار اللي عندك)
+            if (is_null($user->email_verified_at)) {
+
+                // توليد الكود
+                $code = rand(100000,999999);
+
+                session([
+                    'email_verify_code' => $code,
+                    'email_verify_user' => $user->id
+                ]);
+
+                try {
+
+                    Mail::send('emails.otp', [
+                        'code' => $code,
+                        'user' => $user
+                    ], function($msg) use ($user) {
+                        $msg->to($user->email)
+                            ->subject('رمز التحقق');
+                    });
+
+                } catch (\Exception $e) {
+
+                    // لو الإيميل فشل لا يطيح الموقع
+                    return back()->withErrors([
+                        'email' => 'فشل إرسال الإيميل تأكدي من الإعدادات'
+                    ]);
+                }
+
+                return redirect()->route('auth.email.verify.form');
+            }
+
             return redirect()->route('partner.dashboard');
         }
 

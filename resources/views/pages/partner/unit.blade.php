@@ -427,10 +427,7 @@
 
   <div class="flex-between section">
       <h2 class="title">إضافة عقار</h2>
-      <span class="badge" id="draftStatus">
-        <span class="dot" id="draftDot"></span>
-        <span id="draftText">غير محفوظ</span>
-      </span>
+      
   </div>
 
   <div class="split">
@@ -440,7 +437,7 @@
 
           <div class="card-head">
             <h3 class="card-title">تفاصيل العقار</h3>
-            <p class="hint">املئ البيانات وسيظهر كل شيء في المعاينة تلقائيًا.</p>
+            <p class="hint">املأ البيانات وسيظهر كل شيء في المعاينة تلقائيًا.</p>
           </div>
 
           <form id="unitForm" method="POST"
@@ -468,6 +465,20 @@
                         <option value="studio">استوديو</option>
                     </select>
                 </div>
+
+                @if(auth()->user()->partner->type === 'individual')
+
+                  <div class="form-group">
+                      <label>رقم الهوية</label>
+                      <input name="national_id" required class="input">
+                  </div>
+
+                  <div class="form-group">
+                      <label>رقم ترخيص السياحة</label>
+                      <input name="tourism_permit_no" required class="input">
+                  </div>
+
+                  @endif
 
                 <div class="form-group" id="bedroomsWrap" style="display:none;">
                     <label class="label">عدد غرف النوم</label>

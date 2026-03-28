@@ -8,13 +8,13 @@ $profile = auth()->user()->partner;
 
 <div class="page-wrap">
 
-    <div class="card" style="max-width:700px;margin:auto;">
+    <div class="card license-card">
 
         <h2 class="title mb-40">
             بيانات التصريح
         </h2>
 
-        @if($profile && $profile->verification_status === 'pending')
+        @if($profile && $profile->verification_status === 'pending' && $profile->tourism_permit_no)
             <div class="alert alert-warning">
                 تم إرسال البيانات وهي الآن قيد المراجعة.
             </div>
@@ -23,7 +23,7 @@ $profile = auth()->user()->partner;
         <form method="POST" action="{{ route('partner.license.store') }}">
             @csrf
 
-            <input type="hidden" name="type" value="company">
+            
 
             <div class="form-group">
                 <label class="label">رقم الرخصة</label>

@@ -57,33 +57,28 @@ class OtpAuthController extends Controller
             return back()->withErrors(['code' => 'رمز غير صحيح أو منتهي']);
         }
 
-        $user = User::firstOrCreate(
-            ['phone' => $validated['phone']],
-            [
-                'name'     => null,
-            ]
-        );
+          $user = User::where('phone', $validated['phone'])->first();
+
+if (!$user) {
+    $user = User::create([
+        'phone' => $validated['phone'],
+        'name'  => null,
+    ]);
+}
 
         /* ==============================
-           Assign Role
-        ============================== */
+   Assign Role (مرة وحدة فقط)
+============================== */
 
-        if ($validated['intent'] === 'partner') {
+if (!$user->roles()->exists()) {
 
-            $partnerRole = Role::where('name', 'Partner')->first();
+    if ($validated['intent'] === 'partner') {
+        $user->assignRole('Partner', true);
+    } else {
+        $user->assignRole('User', true);
+    }
 
-            if ($partnerRole) {
-                $user->roles()->syncWithoutDetaching([$partnerRole->id]);
-            }
-
-        } else {
-
-            $userRole = Role::where('name', 'User')->first();
-
-            if ($userRole) {
-                $user->roles()->syncWithoutDetaching([$userRole->id]);
-            }
-        }
+}
 
         Auth::login($user);
 

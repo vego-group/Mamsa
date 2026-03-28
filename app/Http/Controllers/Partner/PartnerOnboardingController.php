@@ -13,44 +13,62 @@ class PartnerOnboardingController extends Controller
 
         $profile = auth()->user()->partner;
 
+        // إذا اختار النوع خلاص → نوديه يكمل الترخيص
         if ($profile && !empty($profile->type)) {
-            return redirect()->route('partner.dashboard');
+            return redirect()->route('partner.license.form');
         }
 
         return view('pages.partner.type');
     }
 
-    public function typeStore(Request $request)
-    {
-        abort_unless(auth()->user()->isPartner(), 403);
+   public function typeStore(Request $request)
+{
+    abort_unless(auth()->user()->isPartner(), 403);
 
-        $data = $request->validate([
-            'type' => 'required|in:individual,company',
-        ]);
+    $data = $request->validate([
+        'type' => ['required','in:individual,company'],
+    ]);
 
-        auth()->user()->partner()->updateOrCreate(
-            ['user_id' => auth()->id()],
-            [
-                'type'   => $data['type'],
-                'status' => $data['type'] === 'company'
-                                ? 'pending_review'
-                                : 'verified',
-            ]
-        );
+    auth()->user()->partner()->updateOrCreate(
+        ['user_id' => auth()->id()],
+        [
+            'type' => $data['type'],
+            'verification_status' => 'pending',
+        ]
+    );
 
-        return redirect()->route('partner.license.form');
+    // 🔥 التفريق هنا
+    if ($data['type'] === 'individual') {
+        return redirect()->route('partner.unit.create');
     }
+
+    return redirect()->route('partner.license.form');
+}
 
     public function dashboard()
-    {
-        abort_unless(auth()->user()->isPartner(), 403);
+{
+    abort_unless(auth()->user()->isPartner(), 403);
 
-        $profile = auth()->user()->partner;
+    $profile = auth()->user()->partner;
 
-        if (!$profile || empty($profile->type)) {
-            return redirect()->route('partner.type.form');
+    if (!$profile || empty($profile->type)) {
+        return redirect()->route('partner.type.form');
+    }
+
+    // 🔥 فقط الشركة تتقيد بالتصريح
+    if ($profile->type === 'company') {
+
+        if (empty($profile->tourism_permit_no)) {
+            return redirect()->route('partner.license.form');
         }
 
-        return view('pages.partner.dashboard', compact('profile'));
+        if ($profile->verification_status !== 'approved') {
+            return redirect()->route('partner.review')
+                ->with('status','حساب الشركة قيد المراجعة.');
+        }
     }
+
+    // ✅ الفرد يدخل طبيعي
+    return view('pages.partner.dashboard', compact('profile'));
+}
 }

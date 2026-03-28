@@ -12,6 +12,7 @@ use App\Http\Controllers\ReportsController;
 
 use App\Http\Controllers\Auth\OtpAuthController;
 use App\Http\Controllers\Auth\CompleteProfileController;
+use Illuminate\Http\Request;
 
 use App\Http\Controllers\Partner\PartnerOnboardingController;
 use App\Http\Controllers\Partner\PartnerUnitController;
@@ -91,7 +92,12 @@ Route::get('/post-auth-redirect', function () {
     }
 
     if ($user && $user->isPartner()) {
+
+    if (!$user->partner || empty($user->partner->type)) {
         return redirect()->route('partner.type.form');
+    }
+
+    return redirect()->route('partner.dashboard');
     }
 
     return redirect()->route('user.profile');
@@ -138,6 +144,27 @@ Route::post('/auth/request', [OtpAuthController::class, 'requestCode'])->name('a
 Route::get('/auth/confirm', [OtpAuthController::class, 'showConfirmForm'])->name('auth.otp.confirm');
 Route::post('/auth/verify', [OtpAuthController::class, 'verifyCode'])->name('auth.otp.verify');
 
+Route::get('/email-verify', function(){
+    return view('pages.Auth.email-verify');
+})->name('auth.email.verify.form');
+
+Route::post('/email-verify', function (Illuminate\Http\Request $request) {
+
+    if ($request->code == session('email_verify_code')) {
+
+        $user = \App\Models\User::find(session('email_verify_user'));
+
+        if ($user) {
+            $user->email_verified_at = now();
+            $user->save();
+        }
+
+        return redirect()->route('partner.dashboard');
+    }
+
+    return back()->withErrors(['code' => 'رمز التحقق غير صحيح']);
+
+})->name('auth.email.verify.submit'); // 🔥 هذا السطر المهم
 /*
 |--------------------------------------------------------------------------
 | إكمال الملف الشخصي
@@ -160,7 +187,6 @@ Route::prefix('partner')
     ->name('partner.')
     ->middleware([
         'auth',
-        'verified',
         \App\Http\Middleware\RoleMiddleware::class . ':Partner',
     ])
     ->group(function () {

@@ -25,7 +25,7 @@
         <input type="hidden" name="intent" value="{{ $intent }}">
 
         <div class="form-group">
-            <label class="label">الاسم الكامل</label>
+            <label class="label">الاسم </label>
             <input type="text"
                    name="name"
                    class="input"

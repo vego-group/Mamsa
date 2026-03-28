@@ -233,3 +233,37 @@ button *, a *, .header-pill *, .btn-pill *{
     padding-inline-start: 12px;
   }
 }
+
+/* type.form */
+.type-box{
+    border:2px solid #eee;
+    padding:25px;
+    border-radius:16px;
+    cursor:pointer;
+    transition:.2s;
+    width:150px;
+    text-align:center;
+    font-size:16px;
+}
+
+.type-box:hover{
+    border-color:#2F6F63;
+}
+
+.type-box input{
+    display:none;
+}
+
+.type-box input:checked + div{
+    color:#2F6F63;
+    font-weight:700;
+}
+
+.license-card{
+    max-width:700px;
+    margin:auto;
+    padding:40px;
+    border-radius:20px;
+    box-shadow:0 15px 40px rgba(0,0,0,0.08);
+    background:white;
+}

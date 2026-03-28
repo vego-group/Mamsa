@@ -11,7 +11,6 @@
 
 <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px auto;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.08);">
 
-{{-- HEADER --}}
 <tr>
 <td style="background:#2F6F63;padding:30px;text-align:center;color:#ffffff;">
 <h1 style="margin:0;font-size:24px;">مَمْسَى</h1>
@@ -19,7 +18,6 @@
 </td>
 </tr>
 
-{{-- BODY --}}
 <tr>
 <td style="padding:40px;text-align:center;">
 
@@ -27,16 +25,26 @@
 مرحباً {{ $user->name ?? '' }} 👋
 </h2>
 
-<p style="color:#555;font-size:15px;line-height:1.8;margin-bottom:30px;">
-اضغط الزر بالأسفل لتأكيد بريدك الإلكتروني وتفعيل حسابك في منصة مَمْسَى.
+<p style="color:#555;font-size:15px;line-height:1.8;margin-bottom:20px;">
+رمز التحقق الخاص بك لتفعيل حسابك:
 </p>
 
-<a href="{{ $url }}"
-   style="display:inline-block;background:#2F6F63;color:#ffffff;
-   padding:14px 30px;border-radius:12px;text-decoration:none;
-   font-weight:bold;font-size:15px;">
-   تأكيد البريد الإلكتروني
-</a>
+<div style="
+background:#f3f4f6;
+padding:18px;
+border-radius:12px;
+font-size:26px;
+font-weight:bold;
+letter-spacing:6px;
+color:#2F6F63;
+margin:25px 0;
+">
+{{ $code }}
+</div>
+
+<p style="font-size:13px;color:#777;">
+هذا الرمز صالح لمدة 5 دقائق فقط
+</p>
 
 <p style="margin-top:30px;font-size:12px;color:#888;">
 إذا لم تقم بإنشاء حساب، يمكنك تجاهل هذه الرسالة.
@@ -45,7 +53,6 @@
 </td>
 </tr>
 
-{{-- FOOTER --}}
 <tr>
 <td style="background:#f0f2f1;padding:20px;text-align:center;font-size:12px;color:#777;">
 © {{ date('Y') }} مَمْسَى — جميع الحقوق محفوظة
