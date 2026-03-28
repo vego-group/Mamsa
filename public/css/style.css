@@ -956,6 +956,9 @@ left:-60px;
 right:-60px;
 }
 
+/* ===========================
+        صفحة البروفايل
+=========================== */
 .profile-page {
     width: 85%;
     margin: 40px auto;
@@ -1022,4 +1025,77 @@ right:-60px;
     text-align: center;
     color: var(--green);
     font-size: 14px;
+}
+
+/* ===========================
+      قائمة المستخدم )
+=========================== */
+
+.user-menu-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* أيقونة الحساب */
+.user-icon-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.user-icon-btn img {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+}
+
+/* القائمة المنسدلة مع الأنيميشن */
+.user-dropdown {
+    position: absolute;
+    top: 65px;                 /* تنزل تحت الأيقونة */
+    right: 50%;                /* محاذاة دقيقة مع الأيقونة */
+    transform: translate(-150%) translateY(-15px);
+    width: 130px;              /* القائمة أصغر */
+    background: white;
+    border-radius: 12px;
+    padding: 6px 0;            /* حجم داخلي أصغر */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    
+    /* للأنيميشن */
+    opacity: 0;
+    transform-origin: top;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+
+    display: none;             /* افتراضياً مخفية */
+    z-index: 9999;
+    text-align: right;
+}
+
+/* عند فتح القائمة */
+.user-dropdown.show {
+    display: block !important;
+    opacity: 1;
+    transform: translateX(-150%) translateY(0);
+}
+
+/* عناصر القائمة */
+.user-dropdown a,
+.user-dropdown button.dropdown-logout {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #35554B;
+    text-decoration: none;
+    cursor: pointer;
+    background: none;
+    border: none;
+    text-align: right;
+}
+
+.user-dropdown a:hover,
+.user-dropdown button.dropdown-logout:hover {
+    background: #EDF1EF;
 }

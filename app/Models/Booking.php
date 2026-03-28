@@ -25,14 +25,21 @@ class Booking extends Model
         'total_amount' => 'decimal:2',
     ];
 
+    // العلاقة مع الوحدات
     public function unit()
     {
-        return $this->belongsTo(Unit::class);
+        return $this->belongsTo(Unit::class, 'unit_id');
     }
 
+    // العلاقة مع المستخدم كحاجز
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    // العلاقة الاختيارية اللي مسميتها سابقاً "customer"
     public function customer()
     {
-        // الحاجز (مستخدم داخل النظام حالياً)
         return $this->belongsTo(User::class, 'user_id');
     }
 

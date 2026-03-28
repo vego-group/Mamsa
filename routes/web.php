@@ -18,6 +18,7 @@ use App\Http\Controllers\Partner\PartnerUnitController;
 
 use App\Http\Controllers\UnitDetailsController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserBookingsController;
 
 use App\Models\Unit;
 
@@ -58,6 +59,12 @@ Route::get('/profile', function () {
 Route::put('/profile/update', [UserController::class, 'updateProfile'])
     ->middleware('auth')
     ->name('user.update');
+
+
+
+Route::get('/my-bookings', [UserBookingsController::class, 'index'])
+    ->middleware('auth')
+    ->name('user.bookings');
 
 /*
 |--------------------------------------------------------------------------
