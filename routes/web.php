@@ -13,6 +13,9 @@ use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\Auth\OtpAuthController;
 use App\Http\Controllers\Auth\CompleteProfileController;
 
+use App\Http\Controllers\Partner\PartnerOnboardingController;
+use App\Http\Controllers\Partner\PartnerUnitController;
+
 use App\Http\Controllers\UnitDetailsController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserBookingsController;
@@ -111,27 +114,39 @@ Route::get('/post-auth-redirect', function () {
 
     $user = Auth::user();
 
-    // لو المستخدم أدمن → يدخل لوحة الأدمن
+    // 👑 أدمن
     if ($user && $user->isAdmin()) {
         return redirect()->route('admin.dashboard');
     }
 
-    // لو سجل دخول عبر "كن شريكًا معنا"
+    // 🆕 جا من "كن شريك"
     if (session('login_intent') === 'partner') {
-        return redirect()->route('partner.type.form');
+
+        // أول مرة
+        if (!$user->partner || empty($user->partner->type)) {
+            return redirect()->route('partner.type.form');
+        }
+
+        // قديم
+        return redirect()->route('partner.dashboard');
     }
 
-    // لو المستخدم شريك قديم
+    // 👴 شريك قديم
     if ($user && $user->isPartner()) {
-        return redirect()->route('partner.type.form');
+
+        // ما كمل
+        if (!$user->partner || empty($user->partner->type)) {
+            return redirect()->route('partner.type.form');
+        }
+
+        // كمل
+        return redirect()->route('partner.dashboard');
     }
 
-    // المستخدم العادي
+    // 👤 مستخدم عادي
     return redirect()->route('user.profile');
 
 })->middleware('auth')->name('post.auth.redirect');
-
-
 /*
 |--------------------------------------------------------------------------
 | Dashboard عام
@@ -192,7 +207,7 @@ Route::post('/email-verify', function (Illuminate\Http\Request $request) {
             $user->save();
         }
 
-        return redirect()->route('admin.dashboard');
+        return redirect()->route('partner.type.form');
     }
 
     return back()->withErrors(['code' => 'رمز التحقق غير صحيح']);
@@ -212,6 +227,33 @@ Route::middleware('auth')->group(function () {
         ->name('auth.complete-profile.submit');
 });
 
+
+/*
+|--------------------------------------------------------------------------
+| الشريك Partner
+|--------------------------------------------------------------------------
+*/
+Route::prefix('partner')
+    ->name('partner.')
+    ->middleware([
+        'auth',
+        \App\Http\Middleware\RoleMiddleware::class . ':Partner',
+    ])
+    ->group(function () {
+
+        Route::get('/type', [PartnerOnboardingController::class, 'typeForm'])->name('type.form');
+        Route::post('/type', [PartnerOnboardingController::class, 'typeStore'])->name('type.store');
+
+        Route::get('/dashboard', [PartnerOnboardingController::class, 'dashboard'])->name('dashboard');
+
+        Route::get('/license', [PartnerUnitController::class, 'licenseForm'])->name('license.form');
+        Route::post('/license', [PartnerUnitController::class, 'licenseStore'])->name('license.store');
+
+        Route::get('/unit', [PartnerUnitController::class, 'create'])->name('unit.create');
+        Route::post('/unit', [PartnerUnitController::class, 'store'])->name('unit.store');
+
+        Route::get('/review', [PartnerUnitController::class, 'review'])->name('review');
+    });
 
 
 /*
