@@ -15,6 +15,9 @@ use App\Http\Controllers\Auth\CompleteProfileController;
 use App\Http\Controllers\Partner\PartnerOnboardingController;
 use App\Http\Controllers\Partner\PartnerUnitController;
 
+use App\Http\Controllers\Partner\PartnerOnboardingController;
+use App\Http\Controllers\Partner\PartnerUnitController;
+
 use App\Http\Controllers\UnitDetailsController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserBookingsController;
@@ -185,6 +188,7 @@ Route::post('/email-verify', function (Illuminate\Http\Request $request) {
             $user->save();
         }
 
+        return redirect()->route('partner.type.form');
         return redirect()->route('partner.type.form');
     }
 
