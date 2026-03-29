@@ -2,59 +2,47 @@
 
 @section('content')
 
-<div class="unit-page">
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+
+
 
 <div class="unit-layout">
 
-<!-- المحتوى الرئيسي -->
+<!-- ================= MAIN ================= -->
 <div class="unit-main">
 
-    <!-- العنوان -->
-    <div class="unit-header">
+    <!-- Title -->
+    <h1>{{ $unit->name }}</h1>
 
-        <h1 class="unit-title">
-            {{ $unit->name }}
-        </h1>
+    <p style="color:#777">
+        {{ $unit->city }} • {{ $unit->bedrooms }} غرف • {{ $unit->capacity }} أشخاص
+    </p>
 
-        <div class="unit-rating">
-            <span class="stars">★★★★★</span>
-
-            <span class="rating-number">
-                4.8
-            </span>
-
-            <span class="reviews-count">
-                (124 تقييم)
-            </span>
-
-            <span class="unit-meta">
-                {{ $unit->city }} • {{ $unit->bedrooms }} غرف • {{ $unit->capacity }} أشخاص
-            </span>
-        </div>
-
-    </div>
-
-
-    <!-- الصور -->
+    <!-- Gallery -->
     <div class="unit-gallery">
 
         @if($unit->images->count())
 
-        <div class="gallery-grid">
+            <div class="gallery-grid">
 
-            <img class="main-photo"
-            src="{{ asset('storage/' . $unit->images->first()->image_url) }}">
+                <img class="main-photo"
+                     src="{{ asset('storage/' . $unit->images->first()->image_url) }}">
 
-            <div class="gallery-side">
+                <div class="gallery-side">
 
-                @foreach($unit->images->skip(1)->take(4) as $img)
-                    <img src="{{ asset('storage/' . $img->image_url) }}" class="gallery-thumb">
-                @endforeach
+                    @foreach($unit->images->skip(1)->take(4) as $img)
+                        <img src="{{ asset('storage/' . $img->image_url) }}" class="gallery-thumb">
+                    @endforeach
+
+                </div>
 
             </div>
 
-        </div>
-
+        @else
+            <img src="/images/default.jpg" class="main-photo">
         @endif
 
         <button class="show-photos-btn" onclick="openGallery()">
@@ -63,109 +51,39 @@
 
     </div>
 
-
-    <!-- وصف الوحدة -->
+    <!-- Description -->
     <div class="unit-description">
-
         <h2>وصف الوحدة</h2>
-
-        <p>
-            {{ $unit->description }}
-        </p>
-
+        <p>{{ $unit->description }}</p>
     </div>
 
-
-    <!-- التبويبات -->
+    <!-- Tabs -->
     <div class="tabs">
-
-        <button class="tab active" data-tab="features">
-            المميزات والمواصفات
-        </button>
-
-        <button class="tab" data-tab="reviews">
-            التقييمات
-        </button>
-
-        <button class="tab" data-tab="location">
-            الموقع
-        </button>
-
-        <button class="tab" data-tab="policy">
-            شروط الحجز والإلغاء
-        </button>
-
+        <button class="tab active" data-tab="location">الموقع</button>
+        <button class="tab" data-tab="policy">الشروط</button>
     </div>
 
-
-    <!-- المميزات -->
-    <div class="tab-content active" id="features">
-
-        <div class="features-grid">
-            <div class="feature">واي فاي</div>
-            <div class="feature">موقف سيارات</div>
-            <div class="feature">مطبخ كامل</div>
-            <div class="feature">تكييف</div>
-            <div class="feature">تلفزيون</div>
-            <div class="feature">غسالة</div>
-        </div>
-
-    </div>
-
-
-    <!-- التقييمات -->
-    <div class="tab-content" id="reviews">
-
-        <div class="review-card">
-
-            <div class="review-stars">★★★★★</div>
-
-            <div class="review-text">
-                مكان جميل جداً ونظيف وقريب من البوليفارد.
-            </div>
-
-            <div class="review-author">
-                خالد أحمد
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- الموقع -->
-    <div class="tab-content" id="location">
-
+    <!-- Location -->
+    <div class="tab-content active" id="location">
         <div id="map" style="height:350px;border-radius:15px;"></div>
-
     </div>
 
-
-    <!-- السياسات -->
+    <!-- Policy -->
     <div class="tab-content" id="policy">
-        الدخول: بعد 3 مساءً  
-        الخروج: قبل 12 ظهراً  
-        <br><br>
-        الإلغاء مجاني قبل 24 ساعة.
+        الدخول: بعد 3 مساءً<br>
+        الخروج: قبل 12 ظهراً<br><br>
+        الإلغاء مجاني قبل 24 ساعة
     </div>
 
+</div>
 
-</div> <!-- /unit-main -->
 
-
-<!-- كارد الحجز -->
+<!-- ================= BOOKING ================= -->
 <div class="booking-card">
 
     <div class="price-row">
-
-        <span class="price">
-            {{ $unit->price }} ريال
-        </span>
-
-        <span class="per-night">
-            / ليلة
-        </span>
-
+        <span class="price">{{ $unit->price }} ريال</span>
+        <span class="per-night">/ ليلة</span>
     </div>
 
     <div class="booking-dates">
@@ -188,8 +106,7 @@
     </div>
 
     <div class="nights-box">
-        عدد الليالي:
-        <span id="nights">1</span>
+        عدد الليالي: <span id="nights">1</span>
     </div>
 
     <div class="total-price">
@@ -206,12 +123,10 @@
 
 </div>
 
-
-</div>
 </div>
 
 
-<!-- معرض الصور -->
+<!-- ================= GALLERY MODAL ================= -->
 <div id="photoGallery" class="gallery-modal">
 
     <span class="close-gallery" onclick="closeGallery()">×</span>
@@ -229,12 +144,9 @@
 </div>
 
 
-
 <script>
 
-/* =========================
-        التبويبات
-========================= */
+/* ================= Tabs ================= */
 document.querySelectorAll(".tab").forEach(tab => {
 
     tab.addEventListener("click", () => {
@@ -254,9 +166,7 @@ document.querySelectorAll(".tab").forEach(tab => {
 })
 
 
-/* =========================
-          الخريطة
-========================= */
+/* ================= Map ================= */
 let mapLoaded = false
 
 function loadMap(){
@@ -281,9 +191,7 @@ function loadMap(){
 }
 
 
-/* =========================
-        حساب الليالي
-========================= */
+/* ================= Booking ================= */
 const checkin = document.getElementById("checkin")
 const checkout = document.getElementById("checkout")
 const nights = document.getElementById("nights")
@@ -326,9 +234,7 @@ checkin.addEventListener("change",calculateBooking)
 checkout.addEventListener("change",calculateBooking)
 
 
-/* =========================
-      معرض الصور
-========================= */
+/* ================= Gallery ================= */
 
 let images = [
 

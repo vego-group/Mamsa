@@ -84,22 +84,24 @@ Route::middleware('guest')->group(function () {
 */
 Route::get('/post-auth-redirect', function () {
 
-    /** @var \App\Models\User $user */
     $user = Auth::user();
 
+    // لو المستخدم أدمن → يدخل لوحة الأدمن
     if ($user && $user->isAdmin()) {
         return redirect()->route('admin.dashboard');
     }
 
-    if ($user && $user->isPartner()) {
-
-    if (!$user->partner || empty($user->partner->type)) {
+    // لو سجل دخول عبر "كن شريكًا معنا"
+    if (session('login_intent') === 'partner') {
         return redirect()->route('partner.type.form');
     }
 
-    return redirect()->route('partner.dashboard');
+    // لو المستخدم شريك قديم
+    if ($user && $user->isPartner()) {
+        return redirect()->route('partner.type.form');
     }
 
+    // المستخدم العادي
     return redirect()->route('user.profile');
 
 })->middleware('auth')->name('post.auth.redirect');
@@ -159,12 +161,12 @@ Route::post('/email-verify', function (Illuminate\Http\Request $request) {
             $user->save();
         }
 
-        return redirect()->route('partner.dashboard');
+        return redirect()->route('admin.dashboard');
     }
 
     return back()->withErrors(['code' => 'رمز التحقق غير صحيح']);
 
-})->name('auth.email.verify.submit'); // 🔥 هذا السطر المهم
+})->name('auth.email.verify.submit'); 
 /*
 |--------------------------------------------------------------------------
 | إكمال الملف الشخصي

@@ -1,4 +1,5 @@
 {{-- resources/views/partials/header.blade.php --}}
+
 <header class="header header--hero">
   <div class="header-container">
 
@@ -9,46 +10,57 @@
 
     {{-- الحساب / الأزرار يسار --}}
     <div class="login">
+@php
+$hideProfileIcon = 
+    request()->is('complete-profile*') || 
+    request()->is('email-verify*') || 
+    request()->is('partner*') || 
+    request()->get('intent') === 'partner';
+@endphp
 
+      {{-- إذا المستخدم مسجل دخول --}}
       @auth
-      {{-- قائمة المستخدم المنسدلة --}}
-      <div class="user-menu-wrapper">
+        @if(!$hideProfileIcon)
 
-        {{-- زر الأيقونة --}}
-        <button type="button" class="user-icon-btn" onclick="toggleUserMenu()">
-            <img src="{{ asset('images/login.png') }}" alt="حسابي">
-        </button>
+        {{-- قائمة المستخدم --}}
+        <div class="user-menu-wrapper">
 
-        {{-- القائمة --}}
-        <div class="user-dropdown" id="userDropdown">
+          {{-- زر الأيقونة --}}
+          <button type="button" class="user-icon-btn" onclick="toggleUserMenu()">
+              <img src="{{ asset('images/login.png') }}" alt="حسابي">
+          </button>
 
-            <a href="{{ route('user.profile') }}">صفحتي الشخصية</a>
+          {{-- القائمة المنسدلة --}}
+          <div class="user-dropdown" id="userDropdown">
+              <a href="{{ route('user.profile') }}">صفحتي الشخصية</a>
+              <a href="{{ route('user.bookings') }}">حجوزاتي</a>
 
-            <a href="{{ route('user.bookings') }}">حجوزاتي</a>
-
-            {{-- تسجيل خروج --}}
-            <form id="logout-form-header" action="{{ route('logout') }}" method="POST" style="margin:0;">
-                @csrf
-                <button type="submit" class="dropdown-logout">تسجيل خروج</button>
-            </form>
+              <form id="logout-form-header" action="{{ route('logout') }}" method="POST" style="margin:0;">
+                  @csrf
+                  <button type="submit" class="dropdown-logout">تسجيل خروج</button>
+              </form>
+          </div>
 
         </div>
-      </div>
+
+        @endif
       @endauth
 
 
+      {{-- إذا المستخدم زائر --}}
       @guest
         @php
           $isLoginRoute = request()->routeIs('login') || request()->routeIs('auth.phone');
         @endphp
 
-        {{-- لا نعرض الأزرار داخل صفحة الدخول --}}
+        {{-- نخفي الأزرار في صفحة تسجيل الدخول --}}
         @unless($isLoginRoute)
           <div class="header-actions">
 
             <a href="{{ route('auth.phone') }}" class="header-pill">
               تسجيل الدخول
             </a>
+
             <a href="{{ route('auth.phone', ['intent' => 'partner']) }}" class="header-pill">
               كن شريكًا معنا
             </a>
@@ -74,7 +86,7 @@ document.addEventListener('click', function(e) {
     const wrapper = document.querySelector('.user-menu-wrapper');
     const menu = document.getElementById('userDropdown');
 
-    if (!wrapper.contains(e.target)) {
+    if (wrapper && !wrapper.contains(e.target)) {
         menu.classList.remove('show');
     }
 });

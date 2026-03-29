@@ -65,7 +65,8 @@ public function store(Request $request)
 
     $request->validate($rules);
 
-    Unit::create([
+    // ✅ نحفظ الوحدة أول
+    $unit = Unit::create([
         'partner_id' => $profile->id,
         'unit_name'  => $request->unit_name,
         'unit_type'  => $request->unit_type,
@@ -75,12 +76,26 @@ public function store(Request $request)
         'district'   => $request->district,
         'description'=> $request->description,
 
-        // 🔥 مهم للفرد (NOT NULL)
+        // 🔥 مهم للفرد
         'national_id'        => $request->national_id,
         'tourism_permit_no'  => $request->tourism_permit_no,
 
         'approval_status' => 'pending_review',
     ]);
+
+    // 🔥 هذا الجزء الجديد فقط (حفظ الصور)
+    if ($request->hasFile('images')) {
+
+        foreach ($request->file('images') as $image) {
+
+            $path = $image->store('units', 'public');
+
+            \App\Models\UnitImage::create([
+                'unit_id'   => $unit->id,
+                'image_url' => $path,
+            ]);
+        }
+    }
 
     return redirect()->route('partner.dashboard')
         ->with('status','تم إرسال الوحدة وهي الآن قيد المراجعة');
