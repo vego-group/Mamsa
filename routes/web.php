@@ -3,7 +3,6 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 
-use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminUsersController;
 use App\Http\Controllers\BookingsController;
@@ -12,6 +11,9 @@ use App\Http\Controllers\ReportsController;
 
 use App\Http\Controllers\Auth\OtpAuthController;
 use App\Http\Controllers\Auth\CompleteProfileController;
+
+use App\Http\Controllers\Partner\PartnerOnboardingController;
+use App\Http\Controllers\Partner\PartnerUnitController;
 
 use App\Http\Controllers\UnitDetailsController;
 use App\Http\Controllers\UserController;
@@ -88,48 +90,39 @@ Route::put('/profile/update', [UserController::class, 'updateProfile'])
 
 /*
 |--------------------------------------------------------------------------
-| تسجيل الدخول
-|--------------------------------------------------------------------------
-*/
-Route::middleware('guest')->group(function () {
-
-    Route::get('/login', [LoginController::class, 'show'])
-        ->name('login');
-
-    Route::post('/login', [LoginController::class, 'login'])
-        ->name('login.attempt');
-});
-
-
-
-/*
-|--------------------------------------------------------------------------
-| إعادة التوجيه بعد تسجيل الدخول (بدون Partner)
+| post-auth redirect
 |--------------------------------------------------------------------------
 */
 Route::get('/post-auth-redirect', function () {
 
     $user = Auth::user();
 
-    // لو المستخدم أدمن → يدخل لوحة الأدمن
     if ($user && $user->isAdmin()) {
         return redirect()->route('admin.dashboard');
     }
 
-    // لو سجل دخول عبر "كن شريكًا معنا"
     if (session('login_intent') === 'partner') {
-        return redirect()->route('partner.type.form');
+
+        if (!$user->partner || empty($user->partner->type)) {
+            return redirect()->route('partner.type.form');
+        }
+
+        return redirect()->route('partner.dashboard');
     }
 
-    // لو المستخدم شريك قديم
     if ($user && $user->isPartner()) {
-        return redirect()->route('partner.type.form');
+
+        if (!$user->partner || empty($user->partner->type)) {
+            return redirect()->route('partner.type.form');
+        }
+
+        return redirect()->route('partner.dashboard');
     }
 
-    // المستخدم العادي
     return redirect()->route('user.profile');
 
 })->middleware('auth')->name('post.auth.redirect');
+
 
 
 /*
@@ -192,12 +185,15 @@ Route::post('/email-verify', function (Illuminate\Http\Request $request) {
             $user->save();
         }
 
-        return redirect()->route('admin.dashboard');
+        return redirect()->route('partner.type.form');
     }
 
     return back()->withErrors(['code' => 'رمز التحقق غير صحيح']);
 
-})->name('auth.email.verify.submit'); 
+})->name('auth.email.verify.submit');
+
+
+
 /*
 |--------------------------------------------------------------------------
 | إكمال الملف الشخصي
@@ -211,6 +207,35 @@ Route::middleware('auth')->group(function () {
     Route::post('/complete-profile', [CompleteProfileController::class, 'submit'])
         ->name('auth.complete-profile.submit');
 });
+
+
+
+/*
+|--------------------------------------------------------------------------
+| الشريك Partner
+|--------------------------------------------------------------------------
+*/
+Route::prefix('partner')
+    ->name('partner.')
+    ->middleware([
+        'auth',
+        \App\Http\Middleware\RoleMiddleware::class . ':Partner',
+    ])
+    ->group(function () {
+
+        Route::get('/type', [PartnerOnboardingController::class, 'typeForm'])->name('type.form');
+        Route::post('/type', [PartnerOnboardingController::class, 'typeStore'])->name('type.store');
+
+        Route::get('/dashboard', [PartnerOnboardingController::class, 'dashboard'])->name('dashboard');
+
+        Route::get('/license', [PartnerUnitController::class, 'licenseForm'])->name('license.form');
+        Route::post('/license', [PartnerUnitController::class, 'licenseStore'])->name('license.store');
+
+        Route::get('/unit', [PartnerUnitController::class, 'create'])->name('unit.create');
+        Route::post('/unit', [PartnerUnitController::class, 'store'])->name('unit.store');
+
+        Route::get('/review', [PartnerUnitController::class, 'review'])->name('review');
+    });
 
 
 
@@ -260,6 +285,7 @@ Route::prefix('admin')
         Route::get('/reports/export/bookings.csv',  [ReportsController::class, 'exportBookingsCsv'])->name('reports.export.bookings.csv');
         Route::get('/reports/export/bookings.excel', [ReportsController::class, 'exportBookingsExcel'])->name('reports.export.bookings.excel');
         Route::get('/reports/export/bookings.pdf',  [ReportsController::class, 'exportBookingsPdf'])->name('reports.export.bookings.pdf');
+
         Route::get('/reports/export/summary.csv', [ReportsController::class, 'exportSummaryCsv'])->name('reports.export.summary.csv');
         Route::get('/reports/export/summary.excel', [ReportsController::class, 'exportSummaryExcel'])->name('reports.export.summary.excel');
         Route::get('/reports/export/summary.pdf', [ReportsController::class, 'exportSummaryPdf'])->name('reports.export.summary.pdf');

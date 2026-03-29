@@ -92,7 +92,7 @@ class CompleteProfileController extends Controller
                 return redirect()->route('auth.email.verify.form');
             }
 
-            return redirect()->route('partner.dashboard');
+            return redirect()->route('admin.dashboard');
         }
 
         return redirect()->route('home');

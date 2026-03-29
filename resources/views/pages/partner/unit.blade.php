@@ -18,9 +18,9 @@
   }
 
   .page-wrap{
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 28px auto 80px;
-    padding: 0 16px;
+    padding: 0 24px;
   }
 
   .section{ margin-bottom: 18px; }
@@ -66,7 +66,7 @@
 
   .split{
     display:grid;
-    grid-template-columns: 1.1fr .9fr;
+    grid-template-columns: 1fr 2fr;
     gap: 18px;
   }
   @media (max-width: 980px){
@@ -78,7 +78,7 @@
     border:1px solid rgba(229,231,235,.95);
     border-radius: var(--radius);
     box-shadow: var(--shadow2);
-    padding: 18px;
+    padding: 24px;
     overflow:hidden;
   }
 

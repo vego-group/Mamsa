@@ -55,7 +55,7 @@ class VerifyEmailController extends Controller
             }
 
             // إذا اختار النوع
-            return redirect()->route('partner.dashboard');
+            return redirect()->route('admin.dashboard');
         }
 
         return redirect()->route('home');
