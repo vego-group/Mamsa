@@ -3,9 +3,25 @@
   <div class="header-container">
 
     {{-- الشعار يمين --}}
-    <div class="logo">
-      <img src="{{ asset('images/logo.png') }}" alt="شعار الموقع">
-    </div>
+    <div class="logo" style="position: relative; display: inline-block;">
+
+    {{-- زر مخفي يغطي الشعار بالكامل ويعيد للهوم --}}
+    <a href="{{ route('home') }}" 
+       style="
+            position:absolute;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            z-index:10;
+            opacity:0;
+            cursor:pointer;
+        ">
+    </a>
+
+    {{-- الشعار --}}
+    <img src="{{ asset('images/logo.png') }}" alt="شعار الموقع">
+</div>
 
     {{-- الحساب / الأزرار يسار --}}
     <div class="login">

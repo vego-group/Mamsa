@@ -32,6 +32,6 @@ class LoginController extends Controller
         $request->session()->regenerate();
 
         // التوجيه الموحّد: سيقرّر /admin أو /partner/dashboard
-        return redirect()->intended(route('post.auth.redirect'));
+        return redirect()->route('post.auth.redirect');
     }
 }

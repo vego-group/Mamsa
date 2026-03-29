@@ -12,10 +12,6 @@ use App\Http\Controllers\ReportsController;
 
 use App\Http\Controllers\Auth\OtpAuthController;
 use App\Http\Controllers\Auth\CompleteProfileController;
-use Illuminate\Http\Request;
-
-use App\Http\Controllers\Partner\PartnerOnboardingController;
-use App\Http\Controllers\Partner\PartnerUnitController;
 
 use App\Http\Controllers\UnitDetailsController;
 use App\Http\Controllers\UserController;
@@ -25,7 +21,7 @@ use App\Models\Unit;
 
 /*
 |--------------------------------------------------------------------------
-| الصفحة الرئيسية
+| الصفحة الرئيسية (HOME CONTENT)
 |--------------------------------------------------------------------------
 */
 Route::get('/', function () {
@@ -36,9 +32,17 @@ Route::get('/', function () {
         ->take(12)
         ->get();
 
-    return view('home', compact('units'));
+    $bedroomsList = Unit::select('bedrooms')
+        ->distinct()
+        ->whereNotNull('bedrooms')
+        ->orderBy('bedrooms')
+        ->pluck('bedrooms');
+
+    return view('home-content', compact('units', 'bedroomsList'));
 
 })->name('home');
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -48,6 +52,23 @@ Route::get('/', function () {
 Route::get('/units/all', [UnitsController::class, 'all'])->name('units.all');
 Route::get('/units/filter', [UnitsController::class, 'filter'])->name('units.filter');
 
+
+
+/*
+|--------------------------------------------------------------------------
+| حجوزاتي + تفاصيل الحجز
+|--------------------------------------------------------------------------
+*/
+Route::get('/my-bookings', [UserBookingsController::class, 'index'])
+    ->middleware('auth')
+    ->name('user.bookings');
+
+Route::get('/my-bookings/{booking}', [UserBookingsController::class, 'show'])
+    ->middleware('auth')
+    ->name('user.bookings.show');
+
+
+
 /*
 |--------------------------------------------------------------------------
 | صفحة البروفايل
@@ -55,7 +76,9 @@ Route::get('/units/filter', [UnitsController::class, 'filter'])->name('units.fil
 */
 Route::get('/profile', function () {
     return view('user.profile');
-})->middleware('auth')->name('user.profile');
+})
+->middleware('auth')
+->name('user.profile');
 
 Route::put('/profile/update', [UserController::class, 'updateProfile'])
     ->middleware('auth')
@@ -63,46 +86,39 @@ Route::put('/profile/update', [UserController::class, 'updateProfile'])
 
 
 
-Route::get('/my-bookings', [UserBookingsController::class, 'index'])
-    ->middleware('auth')
-    ->name('user.bookings');
-
 /*
 |--------------------------------------------------------------------------
 | تسجيل الدخول
 |--------------------------------------------------------------------------
 */
 Route::middleware('guest')->group(function () {
-    Route::get('/login', [LoginController::class, 'show'])->name('login');
-    Route::post('/login', [LoginController::class, 'login'])->name('login.attempt');
+
+    Route::get('/login', [LoginController::class, 'show'])
+        ->name('login');
+
+    Route::post('/login', [LoginController::class, 'login'])
+        ->name('login.attempt');
 });
+
+
 
 /*
 |--------------------------------------------------------------------------
-| إعادة توجيه بعد تسجيل الدخول
+| إعادة التوجيه بعد تسجيل الدخول (بدون Partner)
 |--------------------------------------------------------------------------
 */
 Route::get('/post-auth-redirect', function () {
 
-    /** @var \App\Models\User $user */
     $user = Auth::user();
 
-    if ($user && $user->isAdmin()) {
+    if ($user->isAdmin()) {
         return redirect()->route('admin.dashboard');
-    }
-
-    if ($user && $user->isPartner()) {
-
-    if (!$user->partner || empty($user->partner->type)) {
-        return redirect()->route('partner.type.form');
-    }
-
-    return redirect()->route('partner.dashboard');
     }
 
     return redirect()->route('user.profile');
 
 })->middleware('auth')->name('post.auth.redirect');
+
 
 /*
 |--------------------------------------------------------------------------
@@ -111,16 +127,17 @@ Route::get('/post-auth-redirect', function () {
 */
 Route::get('/dashboard', function () {
 
-    /** @var \App\Models\User $user */
     $user = Auth::user();
 
-    if ($user && $user->isAdmin()) {
+    if ($user->isAdmin()) {
         return redirect()->route('admin.dashboard');
     }
 
     return redirect()->route('user.profile');
 
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -132,11 +149,15 @@ Route::post('/logout', function () {
     request()->session()->invalidate();
     request()->session()->regenerateToken();
     return redirect()->route('home');
-})->middleware('auth')->name('logout');
+})
+->middleware('auth')
+->name('logout');
+
+
 
 /*
 |--------------------------------------------------------------------------
-| نظام OTP
+| OTP
 |--------------------------------------------------------------------------
 */
 Route::get('/auth', [OtpAuthController::class, 'showPhoneForm'])->name('auth.phone');
@@ -144,33 +165,15 @@ Route::post('/auth/request', [OtpAuthController::class, 'requestCode'])->name('a
 Route::get('/auth/confirm', [OtpAuthController::class, 'showConfirmForm'])->name('auth.otp.confirm');
 Route::post('/auth/verify', [OtpAuthController::class, 'verifyCode'])->name('auth.otp.verify');
 
-Route::get('/email-verify', function(){
-    return view('pages.Auth.email-verify');
-})->name('auth.email.verify.form');
 
-Route::post('/email-verify', function (Illuminate\Http\Request $request) {
 
-    if ($request->code == session('email_verify_code')) {
-
-        $user = \App\Models\User::find(session('email_verify_user'));
-
-        if ($user) {
-            $user->email_verified_at = now();
-            $user->save();
-        }
-
-        return redirect()->route('partner.dashboard');
-    }
-
-    return back()->withErrors(['code' => 'رمز التحقق غير صحيح']);
-
-})->name('auth.email.verify.submit'); // 🔥 هذا السطر المهم
 /*
 |--------------------------------------------------------------------------
 | إكمال الملف الشخصي
 |--------------------------------------------------------------------------
 */
 Route::middleware('auth')->group(function () {
+
     Route::get('/complete-profile', [CompleteProfileController::class, 'show'])
         ->name('auth.complete-profile');
 
@@ -178,32 +181,7 @@ Route::middleware('auth')->group(function () {
         ->name('auth.complete-profile.submit');
 });
 
-/*
-|--------------------------------------------------------------------------
-| الشريك Partner
-|--------------------------------------------------------------------------
-*/
-Route::prefix('partner')
-    ->name('partner.')
-    ->middleware([
-        'auth',
-        \App\Http\Middleware\RoleMiddleware::class . ':Partner',
-    ])
-    ->group(function () {
 
-        Route::get('/type', [PartnerOnboardingController::class, 'typeForm'])->name('type.form');
-        Route::post('/type', [PartnerOnboardingController::class, 'typeStore'])->name('type.store');
-
-        Route::get('/dashboard', [PartnerOnboardingController::class, 'dashboard'])->name('dashboard');
-
-        Route::get('/license', [PartnerUnitController::class, 'licenseForm'])->name('license.form');
-        Route::post('/license', [PartnerUnitController::class, 'licenseStore'])->name('license.store');
-
-        Route::get('/unit', [PartnerUnitController::class, 'create'])->name('unit.create');
-        Route::post('/unit', [PartnerUnitController::class, 'store'])->name('unit.store');
-
-        Route::get('/review', [PartnerUnitController::class, 'review'])->name('review');
-    });
 
 /*
 |--------------------------------------------------------------------------
@@ -218,10 +196,8 @@ Route::prefix('admin')
     ->name('admin.')
     ->group(function () {
 
-        // Dashboard
         Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
 
-        // المستخدمين (سوبر فقط)
         Route::middleware([\App\Http\Middleware\RoleMiddleware::class . ':Super Admin'])
             ->group(function () {
 
@@ -232,7 +208,6 @@ Route::prefix('admin')
             Route::delete('/users/{id}/delete', [AdminUsersController::class, 'delete'])->name('users.delete');
         });
 
-        // الوحدات
         Route::get('/units', [UnitsController::class, 'index'])->name('units.index');
         Route::get('/units/create', [UnitsController::class, 'create'])->name('units.create');
         Route::post('/units', [UnitsController::class, 'store'])->name('units.store');
@@ -240,40 +215,26 @@ Route::prefix('admin')
         Route::put('/units/{unit}', [UnitsController::class, 'update'])->name('units.update');
         Route::delete('/units/{unit}', [UnitsController::class, 'destroy'])->name('units.destroy');
 
-        Route::put('/units/{unit}/calendar/rotate', [UnitsController::class, 'rotateCalendarToken'])
-            ->name('units.calendar.rotate');
+        Route::put('/units/{unit}/calendar/rotate',
+            [UnitsController::class, 'rotateCalendarToken']
+        )->name('units.calendar.rotate');
 
-        // الحجوزات
         Route::get('/bookings', [BookingsController::class, 'index'])->name('bookings.index');
         Route::post('/bookings', [BookingsController::class, 'store'])->name('bookings.store');
         Route::put('/bookings/{booking}', [BookingsController::class, 'update'])->name('bookings.update');
         Route::delete('/bookings/{booking}', [BookingsController::class, 'destroy'])->name('bookings.destroy');
 
-        /*
-        |--------------------------------------------------------------------------
-        | التقارير Reports
-        |--------------------------------------------------------------------------
-        */
         Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
 
-        Route::get('/reports/export/bookings.csv',  [ReportsController::class, 'exportBookingsCsv'])
-            ->name('reports.export.bookings.csv');
-
-        Route::get('/reports/export/bookings.excel', [ReportsController::class, 'exportBookingsExcel'])
-            ->name('reports.export.bookings.excel');
-
-        Route::get('/reports/export/bookings.pdf', [ReportsController::class, 'exportBookingsPdf'])
-            ->name('reports.export.bookings.pdf');
-
-        Route::get('/reports/export/summary.csv', [ReportsController::class, 'exportSummaryCsv'])
-            ->name('reports.export.summary.csv');
-
-        Route::get('/reports/export/summary.excel', [ReportsController::class, 'exportSummaryExcel'])
-            ->name('reports.export.summary.excel');
-
-        Route::get('/reports/export/summary.pdf', [ReportsController::class, 'exportSummaryPdf'])
-            ->name('reports.export.summary.pdf');
+        Route::get('/reports/export/bookings.csv',  [ReportsController::class, 'exportBookingsCsv'])->name('reports.export.bookings.csv');
+        Route::get('/reports/export/bookings.excel', [ReportsController::class, 'exportBookingsExcel'])->name('reports.export.bookings.excel');
+        Route::get('/reports/export/bookings.pdf',  [ReportsController::class, 'exportBookingsPdf'])->name('reports.export.bookings.pdf');
+        Route::get('/reports/export/summary.csv', [ReportsController::class, 'exportSummaryCsv'])->name('reports.export.summary.csv');
+        Route::get('/reports/export/summary.excel', [ReportsController::class, 'exportSummaryExcel'])->name('reports.export.summary.excel');
+        Route::get('/reports/export/summary.pdf', [ReportsController::class, 'exportSummaryPdf'])->name('reports.export.summary.pdf');
     });
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -282,6 +243,8 @@ Route::prefix('admin')
 */
 Route::get('/units/{unit}', [UnitDetailsController::class, 'show'])
     ->name('units.details');
+
+
 
 /*
 |--------------------------------------------------------------------------

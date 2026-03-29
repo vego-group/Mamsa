@@ -1,12 +1,6 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Homepage</title>
-    <link rel="stylesheet" href="{{ asset('css/style.css') }}">
-</head>
-<body>
+@extends('layouts.app')
+
+@section('content')
 
 {{-- نفتح فورم الفلاتر --}}
 <form method="GET" action="{{ route('units.filter') }}" id="filterForm">
@@ -135,42 +129,34 @@
     </a>
 
     <div class="cards">
-        @foreach($units as $unit)
+    @foreach($units as $unit)
 
-        <a href="{{ route('units.details', $unit->id) }}" class="card">
+   <a class="card" href="{{ route('units.details', $unit->id) }}">
 
-            @if($unit->images->first())
-                <img src="{{ asset('storage/' . $unit->images->first()->image_url) }}">
-            @else
-                <img src="{{ asset('images/no-image.jpg') }}">
-            @endif
+        @if($unit->images && $unit->images->first())
+            <img src="{{ asset('storage/' . $unit->images->first()->image_url) }}" alt="">
+        @else
+            <img src="{{ asset('images/no-image.jpg') }}" alt="">
+        @endif
 
-            <div class="card-content">
+        <div class="card-content">
+            <div class="card-title">{{ $unit->name }}</div>
 
-                <div class="card-title">{{ $unit->name }}</div>
-
-                <div class="card-location">
-                    {{ $unit->city ?? 'غير محدد' }}
-                    •
-                    {{ $unit->bedrooms ?? '—' }} غرف
-                </div>
-
-                <div class="card-price">
-                    {{ number_format($unit->price) }} ريال / ليلة
-                </div>
-
+            <div class="card-location">
+                {{ $unit->city ?? 'غير محدد' }} • {{ $unit->bedrooms ?? '—' }} غرف
             </div>
 
-        </a>
+            <div class="card-price">
+                {{ number_format($unit->price) }} ريال / ليلة
+            </div>
+        </div>
 
-        @endforeach
-    </div>
+    </a>
 
+    @endforeach
 </div>
-
 </form>
-{{-- سكربتات JS للتقويم (تكملة الجزء الأول) --}}
-
+<!-- سكربتات JS للتقويم (تكملة الجزء الأول) -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -241,7 +227,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.target === modal) modal.style.display = "none";
     });
 
-
     function renderCalendar() {
 
         const y = currentDate.getFullYear();
@@ -307,7 +292,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         return;
                     }
 
-
                     if (selectedInput.input === endInput) {
 
                         if (startInput.value) {
@@ -317,14 +301,14 @@ document.addEventListener("DOMContentLoaded", () => {
                             if (thisDate <= start) {
                                 const next = addDays(start,1);
                                 endInput.value = fmt(next);
-                                openEnd.textContent = endInput.value;
+                                openEnd.textContent = fmt(next);
                                 modal.style.display = "none";
                                 return;
                             }
                         } else {
                             const prev = addDays(thisDate,-1);
                             startInput.value = fmt(prev);
-                            openStart.textContent = startInput.value;
+                            openStart.textContent = fmt(prev);
                         }
 
                         endInput.value = dateStr;
@@ -421,12 +405,6 @@ document.addEventListener("click", function (e) {
       menu.style.display = 'none';
     }
   });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
-      menu.style.display = 'none';
-    }
-  });
 })();
 </script>
 
@@ -461,12 +439,6 @@ document.addEventListener("click", function (e) {
       menu.style.display = 'none';
     }
   });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
-      menu.style.display = 'none';
-    }
-  });
 })();
 </script>
 
@@ -477,5 +449,4 @@ function submitFilters() {
 }
 </script>
 
-</body>
-</html>
+@endsection
