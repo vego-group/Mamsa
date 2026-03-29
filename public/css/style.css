@@ -554,16 +554,17 @@ margin:40px auto;
     Layout الصفحة
 ========================= */
 
+
 .unit-layout{
-display:grid;
-grid-template-columns: 1fr 340px;
-gap:40px;
-align-items:start;
+    display:flex;
+    gap:40px;
+    align-items:flex-start;
 }
 
 .unit-main{
-width:100%;
+    flex:2;
 }
+
 
 
 /* =========================
@@ -617,29 +618,29 @@ margin-top:25px;
 }
 
 .gallery-grid{
-display:grid;
-grid-template-columns:2fr 1fr;
-gap:12px;
+    display:grid;
+    grid-template-columns:2fr 1fr;
+    gap:10px;
 }
 
 .gallery-side{
-display:grid;
-grid-template-columns:1fr 1fr;
-gap:12px;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
 }
 
 .main-photo{
-width:100%;
-height:420px;
-object-fit:cover;
-border-radius:16px;
+    width:100%;
+    height:300px;
+    object-fit:cover;
+    border-radius:12px;
 }
 
 .gallery-thumb{
-width:100%;
-height:200px;
-object-fit:cover;
-border-radius:12px;
+    width:100%;
+    height:145px;
+    object-fit:cover;
+    border-radius:12px;
 }
 
 .show-photos-btn{
@@ -673,38 +674,37 @@ margin-bottom:10px;
 ========================= */
 
 .tabs{
-display:flex;
-gap:25px;
-margin-top:30px;
-border-bottom:2px solid #eee;
+    display:flex;
+    gap:30px;
+    border-bottom:1px solid #eee;
+    margin-top:30px;
 }
 
 .tab{
-background:none;
-border:none;
-padding:12px 0;
-font-weight:600;
-cursor:pointer;
-color:#777;
+    background:none;
+    border:none;
+    padding:10px 0;
+    cursor:pointer;
+    color:#777;
+    font-weight:500;
 }
 
 .tab.active{
-color:#1f4f46;
-border-bottom:3px solid #1f4f46;
+    color:#2F6F63;
+    border-bottom:2px solid #2F6F63;
 }
-
 
 /* =========================
         محتوى التبويب
 ========================= */
 
 .tab-content{
-display:none;
-margin-top:20px;
+    display:none;
+    margin-top:20px;
 }
 
 .tab-content.active{
-display:block;
+    display:block;
 }
 
 
@@ -760,14 +760,13 @@ color:#777;
 ========================= */
 
 .booking-card{
-width:340px;
-background:white;
-border-radius:18px;
-padding:25px;
-box-shadow:0 10px 35px rgba(0,0,0,0.12);
-position:sticky;
-top:120px;
-height:fit-content;
+    flex:1;
+    position:sticky;
+    top:100px;
+    background:#fff;
+    padding:20px;
+    border-radius:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.08);
 }
 
 .price-row{
@@ -1098,4 +1097,17 @@ right:-60px;
 .user-dropdown a:hover,
 .user-dropdown button.dropdown-logout:hover {
     background: #EDF1EF;
+}
+/* إخفاء أيقونة البروفايل فقط */
+.hide-profile .user-menu-wrapper {
+    display: none !important;
+}
+
+
+.login img{
+  display: none;
+}
+
+.user-menu-wrapper img{
+  display: block;
 }

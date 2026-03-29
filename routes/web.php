@@ -111,10 +111,22 @@ Route::get('/post-auth-redirect', function () {
 
     $user = Auth::user();
 
-    if ($user->isAdmin()) {
+    // لو المستخدم أدمن → يدخل لوحة الأدمن
+    if ($user && $user->isAdmin()) {
         return redirect()->route('admin.dashboard');
     }
 
+    // لو سجل دخول عبر "كن شريكًا معنا"
+    if (session('login_intent') === 'partner') {
+        return redirect()->route('partner.type.form');
+    }
+
+    // لو المستخدم شريك قديم
+    if ($user && $user->isPartner()) {
+        return redirect()->route('partner.type.form');
+    }
+
+    // المستخدم العادي
     return redirect()->route('user.profile');
 
 })->middleware('auth')->name('post.auth.redirect');
@@ -165,8 +177,27 @@ Route::post('/auth/request', [OtpAuthController::class, 'requestCode'])->name('a
 Route::get('/auth/confirm', [OtpAuthController::class, 'showConfirmForm'])->name('auth.otp.confirm');
 Route::post('/auth/verify', [OtpAuthController::class, 'verifyCode'])->name('auth.otp.verify');
 
+Route::get('/email-verify', function(){
+    return view('pages.Auth.email-verify');
+})->name('auth.email.verify.form');
 
+Route::post('/email-verify', function (Illuminate\Http\Request $request) {
 
+    if ($request->code == session('email_verify_code')) {
+
+        $user = \App\Models\User::find(session('email_verify_user'));
+
+        if ($user) {
+            $user->email_verified_at = now();
+            $user->save();
+        }
+
+        return redirect()->route('admin.dashboard');
+    }
+
+    return back()->withErrors(['code' => 'رمز التحقق غير صحيح']);
+
+})->name('auth.email.verify.submit'); 
 /*
 |--------------------------------------------------------------------------
 | إكمال الملف الشخصي

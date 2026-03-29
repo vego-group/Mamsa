@@ -10,7 +10,13 @@
     
 </head>
 
-<body>
+<body class="
+{{ 
+    request()->is('complete-profile*') || 
+    request()->is('email-verify*') || 
+    request()->is('partner*') 
+    ? 'hide-profile' : '' 
+}}">
 
 {{-- HEADER ثابت --}}
 @include('partials.header')
