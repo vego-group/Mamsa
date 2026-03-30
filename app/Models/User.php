@@ -5,10 +5,6 @@ namespace App\Models;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-/**
- * @method bool isAdmin()
- * @method bool isPartner()
- */
 class User extends Authenticatable
 {
     use Notifiable;
@@ -32,29 +28,45 @@ class User extends Authenticatable
         'password'          => 'hashed',
     ];
 
-    // العلاقات
+    /* =======================
+        العلاقات
+    ======================== */
+
+    // الأدوار
     public function roles()
     {
         return $this->belongsToMany(Role::class, 'user_roles', 'user_id', 'role_id')
             ->select(['roles.id', 'roles.name as name']);
     }
 
-    public function partner()
+    // علاقة التفاصيل الإدارية (بدل Partner)
+    public function adminDetail()
     {
-        return $this->hasOne(Partner::class);
+        return $this->hasOne(AdminDetail::class, 'user_id');
     }
 
+    // اختياري: alias للوراثة القديمة (ما يخرب الأكواد)
+    public function partner()
+    {
+        return $this->adminDetail();
+    }
+
+    // الحجوزات
     public function bookings()
     {
         return $this->hasMany(Booking::class);
     }
 
+    // المراجعات
     public function reviews()
     {
         return $this->hasMany(Review::class);
     }
 
-    // normalize
+    /* =======================
+        نظام الأدوار
+    ======================== */
+
     protected function normalizeRoleName(string $name): string
     {
         return ucwords(str_replace('_', ' ', trim($name)));
@@ -119,20 +131,19 @@ class User extends Authenticatable
         }
     }
 
-
-    /*=====================
+    /* =======================
         أدوار النظام
-    =====================*/
+    ======================== */
 
-    // شريك
-    public function isPartner(): bool
-    {
-        return $this->hasRole('Partner');
-    }
-
-    // أدمن + سوبر
+    // مدير (Admin + Super Admin)
     public function isAdmin(): bool
     {
         return $this->hasAnyRole(['Admin', 'Super Admin']);
+    }
+
+    // شريك (Partner) ← بناءً على الرول
+    public function isPartner(): bool
+    {
+        return $this->hasRole('Partner');
     }
 }

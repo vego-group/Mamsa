@@ -4,8 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Partner extends Model
+class AdminDetail extends Model
 {
+    protected $table = 'admin_details';
+
     protected $fillable = [
         'user_id',
         'type',
@@ -21,17 +23,8 @@ class Partner extends Model
         'verified_at' => 'datetime'
     ];
 
-    /* =======================
-        Relationships
-    ======================== */
-
     public function user()
     {
-        return $this->belongsTo(User::class);
-    }
-
-    public function units()
-    {
-        return $this->hasMany(Unit::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

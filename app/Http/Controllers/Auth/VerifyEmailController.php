@@ -41,7 +41,8 @@ class VerifyEmailController extends Controller
         if ($user->isPartner()) {
 
             // إنشاء سجل partner إذا غير موجود
-            $profile = $user->partner;
+            $profile = $user->adminDetail
+;
 
             if (!$profile) {
                 $profile = Partner::create([

@@ -4,16 +4,21 @@ namespace App\Http\Controllers\Partner;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class PartnerOnboardingController extends Controller
 {
     public function typeForm()
     {
-        abort_unless(auth()->user()->isPartner(), 403);
+        $user = Auth::user(); /** @var \App\Models\User $user */
 
-        $profile = auth()->user()->partner;
+        // يجب أن يملك دور Partner
+        abort_unless($user->isPartner(), 403);
 
-        // إذا اختار النوع خلاص → نوديه يكمل الترخيص
+        // تفاصيل الشريك (الآن من جدول admin_details)
+        $profile = $user->adminDetail;
+
+        // إذا سبق واختار النوع → يذهب لصفحة الترخيص
         if ($profile && !empty($profile->type)) {
             return redirect()->route('partner.license.form');
         }
@@ -21,54 +26,64 @@ class PartnerOnboardingController extends Controller
         return view('pages.partner.type');
     }
 
-   public function typeStore(Request $request)
-{
-    abort_unless(auth()->user()->isPartner(), 403);
+    public function typeStore(Request $request)
+    {
+        $user = Auth::user(); /** @var \App\Models\User $user */
 
-    $data = $request->validate([
-        'type' => ['required','in:individual,company'],
-    ]);
+        abort_unless($user->isPartner(), 403);
 
-    auth()->user()->partner()->updateOrCreate(
-        ['user_id' => auth()->id()],
-        [
-            'type' => $data['type'],
-            'verification_status' => 'pending',
-        ]
-    );
+        $data = $request->validate([
+            'type' => ['required', 'in:individual,company'],
+        ]);
 
-    // 🔥 التفريق هنا
-    if ($data['type'] === 'individual') {
-        return redirect()->route('partner.unit.create');
+        // إنشاء أو تحديث التفاصيل الإدارية
+        $user->adminDetail()->updateOrCreate(
+            [], // مهم جداً: لا نستخدم شرط user_id هنا
+            [
+                'user_id' => $user->id,
+                'type' => $data['type'],
+                'verification_status' => 'pending',
+            ]
+        );
+
+        // فردي → ينتقل لإنشاء الوحدة
+        if ($data['type'] === 'individual') {
+            return redirect()->route('partner.unit.create');
+        }
+
+        // شركة → ينتقل لرفع ترخيص السياحة
+        return redirect()->route('partner.license.form');
     }
-
-    return redirect()->route('partner.license.form');
-}
 
     public function dashboard()
-{
-    abort_unless(auth()->user()->isPartner(), 403);
+    {
+        $user = Auth::user(); /** @var \App\Models\User $user */
 
-    $profile = auth()->user()->partner;
+        abort_unless($user->isPartner(), 403);
 
-    if (!$profile || empty($profile->type)) {
-        return redirect()->route('partner.type.form');
-    }
+        $profile = $user->adminDetail;
 
-    // 🔥 فقط الشركة تتقيد بالتصريح
-    if ($profile->type === 'company') {
-
-        if (empty($profile->tourism_permit_no)) {
-            return redirect()->route('partner.license.form');
+        // لم يكمل نوع الحساب
+        if (!$profile || empty($profile->type)) {
+            return redirect()->route('partner.type.form');
         }
 
-        if ($profile->verification_status !== 'approved') {
-            return redirect()->route('partner.review')
-                ->with('status','حساب الشركة قيد المراجعة.');
-        }
-    }
+        // شركة → لديها خطوات إضافية
+        if ($profile->type === 'company') {
 
-    // ✅ الفرد يدخل طبيعي
-    return view('pages.partner.dashboard', compact('profile'));
-}
+            // لم يرفع ترخيص السياحة
+            if (empty($profile->tourism_permit_no)) {
+                return redirect()->route('partner.license.form');
+            }
+
+            // الحساب ينتظر مراجعة الادارة
+            if ($profile->verification_status !== 'approved') {
+                return redirect()->route('partner.review')
+                    ->with('status', 'حساب الشركة قيد المراجعة.');
+            }
+        }
+
+        // عرض لوحة الشريك
+        return view('pages.partner.dashboard', compact('profile'));
+    }
 }

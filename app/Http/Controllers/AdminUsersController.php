@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\AdminDetail;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Hash;
@@ -10,17 +11,16 @@ use Illuminate\Support\Facades\Hash;
 class AdminUsersController extends Controller
 {
     /**
-     * عرض جدول المدراء + جدول المستخدمين العاديين + بحث واحد للكل
+     * عرض جدول المدراء + جدول المستخدمين
      */
     public function index(Request $request)
     {
         $q = trim((string) $request->get('q', ''));
 
-        // ترقيم مستقل
         $adminsPageName = 'admins_page';
         $usersPageName  = 'users_page';
 
-        /** جدول المدراء فقط */
+        // المدراء فقط
         $admins = User::query()
             ->whereHas('roles', fn($r) => $r->where('name', 'Admin'))
             ->when($q !== '', fn($query) =>
@@ -34,7 +34,7 @@ class AdminUsersController extends Controller
             ->paginate(10, ['*'], $adminsPageName)
             ->withQueryString();
 
-        /** جدول المستخدمين العاديين (بدون Super Admin) */
+        // المستخدمين العاديين
         $users = User::query()
             ->whereDoesntHave('roles', fn($r) => $r->where('name', 'Admin'))
             ->whereDoesntHave('roles', fn($r) => $r->where('name', 'Super Admin'))
@@ -59,15 +59,15 @@ class AdminUsersController extends Controller
     }
 
     /**
-     * صفحة إضافة مدير فقط
+     * صفحة إضافة مدير
      */
     public function create()
     {
-        return view('admin.users.create'); // الصفحة الآن لإضافة مدير فقط
+        return view('admin.users.create');
     }
 
     /**
-     * حفظ مدير جديد فقط
+     * حفظ مدير جديد
      */
     public function store(Request $request)
     {
@@ -94,15 +94,28 @@ class AdminUsersController extends Controller
             'is_active' => $isActive,
         ]);
 
-        // دايم مدير — الآن تعمل لأن assignRole أضفناها داخل الموديل وتطبّع الاسم تلقائيًا
-        $user->assignRole('admin');
+        // تعيينه مدير
+        $user->assignRole('Admin');
 
         return redirect()->route('admin.users.index')
             ->with('success', 'تم إضافة المدير بنجاح.');
     }
 
     /**
-     * تغيير حالة مدير (نشط / معطّل / قيد)
+     * عرض تفاصيل المدير + admin_details
+     */
+    public function details($id)
+    {
+        $user = User::with('adminDetail')->findOrFail($id);
+
+        return view('admin.users.details', [
+            'user' => $user,
+            'details' => $user->adminDetail
+        ]);
+    }
+
+    /**
+     * تحديث حالة مدير
      */
     public function status(Request $request, int $id)
     {
@@ -112,11 +125,11 @@ class AdminUsersController extends Controller
 
         $user = User::findOrFail($id);
 
-        if (!$user->hasRole('admin')) {
+        if (!$user->hasRole('Admin')) {
             return back()->with('error','هذه العملية خاصة بالمدراء فقط.');
         }
 
-        if ($user->hasRole('super_admin')) {
+        if ($user->hasRole('Super Admin')) {
             return back()->with('error','لا يمكن تعديل حالة المشرف العام.');
         }
 
@@ -138,11 +151,11 @@ class AdminUsersController extends Controller
     {
         $user = User::findOrFail($id);
 
-        if ($user->hasRole('super_admin')) {
+        if ($user->hasRole('Super Admin')) {
             return back()->with('error', 'لا يمكن حذف المشرف العام.');
         }
 
-        if (!$user->hasRole('admin')) {
+        if (!$user->hasRole('Admin')) {
             return back()->with('error', 'المستخدم ليس مديرًا.');
         }
 

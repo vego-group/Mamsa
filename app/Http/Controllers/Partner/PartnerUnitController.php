@@ -40,7 +40,7 @@ public function store(Request $request)
 
     abort_unless($user->isPartner(), 403);
 
-    $profile = $user->partner;
+    $profile = $user->adminDetail;
 
     if (!$profile || empty($profile->type)) {
         return redirect()->route('partner.type.form');
@@ -111,7 +111,7 @@ public function store(Request $request)
 
     abort_unless($user->isPartner(), 403);
 
-    $profile = $user->partner;
+    $profile = $user->adminDetail;
 
     if (!$profile) {
         return redirect()->route('partner.type.form');

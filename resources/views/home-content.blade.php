@@ -56,24 +56,26 @@
         </div>
 
         {{-- عدد الأشخاص --}}
-        <div class="dropdown-container">
-            <button type="button" class="filter-btn capcity" id="capcityBtn">
-                عدد الأشخاص: <span id="capcityCount">1</span>
-            </button>
+       <div class="dropdown-container">
+    <button type="button" class="filter-btn capcity" id="capcityBtn">
+        عدد الأشخاص: <span id="capcityCount">1</span>
+    </button>
 
-            <div id="capcityMenu" class="dropdown-menu">
-                <div class="row">
-                    <span>عدد الأشخاص</span>
+    <div id="capcityMenu" class="dropdown-menu">
+        <div class="row">
+            <span>عدد الأشخاص</span>
 
-                    <div class="counter">
-                        <button id="minusBtn">-</button>
-                        <span id="number">1</span>
-                        <button id="plusBtn">+</button>
-                    </div>
-
-                </div>
+            <div class="counter">
+                <button type="button" id="minusBtn">-</button>
+                <span id="number">1</span>
+                <button type="button" id="plusBtn">+</button>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Hidden input -->
+<input type="hidden" name="capacity" id="capacityHidden" value="1">
 
         {{-- Hidden --}}
         <input type="hidden" name="capacity" id="capacityHidden" value="1">

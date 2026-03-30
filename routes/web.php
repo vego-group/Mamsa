@@ -15,8 +15,6 @@ use App\Http\Controllers\Auth\CompleteProfileController;
 use App\Http\Controllers\Partner\PartnerOnboardingController;
 use App\Http\Controllers\Partner\PartnerUnitController;
 
-use App\Http\Controllers\Partner\PartnerOnboardingController;
-use App\Http\Controllers\Partner\PartnerUnitController;
 
 use App\Http\Controllers\UnitDetailsController;
 use App\Http\Controllers\UserController;
@@ -31,6 +29,17 @@ use App\Models\Unit;
 */
 Route::get('/', function () {
 
+    // 🔥 منع الأدمن والسوبر أدمن من زيارة الصفحة الرئيسية
+    if (Auth::check() && Auth::user()->isAdmin()) {
+        return redirect()->route('admin.dashboard');
+    }
+
+    // 🔥 منع الشريك من زيارة الصفحة الرئيسية
+    if (Auth::check() && Auth::user()->isPartner()) {
+        return redirect()->route('partner.dashboard');
+    }
+
+    // 👇 الصفحة الرئيسية للزوار فقط
     $units = Unit::with('images')
         ->where('status', 'available')
         ->latest()
@@ -46,6 +55,7 @@ Route::get('/', function () {
     return view('home-content', compact('units', 'bedroomsList'));
 
 })->name('home');
+
 
 
 
@@ -106,7 +116,8 @@ Route::get('/post-auth-redirect', function () {
 
     if (session('login_intent') === 'partner') {
 
-        if (!$user->partner || empty($user->partner->type)) {
+        if (!$user->adminDetail
+|| empty($user->partner->type)) {
             return redirect()->route('partner.type.form');
         }
 
