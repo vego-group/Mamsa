@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* اختبارات بسيطة للتأكد أن CSS فعلاً يُحمَّل */
+body { background: #f6f7fb; } /* لو ظهر اللون، فالـ CSS شغّال */
+
+/* بطاقات */
+.card { @apply bg-white rounded-2xl border border-brand-300/40 p-6; }
+
+/* أرقام/إحصائيات */
+.stat { @apply text-4xl font-semibold text-brand-900; }
+
+/* جميع روابط السايدبار: إزالة أي outline/ring */
+.sidebar-link { outline: none; }
+.sidebar-link:focus,
+.sidebar-link:focus-visible { outline: none; box-shadow: none; }
+.sidebar-link { -webkit-tap-highlight-color: transparent; }

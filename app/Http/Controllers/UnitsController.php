@@ -1,0 +1,344 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Unit;
+use App\Models\User;
+use App\Models\Booking;
+use App\Models\UnitImage;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+
+class UnitsController extends Controller
+{
+    use AuthorizesRequests;
+
+    /* =======================================================
+     *                     Admin Index  
+     * ======================================================= */
+    public function index(Request $request)
+    {
+        $this->authorize('viewAny', Unit::class);
+
+        $q          = trim((string)$request->get('q', ''));
+        $status     = $request->get('status');
+        $priceFrom  = $request->get('price_from');
+        $priceTo    = $request->get('price_to');
+        $ownerId    = $request->get('owner_id');
+
+        $query = Unit::query()
+            ->with(['owner','images'])
+            ->when($q !== '', function ($qb) use ($q) {
+                $qb->where(function ($sub) use ($q) {
+                    $sub->where('name', 'like', "%{$q}%")
+                        ->orWhere('code', 'like', "%{$q}%")
+                        ->orWhere('description', 'like', "%{$q}%");
+                });
+            })
+            ->when($status, fn($qb) => $qb->where('status', $status))
+            ->when($priceFrom !== null && $priceFrom !== '', fn($qb) => $qb->where('price', '>=', (float)$priceFrom))
+            ->when($priceTo   !== null && $priceTo   !== '', fn($qb) => $qb->where('price', '<=', (float)$priceTo))
+            ->orderByDesc('id');
+
+        if ($request->user()->hasRole('admin') && !$request->user()->hasRole('super_admin')) {
+            $query->where('user_id', $request->user()->id);
+        } else {
+            if ($ownerId) $query->where('user_id', $ownerId);
+        }
+
+        $units = $query->paginate(12)->withQueryString();
+
+        $ownersList = collect();
+        if ($request->user()->hasRole('super_admin')) {
+            $ownersList = User::query()
+                ->whereHas('roles', fn($r) => $r->whereIn('name', ['Admin','Super Admin']))
+                ->orderBy('name')
+                ->get(['id','name']);
+        }
+
+        return view('admin.units.index', compact(
+            'units','q','status','priceFrom','priceTo','ownerId','ownersList'
+        ));
+    }
+
+
+    /* =======================================================
+     *                    Create / Store  
+     * ======================================================= */
+    public function create()
+    {
+        $this->authorize('create', Unit::class);
+
+        $generatedCode = $this->generateUniqueCode();
+        $statuses  = [
+            'available'   => 'متاحة',
+            'unavailable' => 'غير متاحة',
+            'reserved'    => 'محجوزة'
+        ];
+
+        return view('admin.units.create', compact('statuses','generatedCode'));
+    }
+
+
+    public function store(Request $request)
+    {
+        $this->authorize('create', Unit::class);
+
+        $validated = $request->validate([
+            'name'                 => ['required','string','max:255'],
+            'code'                 => ['nullable','string','max:100','unique:units,code'],
+            'description'          => ['nullable','string','max:2000'],
+            'status'               => ['required','in:available,unavailable,reserved'],
+            'price'                => ['nullable','numeric','min:0'],
+            'calendar_external_url'=> ['nullable','url','max:2048'],
+
+            'type'     => ['nullable','in:apartment,villa,studio'],
+            'bedrooms' => ['nullable','integer','min:0','max:50'],
+            'capacity' => ['nullable','integer','min:1','max:100'],
+            'city'     => ['nullable','string','max:100'],
+            'district' => ['nullable','string','max:100'],
+            'lat'      => ['nullable','numeric','between:-90,90'],
+            'lng'      => ['nullable','numeric','between:-180,180'],
+
+            'images.*' => ['nullable','image','mimes:jpg,jpeg,png,webp','max:4096'],
+        ]);
+
+        $code = $validated['code'] ?? $this->generateUniqueCode();
+
+        $unit = Unit::create([
+            'user_id'              => $request->user()->id,
+            'name'                 => $validated['name'],
+            'code'                 => $code,
+            'description'          => $validated['description'] ?? null,
+            'status'               => $validated['status'],
+            'price'                => $validated['price'] ?? null,
+            'calendar_external_url'=> $validated['calendar_external_url'] ?? null,
+            'type'                 => $validated['type'] ?? null,
+            'bedrooms'             => $validated['bedrooms'] ?? null,
+            'capacity'             => $validated['capacity'] ?? null,
+            'city'                 => $validated['city'] ?? null,
+            'district'             => $validated['district'] ?? null,
+            'lat'                  => $validated['lat'] ?? null,
+            'lng'                  => $validated['lng'] ?? null,
+        ]);
+
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $img) {
+                if (!$img) continue;
+
+                $path = $img->store('units/'.$unit->id, 'public');
+
+                UnitImage::create([
+                    'unit_id'   => $unit->id,
+                    'image_url' => $path,
+                ]);
+            }
+        }
+
+        return redirect()->route('admin.units.index')->with('success','تم إضافة الوحدة بنجاح');
+    }
+
+
+
+    /* =======================================================
+     *                     Update  
+     * ======================================================= */
+    public function edit(Unit $unit)
+    {
+        $this->authorize('update', $unit);
+
+        $unit->load('images','owner');
+
+        $statuses = [
+            'available'   => 'متاحة',
+            'unavailable' => 'غير متاحة',
+            'reserved'    => 'محجوزة'
+        ];
+
+        return view('admin.units.edit', compact('unit','statuses'));
+    }
+
+
+    public function update(Request $request, Unit $unit)
+    {
+        $this->authorize('update', $unit);
+
+        $imagePk = Schema::hasColumn('unit_images', 'image_id') ? 'image_id' : 'id';
+
+        $validated = $request->validate([
+            'name'        => ['required','string','max:255'],
+            'description' => ['nullable','string','max:2000'],
+            'status'      => ['required','in:available,unavailable,reserved'],
+            'price'       => ['nullable','numeric','min:0'],
+
+            'type'     => ['nullable','in:apartment,villa,studio'],
+            'bedrooms' => ['nullable','integer'],
+            'capacity' => ['nullable','integer'],
+            'city'     => ['nullable','string'],
+            'district' => ['nullable','string'],
+            'lat'      => ['nullable','numeric'],
+            'lng'      => ['nullable','numeric'],
+
+            'images.*'        => ['nullable','image'],
+            'delete_images'   => ['nullable','array'],
+            'delete_images.*' => ["exists:unit_images,{$imagePk}"],
+        ]);
+
+        if (!empty($validated['delete_images'])) {
+            $images = UnitImage::whereIn($imagePk, $validated['delete_images'])
+                ->where('unit_id', $unit->id)->get();
+
+            foreach ($images as $img) {
+                if ($img->image_url && Storage::disk('public')->exists($img->image_url)) {
+                    Storage::disk('public')->delete($img->image_url);
+                }
+                $img->delete();
+            }
+        }
+
+        $unit->update($validated);
+
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $img) {
+
+                $path = $img->store('units/'.$unit->id, 'public');
+
+                UnitImage::create([
+                    'unit_id'   => $unit->id,
+                    'image_url' => $path,
+                ]);
+            }
+        }
+
+        return redirect()->route('admin.units.index')
+            ->with('success','تم تحديث الوحدة');
+    }
+
+
+
+    /* =======================================================
+     *                    Delete  
+     * ======================================================= */
+    public function destroy(Unit $unit)
+    {
+        $this->authorize('delete', $unit);
+
+        foreach ($unit->images as $img) {
+            if (Storage::disk('public')->exists($img->image_url)) {
+                Storage::disk('public')->delete($img->image_url);
+            }
+            $img->delete();
+        }
+
+        $unit->delete();
+
+        return back()->with('success','تم حذف الوحدة');
+    }
+
+
+    /* =======================================================
+     *         Front Website — Filter (HOME SEARCH)
+     * ======================================================= */
+    public function filter(Request $request)
+    {
+        $query = Unit::with('images');
+
+        // المدينة
+        if ($request->city_id) {
+            $query->where('city', $request->city_id);
+        }
+
+        // نوع الوحدة
+        if ($request->unit_type) {
+
+            $map = [
+                'شقة'    => 'apartment',
+                'فيلا'   => 'villa',
+                'استديو' => 'studio'
+            ];
+
+            $normalized = $map[$request->unit_type] ?? null;
+
+            if ($normalized) {
+                $query->where('type', $normalized);
+            }
+        }
+
+        // عدد الأشخاص
+        if ($request->capacity) {
+            $query->where('capacity', '>=', $request->capacity);
+        }
+
+        // عدد الغرف
+        if ($request->bedrooms) {
+            $query->where('bedrooms', $request->bedrooms);
+        }
+
+        // التواريخ
+        if ($request->start_date && $request->end_date) {
+
+            $start = $request->start_date;
+            $end   = $request->end_date;
+
+            $query->whereDoesntHave('bookings', function ($q) use ($start, $end) {
+                $q->where(function ($overlap) use ($start, $end) {
+
+                    $overlap->whereBetween('start_date', [$start, $end])
+                            ->orWhereBetween('end_date', [$start, $end])
+                            ->orWhere(function ($wrap) use ($start, $end) {
+                                $wrap->where('start_date', '<=', $start)
+                                     ->where('end_date', '>=', $end);
+                            });
+
+                });
+            });
+        }
+
+        $units = $query->get();
+
+        return view('results', [
+    'units' => $units,
+    'title' => 'نتائج البحث'
+]);
+    }
+
+
+    /* =======================================================
+     *                 Front — Show All Units
+     * ======================================================= */
+    public function all()
+    {
+        $units = Unit::with('images')
+            ->where('status', 'available')
+            ->latest()
+            ->paginate(12);
+
+       return view('results', [
+    'units' => $units,
+    'title' => 'جميع الوحدات'
+]);
+    }
+
+
+    /* =======================================================
+     *                     Helper
+     * ======================================================= */
+    private function generateUniqueCode(int $length = 8): string
+    {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+        do {
+            $code = '';
+            for ($i = 0; $i < $length; $i++) {
+                $code .= $alphabet[random_int(0, strlen($alphabet)-1)];
+            }
+        } while (Unit::where('code', $code)->exists());
+
+        return $code;
+    }
+}

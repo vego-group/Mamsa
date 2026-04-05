@@ -1,0 +1,1113 @@
+/* =========================
+      المتغيرات العامة  
+========================= */
+:root {
+    --green: #3E5A50; 
+    --light: #B7C4B1;   
+    --pill-height: 44px;
+}
+
+/* =========================
+      إعدادات عامة  
+========================= */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: "Tajawal", sans-serif;
+    background: #ffffff;
+    direction: rtl;
+}
+
+
+/* ألوان أساسية */
+:root{
+  --green: #3E5A50;  /* خلفية الهيدر */
+  --light: #B7C4B1;  /* لون كبسولات الأزرار */
+}
+
+/* الهيدر بخلفية خضراء وحواف سفلية كبيرة */
+.header{
+  background: var(--green);
+  color: #fff;
+}
+
+.header--hero{
+  position: relative;
+  padding-block: 16px;
+  padding-inline-end: 320px;
+   /* مساحة احتياط للشعار (300 + هامش) */
+  border-bottom-left-radius: 30px;
+  border-bottom-right-radius: 30px;
+}
+
+/* الحاوية الداخلية */
+.header-container{
+  width: min(1200px, 100%);
+  margin-inline: auto;
+  padding-inline: 8px; /* كان 28px: قلّلناه عشان يقرب من اليمين */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+/* ✔ تكبير الشعار بدون ما يكبر الهيدر ولا تتغير الخلفية */
+.logo img{
+  width: 130px;
+  height: auto;
+  display: block;
+  transform: translateX(-3px);
+}
+.header-actions{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  /* حرّكي الأزرار أفقياً بشكل دقيق */
+  transform: translateX(-300px); /* ← سالب = يسار | موجب = يمين */
+}
+.header-pill{
+  background: var(--light);
+  color: var(--green);
+  padding: 8px 20px;
+  border: none;
+  border-radius: 20px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(0,0,0,.08);
+  transition: filter .15s ease, transform .15s ease;
+}
+
+.header-pill:hover{ filter: brightness(0.96); }
+.header-pill:active{ transform: translateY(1px); }
+
+/* =========================
+      صندوق البحث الأساسي  
+========================= */
+.search-wrapper {
+    width: 92%;
+    margin: 30px auto;
+    border: 2px solid var(--green);
+    border-radius: 40px;
+    padding: 18px 25px;
+    padding-left: 60px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background: #FFFFFF;
+}
+
+.search-icon-btn {
+    background: transparent;   /* خلفية شفافة */
+    border: none;              /* بدون حدود */
+    padding: 0;                /* بدون مساحة داخلية */
+    display: flex;             /* يجعل العدسة تتوسط الزر */
+    align-items: center; 
+    justify-content: center;
+    cursor: pointer;           /* مؤشر اليد */
+}
+
+/* أيقونة البحث */
+.search-icon {
+    width: 22px;
+    height: 22px;
+    stroke: var(--green);
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* =========================
+         الفلاتر  
+========================= */
+.search-filters {
+    display: flex;
+    gap: 12px;
+    flex-wrap: nowrap;
+    width: 100%;
+    justify-content: flex-start; 
+    flex-direction: row-reverse;
+}
+
+/* تصميم الحبوب */
+.filter-btn {
+    background: var(--light);
+    border: none;
+    height: var(--pill-height);
+    line-height: calc(var(--pill-height) - 2px);
+    padding: 0 30px;
+    border-radius: 40px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--green);
+    position: relative;
+    padding-inline-start: 38px;
+}
+
+/* السهم داخل كل زر */
+.filter-btn::before {
+    content: "▾";
+    position: absolute;
+    inset-inline-start: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--green);
+    font-size: 13px;
+    opacity: .9;
+}
+
+/* ========== المقاسات المحددة من Figma ========== */
+.filter-btn.city  { width: 160px; }
+.filter-btn.type  { width: 160px; }
+.filter-btn.capcity {width: 200px;}
+.filter-btn.start { width: 250px; }
+.filter-btn.end   { width: 250px; }
+
+.dropdown-container {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 15px;
+    border-radius: 15px;
+    width: 200px;
+    top: 55px;
+    right: 0;
+    z-index: 50;
+}
+
+.row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.counter button {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: #b5c7b0;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.counter span {
+    padding: 0 10px;
+    font-size: 18px;
+}
+.counter {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px; /* ← هذه المسافة بين زر + و زر - */
+}
+
+
+/* =========================
+     تفعيل الـ Date Picker  
+========================= */
+
+.calendar-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(3px);
+  z-index: 9999;
+  justify-content: center;
+  align-items: center;
+}
+
+.calendar-content {
+  background: white;
+  width: 330px;
+  padding: 20px;
+  border-radius: 20px;
+  text-align: center;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.calendar-header button {
+  background: var(--green);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 8px;
+  color: var(--green);
+  font-weight: 700;
+}
+
+.weekdays div {
+  padding: 6px 0;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 15px;
+}
+
+.calendar-grid div {
+  padding: 10px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #f7f7f7;
+}
+
+.calendar-grid div:hover {
+  background: var(--light);
+}
+
+.calendar-grid .selected {
+  background: var(--green) !important;
+  color: white;
+}
+
+.calendar-actions button {
+  padding: 8px 20px;
+  border-radius: 10px;
+  border: none;
+  background: var(--light);
+  cursor: pointer;
+}
+
+
+
+/* =========================
+     قسم الكروت
+========================= */
+
+.cards-section{
+    width:90%;
+    margin:40px auto;
+    background:var(--green);
+    padding:40px;
+    border-radius:40px;
+}
+
+.show-all{
+    background:var(--light);
+    padding:8px 18px;
+    border-radius:20px;
+    border:none;
+    cursor:pointer;
+    color:var(--green);
+    font-weight:500;
+}
+
+/* ترتيب الكروت */
+
+.cards{
+    display:flex;
+    gap:25px;
+    margin-top:25px;
+    flex-wrap:wrap;
+}
+
+/* الكارد */
+
+.card{
+    width:260px;
+    background:white;
+    border-radius:20px;
+    overflow:hidden;
+    text-decoration:none;
+    transition:0.3s;
+    box-shadow:0 10px 25px rgba(0,0,0,0.12);
+}
+
+.card:hover{
+    transform:translateY(-6px);
+    box-shadow:0 18px 35px rgba(0,0,0,0.18);
+}
+
+/* الصورة */
+
+.card img{
+    width:100%;
+    height:170px;
+    object-fit:cover;
+}
+
+/* محتوى الكارد */
+
+.card-content{
+    padding:16px;
+}
+
+/* العنوان */
+
+.card-title{
+    font-size:15px;
+    font-weight:700;
+    color:#2f1a8c;
+    margin-bottom:6px;
+}
+
+/* الموقع */
+
+.card-location{
+    font-size:13px;
+    color:#6b7280;
+}
+
+/* السعر */
+
+.card-price{
+    margin-top:8px;
+    font-weight:700;
+    color:var(--green);
+}
+/* =========================
+          الفوتر  
+========================= */
+.footer {
+    margin-top: 60px;
+    background: var(--green);
+    padding: 40px;
+    border-top-left-radius: 40px;
+    border-top-right-radius: 40px;
+    color: white;
+    text-align: center;
+}
+
+.footer-links {
+    margin-top: 15px;
+    display: flex;
+    justify-content: center;
+    gap: 25px;
+    font-size: 14px;
+}
+
+.footer-copy {
+    margin-top: 20px;
+    font-size: 12px;
+    opacity: 0.8;
+}
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  background: white;
+  border-radius: 10px;
+  width: 150px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  z-index: 999;
+}
+
+.dropdown-item {
+  padding: 12px;
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background: #f2f2f2;
+}
+/* =========================
+     قائمة اختيار المدينة  
+========================= */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  display: none;            /* تُفتح بالجافاسكربت */
+  position: absolute;
+  background: #fff;
+  border-radius: 10px;
+  width: 180px;             /* تقدرين تخليها قريبة من عرض الزر */
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  z-index: 999;
+  padding: 8px 0;
+  margin-top: 8px;
+  right: 0;                 /* لأن الصفحة RTL: القائمة تلتصق من اليمين */
+  overflow: hidden;         /* يمنع أي بروز للحواف */
+}
+
+.dropdown-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  color: var(--green);
+  font-size: 14px;
+  transition: background 0.2s;
+  white-space: nowrap;      /* منع التفاف الأسطر داخل العناصر */
+}
+
+.dropdown-item:hover {
+  background: #f2f2f2;
+}
+
+/* (اختياري) جعل عرض القائمة مطابق لعرض زر المدينة تمامًا */
+#cityDropdown .dropdown-menu {
+  min-width: 100%;
+  width: auto;
+}
+.header-pill,
+.header-pill *,
+button,
+button *,
+a,
+a *,
+span,
+span *,
+div,
+div * {
+    text-decoration: none !important;
+}
+
+/* حجم أيقونة الحساب */
+.login img{
+  width: 28px;        /* عدّلي 24/32 حسب رغبتك */
+  height: 28px;
+  display: block;
+  transform: translateX(-300px);
+}
+/* ترتيب أزرار الضيف */
+.header-actions{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+/* داخل style.css */
+.header-container{
+  width: min(1200px, 100%);
+  margin-inline: auto;
+  padding-inline: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* الشعار يثبت يمين، الأيقونة/الأزرار يسار */
+}
+
+.logo { order: 1; }   /* يمين */
+.login{ order: 2; }   /* يسار */
+:root{
+  --green: #3E5A50;  /* لون خلفية الهيدر */
+  --light: #B7C4B1;
+}
+
+/* حبة دائرية حول الأيقونة */
+.login .login-pill{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 70px;
+  border-radius: 999px;
+  background: var(--green);     /* نفس لون خلفية الهيدر */
+  box-shadow: 0 1px 0 rgba(0,0,0,.08);
+}
+
+/* حجم الأيقونة */
+.login .login-pill img{
+  width: 50px;
+  height: 50px;
+  display: block;
+  /* فلتر اختياري لتقريب لون الأيقونة (لو PNG أحادي اللون) */
+  /* filter: brightness(0) saturate(100%) invert(30%) sepia(7%) saturate(531%) hue-rotate(111deg) brightness(91%) contrast(87%); */
+}
+
+/* =========================
+    صفحه تفاصيل الوحدة  
+========================= */
+
+.unit-page{
+width:90%;
+margin:40px auto;
+}
+
+
+/* =========================
+    Layout الصفحة
+========================= */
+
+
+.unit-layout{
+    display:flex;
+    gap:40px;
+    align-items:flex-start;
+}
+
+.unit-main{
+    flex:2;
+}
+
+
+
+/* =========================
+        العنوان
+========================= */
+
+.unit-header{
+margin-bottom:25px;
+}
+
+.unit-title{
+font-size:28px;
+font-weight:700;
+color:#1f4f46;
+}
+
+.unit-rating{
+display:flex;
+gap:10px;
+align-items:center;
+margin-top:8px;
+font-size:14px;
+color:#555;
+}
+
+.stars{
+color:#f59e0b;
+font-size:16px;
+}
+
+.rating-number{
+font-weight:700;
+color:#111;
+}
+
+.reviews-count{
+color:#777;
+}
+
+.unit-meta{
+color:#777;
+}
+
+
+/* =========================
+            الصور
+========================= */
+
+.unit-gallery{
+margin-top:25px;
+}
+
+.gallery-grid{
+    display:grid;
+    grid-template-columns:2fr 1fr;
+    gap:10px;
+}
+
+.gallery-side{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+}
+
+.main-photo{
+    width:100%;
+    height:300px;
+    object-fit:cover;
+    border-radius:12px;
+}
+
+.gallery-thumb{
+    width:100%;
+    height:145px;
+    object-fit:cover;
+    border-radius:12px;
+}
+
+.show-photos-btn{
+margin-top:10px;
+background:var(--green);
+color:white;
+padding:8px 14px;
+border-radius:8px;
+font-size:13px;
+border:none;
+cursor:pointer;
+}
+
+
+/* =========================
+        وصف الوحدة
+========================= */
+
+.unit-description{
+margin-top:30px;
+}
+
+.unit-description h2{
+font-size:20px;
+margin-bottom:10px;
+}
+
+
+/* =========================
+            التبويبات
+========================= */
+
+.tabs{
+    display:flex;
+    gap:30px;
+    border-bottom:1px solid #eee;
+    margin-top:30px;
+}
+
+.tab{
+    background:none;
+    border:none;
+    padding:10px 0;
+    cursor:pointer;
+    color:#777;
+    font-weight:500;
+}
+
+.tab.active{
+    color:#2F6F63;
+    border-bottom:2px solid #2F6F63;
+}
+
+/* =========================
+        محتوى التبويب
+========================= */
+
+.tab-content{
+    display:none;
+    margin-top:20px;
+}
+
+.tab-content.active{
+    display:block;
+}
+
+
+/* =========================
+        المميزات
+========================= */
+
+.features-grid{
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:14px;
+}
+
+.feature{
+background:#f3f3f3;
+padding:12px;
+border-radius:10px;
+text-align:center;
+}
+
+
+/* =========================
+        التقييمات
+========================= */
+
+.review-card{
+background:#f6f7f6;
+border-radius:12px;
+padding:16px;
+margin-bottom:12px;
+}
+
+.review-stars{
+color:#f59e0b;
+font-size:14px;
+margin-bottom:6px;
+}
+
+.review-text{
+font-size:14px;
+color:#444;
+margin-bottom:6px;
+}
+
+.review-author{
+font-size:12px;
+color:#777;
+}
+
+
+/* =========================
+        كارد الحجز
+========================= */
+
+.booking-card{
+    flex:1;
+    position:sticky;
+    top:100px;
+    background:#fff;
+    padding:20px;
+    border-radius:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.08);
+}
+
+.price-row{
+display:flex;
+align-items:center;
+gap:6px;
+font-size:22px;
+font-weight:700;
+margin-bottom:20px;
+}
+
+.per-night{
+font-size:14px;
+color:#777;
+}
+
+.total-price{
+margin-top:12px;
+font-weight:700;
+font-size:16px;
+color:var(--green);
+text-align:center;
+}
+
+
+/* =========================
+        التواريخ
+========================= */
+
+.booking-dates{
+display:flex;
+gap:10px;
+margin-bottom:15px;
+}
+
+.date-box{
+flex:1;
+display:flex;
+flex-direction:column;
+}
+
+.date-box label{
+font-size:12px;
+color:#666;
+margin-bottom:4px;
+}
+
+.date-box input{
+padding:8px;
+border-radius:8px;
+border:1px solid #ddd;
+}
+
+
+/* =========================
+        عدد الليالي
+========================= */
+
+.guests{
+margin-bottom:15px;
+}
+
+.guests input{
+width:100%;
+padding:8px;
+border-radius:8px;
+border:1px solid #ddd;
+}
+.nights-box{
+margin-bottom:15px;
+font-size:14px;
+color:#555;
+}
+
+.nights-box span{
+font-weight:700;
+color:var(--green);
+}
+
+
+/* =========================
+        زر الحجز
+========================= */
+
+.booking-btn{
+width:100%;
+background:var(--green);
+color:white;
+padding:12px;
+border-radius:10px;
+border:none;
+font-weight:600;
+cursor:pointer;
+}
+
+.booking-note{
+text-align:center;
+margin-top:10px;
+font-size:12px;
+color:#777;
+}
+
+
+/* =========================
+        الموبايل
+========================= */
+
+@media(max-width:900px){
+
+.unit-layout{
+grid-template-columns:1fr;
+}
+
+.booking-card{
+position:relative;
+top:auto;
+width:100%;
+}
+
+.gallery-grid{
+grid-template-columns:1fr;
+}
+
+.gallery-side{
+grid-template-columns:1fr 1fr;
+}
+
+}
+
+/* =========================
+       معرض الصور
+========================= */
+
+.gallery-modal{
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.9);
+display:none;
+align-items:center;
+justify-content:center;
+z-index:9999;
+}
+
+.gallery-content{
+position:relative;
+max-width:90%;
+max-height:90%;
+}
+
+#galleryImage{
+max-width:100%;
+max-height:80vh;
+border-radius:10px;
+}
+
+.close-gallery{
+position:absolute;
+top:30px;
+right:40px;
+font-size:40px;
+color:white;
+cursor:pointer;
+}
+
+.gallery-nav{
+position:absolute;
+top:50%;
+transform:translateY(-50%);
+background:rgba(255,255,255,0.2);
+border:none;
+font-size:40px;
+color:white;
+cursor:pointer;
+padding:10px 18px;
+border-radius:10px;
+}
+
+.gallery-nav.prev{
+left:-60px;
+}
+
+.gallery-nav.next{
+right:-60px;
+}
+
+/* ===========================
+        صفحة البروفايل
+=========================== */
+.profile-page {
+    width: 85%;
+    margin: 40px auto;
+    direction: rtl;
+}
+
+.profile-title {
+    color: var(--green);
+    font-size: 26px;
+    margin-bottom: 30px;
+    text-align: right;
+}
+
+.profile-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.field-box label {
+    color: var(--green);
+    font-size: 14px;
+    margin-bottom: 5px;
+    display: block;
+}
+
+.field-box input {
+    width: 100%;
+    padding: 14px 20px;
+    border: 2px solid var(--green);
+    border-radius: 30px;
+    outline: none;
+    font-size: 15px;
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    color: var(--green);
+    font-weight: bold;
+    cursor: pointer;
+    text-align: right;
+}
+
+.password-hidden {
+    display: none;
+}
+
+.save-btn {
+    margin-top: 25px;
+    width: 100%;
+    background: var(--green);
+    color: white;
+    padding: 14px;
+    border: none;
+    border-radius: 30px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.logout-btn {
+    display: block;
+    margin-top: 15px;
+    text-align: center;
+    color: var(--green);
+    font-size: 14px;
+}
+
+/* ===========================
+      قائمة المستخدم )
+=========================== */
+
+.user-menu-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* أيقونة الحساب */
+.user-icon-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.user-icon-btn img {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+}
+
+/* القائمة المنسدلة مع الأنيميشن */
+.user-dropdown {
+    position: absolute;
+    top: 65px;                 /* تنزل تحت الأيقونة */
+    right: 50%;                /* محاذاة دقيقة مع الأيقونة */
+    transform: translate(-150%) translateY(-15px);
+    width: 130px;              /* القائمة أصغر */
+    background: white;
+    border-radius: 12px;
+    padding: 6px 0;            /* حجم داخلي أصغر */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    
+    /* للأنيميشن */
+    opacity: 0;
+    transform-origin: top;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+
+    display: none;             /* افتراضياً مخفية */
+    z-index: 9999;
+    text-align: right;
+}
+
+/* عند فتح القائمة */
+.user-dropdown.show {
+    display: block !important;
+    opacity: 1;
+    transform: translateX(-150%) translateY(0);
+}
+
+/* عناصر القائمة */
+.user-dropdown a,
+.user-dropdown button.dropdown-logout {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #35554B;
+    text-decoration: none;
+    cursor: pointer;
+    background: none;
+    border: none;
+    text-align: right;
+}
+
+.user-dropdown a:hover,
+.user-dropdown button.dropdown-logout:hover {
+    background: #EDF1EF;
+}
+/* إخفاء أيقونة البروفايل فقط */
+.hide-profile .user-menu-wrapper {
+    display: none !important;
+}
+
+
+.login img{
+  display: none;
+}
+
+.user-menu-wrapper img{
+  display: block;
+}
