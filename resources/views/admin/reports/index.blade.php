@@ -1,4 +1,4 @@
-@extends('layouts.admin', ['title' => 'التقارير'])
+@extends('layouts.Admin', ['title' => 'التقارير'])
 
 @section('content')
     <h1 class="text-2xl font-semibold text-[#2f4b46] mb-4">التقارير</h1>
@@ -21,7 +21,7 @@
     @endphp
 
     {{-- فلاتر --}}
-    <form method="GET" action="{{ route('admin.reports.index') }}"
+    <form method="GET" action="{{ route('Admin.reports.index') }}"
           class="grid grid-cols-1 md:grid-cols-6 gap-3 bg-white border border-gray-200 rounded-2xl p-4 mb-4">
         <div class="md:col-span-2">
             <label class="block mb-1 text-sm text-gray-700">بحث</label>
@@ -74,28 +74,44 @@
             </button>
 
             @if($params)
-                <a href="{{ route('admin.reports.index') }}"
+                <a href="{{ route('Admin.reports.index') }}"
                    class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm">
                     مسح الفلاتر
                 </a>
             @endif
 
             {{-- تصدير تفصيلي --}}
-            <a href="{{ route('admin.reports.export.bookings.csv',   $params) }}"
-               class="px-3 py-2 rounded-lg bg-slate-600 text-white hover:bg-slate-700 text-sm">CSV تفصيلي</a>
-            <a href="{{ route('admin.reports.export.bookings.excel', $params) }}"
-               class="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm">Excel تفصيلي</a>
-            <a href="{{ route('admin.reports.export.bookings.pdf',   $params) }}"
-               class="px-3 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 text-sm">PDF تفصيلي</a>
+            <a href="/Admin/reports/export/bookings.csv?{{ http_build_query($params) }}"
+   class="px-3 py-2 rounded-lg bg-slate-600 text-white hover:bg-slate-700 text-sm">
+   CSV تفصيلي
+</a>
+
+<a href="/Admin/reports/export/bookings.excel?{{ http_build_query($params) }}"
+   class="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm">
+   Excel تفصيلي
+</a>
+
+<a href="/Admin/reports/export/bookings.pdf?{{ http_build_query($params) }}"
+   class="px-3 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 text-sm">
+   PDF تفصيلي
+</a>
 
             {{-- تصدير ملخص شهري --}}
-            <a href="{{ route('admin.reports.export.summary.csv',   $params) }}"
-               class="px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-sm">CSV ملخّص</a>
-            <a href="{{ route('admin.reports.export.summary.excel', $params) }}"
-               class="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">Excel ملخّص</a>
-            <a href="{{ route('admin.reports.export.summary.pdf',   $params) }}"
-               class="px-3 py-2 rounded-lg bg-fuchsia-600 text-white hover:bg-fuchsia-700 text-sm">PDF ملخّص</a>
-        </div>
+            <a href="/Admin/reports/export/summary.csv?{{ http_build_query($params) }}"
+   class="px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-sm">
+   CSV ملخّص
+</a>
+
+<a href="/Admin/reports/export/summary.excel?{{ http_build_query($params) }}"
+   class="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">
+   Excel ملخّص
+</a>
+
+<a href="/Admin/reports/export/summary.pdf?{{ http_build_query($params) }}"
+   class="px-3 py-2 rounded-lg bg-fuchsia-600 text-white hover:bg-fuchsia-700 text-sm">
+   PDF ملخّص
+</a>
+ </div>
     </form>
 
     {{-- بطاقات --}}
@@ -156,7 +172,7 @@
             @forelse($bookings as $b)
                 <tr class="border-t">
                     <td class="py-3 px-4">{{ $b->id }}</td>
-                    <td class="py-3 px-4">{{ $b->unit?->name }} <span class="text-gray-500">({{ $b->unit?->code }})</span></td>
+                    <td class="py-3 px-4">{{ $b->unit?->unit_name }} <span class="text-gray-500">({{ $b->unit?->code }})</span></td>
                     <td class="py-3 px-4">{{ $b->customer?->name ?? '—' }}</td>
                     <td class="py-3 px-4">
                         <span class="inline-flex px-3 py-1 rounded-full text-xs border">

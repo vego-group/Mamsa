@@ -15,12 +15,12 @@ class BookingPolicy
     public function before(User $user, string $ability)
     {
         // سوبر أدمن = جميع الصلاحيات دائمًا
-        if ($user->hasRole('super_admin')) {
+        if ($user->hasRole('SuperAdmin')) {
             return true;
         }
 
         // مدير غير نشط → يمنع الإضافة/التعديل/الحذف
-        if ($user->hasRole('admin') && intval($user->is_active) !== 1) {
+        if ($user->hasRole('Admin') && intval($user->is_active) !== 1) {
             return false;
         }
 
@@ -33,7 +33,7 @@ class BookingPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasAnyRole(['super_admin', 'admin']);
+        return $user->hasAnyRole(['SuperAdmin', 'Admin']);
     }
 
     /**
@@ -51,7 +51,7 @@ class BookingPolicy
      */
     public function create(User $user): bool
     {
-        return $user->hasRole('admin') && intval($user->is_active) === 1;
+        return $user->hasRole('Admin') && intval($user->is_active) === 1;
     }
 
     /**

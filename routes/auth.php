@@ -1,33 +1,19 @@
 <?php
-
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Auth\EmailVerificationNotificationController;
-use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 
 /*
 |--------------------------------------------------------------------------
-| Email Verification Notice (يتطلب تسجيل دخول)
+| Email Verification (OTP System)
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth')->group(function () {
+// عرض صفحة إدخال الكود
+Route::get('/email/verify', [VerifyEmailController::class, 'show'])
+    ->middleware('auth')
+    ->name('auth.email.verify.form');
 
-    Route::get('/verify-email', EmailVerificationPromptController::class)
-        ->name('verification.notice');
-
-    Route::post('/email/verification-notification',
-        [EmailVerificationNotificationController::class, 'store'])
-        ->middleware('throttle:6,1')
-        ->name('verification.send');
-});
-
-/*
-|--------------------------------------------------------------------------
-| Email Verification Link (يعمل من أي جهاز)
-|--------------------------------------------------------------------------
-*/
-
-Route::get('/verify-email/{id}/{hash}', VerifyEmailController::class)
-    ->middleware(['signed', 'throttle:6,1'])
-    ->name('verification.verify');
+// إرسال الكود والتحقق
+Route::post('/email/verify', [VerifyEmailController::class, 'submit'])
+    ->middleware('auth')
+    ->name('auth.email.verify.submit');

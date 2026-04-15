@@ -39,11 +39,10 @@ class User extends Authenticatable
             ->select(['roles.id', 'roles.name as name']);
     }
 
-   public function adminDetails()
-   {
-    return $this->hasOne(AdminDetail::class);
-   }
-
+   public function AdminDetails()
+{
+    return $this->hasOne(\App\Models\AdminDetail::class, 'user_id');
+}
     public function bookings()
     {
         return $this->hasMany(Booking::class);
@@ -126,8 +125,10 @@ class User extends Authenticatable
 
    
     // أدمن + سوبر
-    public function isAdmin(): bool
-    {
-        return $this->hasAnyRole(['Admin', 'Super Admin']);
-    }
+ 
+
+public function isAdmin()
+{
+    return $this->hasRole('Admin') || $this->hasRole('SuperAdmin');
+}
 }

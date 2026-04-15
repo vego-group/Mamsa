@@ -1,9 +1,9 @@
-@extends('layouts.admin', ['title' => 'تعديل عقار'])
+@extends('layouts.Admin', ['title' => 'تعديل عقار'])
 
 @section('content')
 <div class="flex items-center justify-between mb-4">
-  <h1 class="text-2xl font-semibold text-[#2f4b46]">تعديل: {{ $unit->name }}</h1>
-  <a href="{{ route('admin.units.index') }}" class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">رجوع</a>
+  <h1 class="text-2xl font-semibold text-[#2f4b46]">تعديل: {{ $unit->unit_name }}</h1>
+  <a href="{{ route('Admin.units.index') }}" class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">رجوع</a>
 </div>
 
 @if($errors->any())
@@ -13,30 +13,26 @@
   </div>
 @endif
 
-<form action="{{ route('admin.units.update', $unit->id) }}" method="POST" enctype="multipart/form-data"
+<form action="{{ route('Admin.units.update', $unit->id) }}" method="POST" enctype="multipart/form-data"
       class="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
   @csrf
   @method('PUT')
 
   <div>
     <label class="block mb-1 text-sm text-gray-700">اسم العقار *</label>
-    <input type="text" name="name" value="{{ old('name', $unit->name) }}"
+    <input type="text" name="unit_name" value="{{ old('unit_name', $unit->unit_name) }}"
            class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]" required>
   </div>
 
-  <div>
-    <label class="block mb-1 text-sm text-gray-700">الكود</label>
-    <input type="text" value="{{ $unit->code }}" readonly
-           class="w-full rounded-lg border-gray-300 bg-gray-50 text-gray-700">
-  </div>
+ 
 
   <div>
     <label class="block mb-1 text-sm text-gray-700">نوع العقار</label>
-    <select name="type" class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]">
+    <select name="unit_type" class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]">
       <option value="">—</option>
-      <option value="apartment" @selected(old('type',$unit->type)==='apartment')>شقة</option>
-      <option value="villa"     @selected(old('type',$unit->type)==='villa')>فيلا</option>
-      <option value="studio"    @selected(old('type',$unit->type)==='studio')>استوديو</option>
+      <option value="apartment" @selected(old('unit_type',$unit->unit_type)==='apartment')>شقة</option>
+      <option value="villa"     @selected(old('unit_type',$unit->unit_type)==='villa')>فيلا</option>
+      <option value="studio"    @selected(old('unit_type',$unit->unit_type)==='studio')>استوديو</option>
     </select>
   </div>
 
@@ -87,7 +83,6 @@
     <select name="status" class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]" required>
       <option value="available"   @selected(old('status', $unit->status)==='available')>متاحة</option>
       <option value="unavailable" @selected(old('status', $unit->status)==='unavailable')>غير متاحة</option>
-      <option value="reserved"    @selected(old('status', $unit->status)==='reserved')>محجوزة</option>
     </select>
   </div>
 
@@ -132,10 +127,90 @@
            class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]">
     <div class="text-xs text-gray-500 mt-1">الحد الأقصى للصورة: 4MB</div>
   </div>
+{{-- مميزات الوحدة --}}
+<div>
+    <label class="block mb-3 text-lg font-semibold text-[#2f4b46] text-right">
+        مميزات الوحدة
+    </label>
+
+    <div class="grid grid-cols-2 gap-4" dir="rtl">
+        @foreach($features as $feature)
+            <label class="relative cursor-pointer">
+
+                <input
+                    type="checkbox"
+                    name="features[]"
+                    value="{{ $feature->id }}"
+                    class="peer hidden"
+                    @checked($unit->features->contains($feature->id))
+                >
+
+                <div class="flex items-center justify-between px-4 py-3 rounded-2xl border 
+                            bg-gray-50 text-gray-700
+                            peer-checked:bg-[#2f4b46] peer-checked:text-white 
+                            peer-checked:border-[#2f4b46]
+                            hover:shadow-md hover:scale-[1.02]
+                            transition duration-200">
+
+                    <span class="text-sm font-medium">
+                        {{ $feature->name }}
+                    </span>
+
+                    <svg class="w-5 h-5 opacity-0 peer-checked:opacity-100 transition"
+                         fill="none" stroke="currentColor" stroke-width="3"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M5 13l4 4L19 7" />
+                    </svg>
+
+                </div>
+            </label>
+        @endforeach
+    </div>
+</div>
+{{-- ===== سياسة الإلغاء ===== --}}
+<div class="md:col-span-2">
+    <label class="block mb-1 text-sm text-gray-700">سياسة الإلغاء</label>
+    <select name="cancellation_policy"
+            class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]">
+        <option value="">— اختر السياسة —</option>
+        <option value="no_cancel"
+            @selected(old('cancellation_policy', $unit->cancellation_policy) === 'no_cancel')>
+            غير قابلة للإلغاء
+        </option>
+        <option value="48_hours"
+            @selected(old('cancellation_policy', $unit->cancellation_policy) === '48_hours')>
+            إلغاء قبل 48 ساعة
+        </option>
+    </select>
+</div>
+
+{{-- ===== أوقات الدخول والخروج ===== --}}
+<div>
+    <label class="block mb-1 text-sm text-gray-700">وقت الدخول</label>
+    <input
+        type="text"
+        name="checkin_time"
+        value="{{ old('checkin_time', $unit->checkin_time ? substr($unit->checkin_time, 0, 5) : '') }}"
+        class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]"
+        placeholder="HH:MM"
+    >
+</div>
+
+<div>
+    <label class="block mb-1 text-sm text-gray-700">وقت الخروج</label>
+    <input
+        type="text"
+        name="checkout_time"
+        value="{{ old('checkout_time', $unit->checkout_time ? substr($unit->checkout_time, 0, 5) : '') }}"
+        class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]"
+        placeholder="HH:MM"
+    >
+</div>
 
   <div class="md:col-span-2 flex items-center gap-3 pt-2">
     <button type="submit" class="px-6 py-2.5 rounded-lg bg-[#2f4b46] text-white hover:bg-[#2a433f]">حفظ التغييرات</button>
-    <a href="{{ route('admin.units.index') }}" class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">إلغاء</a>
+    <a href="{{ route('Admin.units.index') }}" class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">إلغاء</a>
   </div>
 </form>
 @endsection

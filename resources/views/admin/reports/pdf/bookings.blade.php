@@ -90,7 +90,7 @@
           <td>{{ $b->id }}</td>
           <td>{{ optional($b->unit)->name }}</td>
           <td>{{ optional($b->unit)->code }}</td>
-          <td>{{ optional(optional($b->unit)->owner)->name }}</td>
+          <td>{{ optional(optional($b->unit)->user)->name }}</td>
           <td>{{ optional($b->customer)->name }}</td>
           <td>{{ $b->status }}</td>
           <td>{{ optional($b->start_date)?->format('Y-m-d') }}</td>

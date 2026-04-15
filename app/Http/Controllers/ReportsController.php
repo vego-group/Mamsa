@@ -29,12 +29,12 @@ class ReportsController extends Controller
         $dateTo   = $request->get('to');
 
         $query = Booking::query()
-            ->with(['unit.owner', 'customer'])
+            ->with(['unit.user', 'customer'])
             ->when($q !== '', function ($qb) use ($q) {
                 $qb->where(function ($sub) use ($q) {
                     $sub->whereHas('unit', function ($u) use ($q) {
-                            $u->where('name', 'like', "%{$q}%")
-                              ->orWhere('code', 'like', "%{$q}%");
+                            $u->where('unit_name', 'like', "%{$q}%")
+  ->orWhere('code', 'like', "%{$q}%");
                         })
                         ->orWhereHas('customer', function ($c) use ($q) {
                             $c->where('name', 'like', "%{$q}%")
@@ -47,7 +47,7 @@ class ReportsController extends Controller
             ->when($dateFrom, fn($qb) => $qb->whereDate('start_date', '>=', $dateFrom))
             ->when($dateTo, fn($qb)   => $qb->whereDate('end_date', '<=', $dateTo));
 
-        if ($request->user()->hasRole('admin') && ! $request->user()->hasRole('super_admin')) {
+        if ($request->user()->hasRole('Admin') && ! $request->user()->hasRole('SuperAdmin')) {
             $query->whereHas('unit', fn($u) => $u->where('user_id', $request->user()->id));
         }
 
@@ -69,10 +69,10 @@ class ReportsController extends Controller
 
         // وحدات للفلاتر
         $unitsList = Unit::query()
-            ->when($request->user()->hasRole('admin') && ! $request->user()->hasRole('super_admin'),
+            ->when($request->user()->hasRole('Admin') && !$request->user()->hasRole('SuperAdmin'),
                 fn($u) => $u->where('user_id', $request->user()->id))
-            ->orderBy('name')
-            ->get(['id','name','code']);
+           ->orderBy('unit_name')
+->get(['id','unit_name','code']);
 
         // تجميع شهري (آخر 12 شهر)
         $end   = Carbon::now()->startOfMonth();
@@ -107,7 +107,7 @@ class ReportsController extends Controller
             $cursor->addMonth();
         }
 
-        return view('admin.reports.index', [
+        return view('Admin.reports.index', [
             'bookings'       => $bookings,
             'unitsList'      => $unitsList,
             'q'              => $request->get('q', ''),
@@ -153,7 +153,7 @@ class ReportsController extends Controller
                         $b->id,
                         optional($b->unit)->name,
                         optional($b->unit)->code,
-                        optional(optional($b->unit)->owner)->name,
+                        optional(optional($b->unit)->user)->name,
                         optional($b->customer)->name,
                         $b->status,
                         optional($b->start_date)->format('Y-m-d'),
@@ -223,7 +223,7 @@ class ReportsController extends Controller
     // ===== Excel =====
     public function exportBookingsExcel(Request $request)
     {
-        $query = $this->buildFilteredQuery($request)->orderByDesc('id')->with(['unit.owner','customer']);
+        $query = $this->buildFilteredQuery($request)->orderByDesc('id')->with(['unit.user','customer']);
         $filename = 'bookings_' . now()->format('Ymd_His') . '.xlsx';
         return Excel::download(new BookingsExport($query), $filename);
     }
@@ -274,7 +274,7 @@ class ReportsController extends Controller
     {
         // نجلب كل النتائج المصفاة (نحط حد أمان 2000 صف)
         $rows = $this->buildFilteredQuery($request)
-            ->with(['unit.owner','customer'])
+            ->with(['unit.user','customer'])
             ->orderByDesc('id')
             ->limit(2000)
             ->get();
@@ -292,7 +292,7 @@ class ReportsController extends Controller
             'generated_at' => now()->format('Y-m-d H:i'),
         ];
 
-        $pdf = Pdf::loadView('admin.reports.pdf.bookings', $data)->setPaper('a4', 'portrait');
+        $pdf = Pdf::loadView('Admin.reports.pdf.bookings', $data)->setPaper('a4', 'portrait');
         return $pdf->download('bookings_' . now()->format('Ymd_His') . '.pdf');
     }
 
@@ -342,7 +342,7 @@ class ReportsController extends Controller
             'generated_at'  => now()->format('Y-m-d H:i'),
         ];
 
-        $pdf = Pdf::loadView('admin.reports.pdf.summary', $data)->setPaper('a4', 'portrait');
+        $pdf = Pdf::loadView('Admin.reports.pdf.summary', $data)->setPaper('a4', 'portrait');
         return $pdf->download('bookings_summary_' . now()->format('Ymd_His') . '.pdf');
     }
 }

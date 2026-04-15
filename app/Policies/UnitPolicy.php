@@ -2,49 +2,72 @@
 
 namespace App\Policies;
 
-use App\Models\User;
 use App\Models\Unit;
+use App\Models\User;
 
 class UnitPolicy
 {
+    /**
+     * SuperAdmin bypass (يشوف ويسوي كل شيء)
+     */
     public function before(User $user, string $ability)
     {
-        if ($user->hasRole('super_admin')) {
+        if ($user->hasRole('SuperAdmin')) {
             return true;
-        }
-
-        // المدير غير النشط لا يسمح له إلا بالعرض
-        if ($user->hasRole('admin') && intval($user->is_active) !== 1) {
-            return false;
         }
 
         return null;
     }
 
+    /**
+     * عرض قائمة الوحدات
+     */
     public function viewAny(User $user): bool
     {
-        return $user->hasAnyRole(['super_admin','admin']);
+        return $user->hasRole('Admin') || $user->hasRole('SuperAdmin');
     }
 
+    /**
+     * عرض وحدة واحدة
+     */
     public function view(User $user, Unit $unit): bool
     {
-        return $user->id === $unit->user_id;
+        return $unit->user_id === $user->id;
     }
 
+    /**
+     * إنشاء وحدة
+     */
     public function create(User $user): bool
     {
-        return $user->hasRole('admin') && intval($user->is_active) === 1;
+        return $user->hasRole('Admin');
     }
 
+    /**
+     * تعديل وحدة (فقط إذا approved)
+     */
     public function update(User $user, Unit $unit): bool
     {
-        return $user->id === $unit->user_id &&
-               intval($user->is_active) === 1;
+        return
+            $unit->user_id === $user->id &&
+            $unit->approval_status === 'approved';
     }
 
+    /**
+     * حذف وحدة (فقط إذا approved)
+     */
     public function delete(User $user, Unit $unit): bool
     {
-        return $user->id === $unit->user_id &&
-               intval($user->is_active) === 1;
+        return
+            $unit->user_id === $user->id &&
+            $unit->approval_status === 'approved';
+    }
+
+    /**
+     * الموافقة / الرفض (SuperAdmin فقط)
+     */
+    public function approve(User $user, Unit $unit): bool
+    {
+        return $user->hasRole('SuperAdmin');
     }
 }

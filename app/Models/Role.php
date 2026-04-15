@@ -11,7 +11,7 @@ class Role extends Model
     public $timestamps = true;
 
     protected $fillable = [
-        'name',        // مثل: Admin, Super Admin, 
+        'name',        // مثل: Admin, SuperAdmin, 
         'guard_name',  // إن وجد عندك هذا العمود (لا يضر وجوده)
     ];
 

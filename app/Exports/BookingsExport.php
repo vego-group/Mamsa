@@ -36,9 +36,8 @@ class BookingsExport implements FromQuery, WithMapping, WithHeadings, ShouldAuto
     {
         return [
             $b->id,
-            optional($b->unit)->name,
-            optional($b->unit)->code,
-            optional(optional($b->unit)->owner)->name,
+            optional($b->unit)->unit_name,
+            optional(optional($b->unit)->user)->name,
             optional($b->customer)->name,
             $b->status,
             optional($b->start_date)->format('Y-m-d'),

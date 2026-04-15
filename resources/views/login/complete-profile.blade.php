@@ -26,7 +26,7 @@
 
         {{-- الاسم --}}
         <div class="form-group">
-            <label class="label">الاسم </label>
+            <label class="label">الاسم</label>
             <input type="text"
                    name="name"
                    class="input"
@@ -36,16 +36,24 @@
 
         {{-- الايميل --}}
         <div class="form-group">
-         <label class="label">البريد الإلكتروني</label>
+         <label class="label">
+            البريد الإلكتروني
+            @if($intent === 'Admin')
+                <small style="color:#888;">مطلوب </small>
+            @else
+                <small style="color:#888;">اختياري</small>
+            @endif
+         </label>
+
          <input type="email"
            name="email"
            class="input"
            value="{{ old('email',auth()->user()->email) }}"
-           {{ $intent === 'admin' || auth()->user()->isAdmin() ? 'required' : '' }}>
+           {{ $intent === 'Admin' || auth()->user()->isAdmin() ? 'required' : '' }}>
         </div>
 
         {{-- 🔥 فقط للأدمن --}}
-        @if($intent === 'admin')
+        @if($intent === 'Admin')
 
         <div class="form-group">
             <label class="label">نوع الحساب</label>
@@ -59,16 +67,38 @@
         {{-- فرد --}}
         <div id="individual_fields" style="display:none;">
             <div class="form-group">
-                <label class="label">رقم الهوية الوطنية</label>
-                <input type="text" name="national_id" class="input" placeholder="أدخل رقم الهوية">
+                <label class="label">
+                    رقم الهوية الوطنية
+                    <small style="color:#888;">يجب أن يبدأ بـ 1 ويتكون من 10 أرقام</small>
+                </label>
+
+                <input type="text"
+                       name="national_id"
+                       id="national_id"
+                       class="input"
+                       placeholder="1XXXXXXXXX"
+                       maxlength="10"
+                       pattern="1[0-9]{9}"
+                       inputmode="numeric">
             </div>
         </div>
 
         {{-- شركة --}}
         <div id="company_fields" style="display:none;">
             <div class="form-group">
-                <label class="label">رقم السجل التجاري</label>
-                <input type="text" name="cr_number" class="input" placeholder="أدخل السجل التجاري">
+                <label class="label">
+                    رقم السجل التجاري
+                    <small style="color:#888;">يتكون من 10 أرقام</small>
+                </label>
+
+                <input type="text"
+                       name="cr_number"
+                       id="cr_number"
+                       class="input"
+                       placeholder="XXXXXXXXXX"
+                       maxlength="10"
+                       pattern="[0-9]{10}"
+                       inputmode="numeric">
             </div>
         </div>
 
@@ -84,7 +114,7 @@
 </div>
 
 {{-- 🔥 سكربت التبديل --}}
-@if($intent === 'admin')
+@if($intent === 'Admin')
 <script>
 function toggleFields(type){
     document.getElementById('individual_fields').style.display =
@@ -98,6 +128,15 @@ const select = document.getElementById('type');
 
 select?.addEventListener('change', function() {
     toggleFields(this.value);
+});
+
+// 🔥 منع إدخال حروف (هوية + سجل)
+document.getElementById('national_id')?.addEventListener('input', function() {
+    this.value = this.value.replace(/\D/g,'').slice(0,10);
+});
+
+document.getElementById('cr_number')?.addEventListener('input', function() {
+    this.value = this.value.replace(/\D/g,'').slice(0,10);
 });
 
 // 🔥 مهم: لما الصفحة ترجع بعد خطأ

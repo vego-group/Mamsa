@@ -17,11 +17,11 @@ class AdminUsersController extends Controller
         $q = trim((string) $request->get('q', ''));
 
         // ترقيم مستقل
-        $adminsPageName = 'admins_page';
+        $AdminsPageName = 'Admins_page';
         $usersPageName  = 'users_page';
 
         /** جدول المدراء فقط */
-        $admins = User::query()
+        $Admins = User::query()
             ->whereHas('roles', fn($r) => $r->where('name', 'Admin'))
             ->when($q !== '', fn($query) =>
                 $query->where(function ($sub) use ($q) {
@@ -31,13 +31,13 @@ class AdminUsersController extends Controller
                 })
             )
             ->orderByDesc('id')
-            ->paginate(10, ['*'], $adminsPageName)
+            ->paginate(10, ['*'], $AdminsPageName)
             ->withQueryString();
 
         /** جدول المستخدمين العاديين (بدون Super Admin) */
         $users = User::query()
             ->whereDoesntHave('roles', fn($r) => $r->where('name', 'Admin'))
-            ->whereDoesntHave('roles', fn($r) => $r->where('name', 'Super Admin'))
+            ->whereDoesntHave('roles', fn($r) => $r->where('name', 'SuperAdmin'))
             ->when($q !== '', fn($query) =>
                 $query->where(function ($sub) use ($q) {
                     $sub->where('name', 'like', "%$q%")
@@ -49,11 +49,11 @@ class AdminUsersController extends Controller
             ->paginate(10, ['*'], $usersPageName)
             ->withQueryString();
 
-        return view('admin.users.index', compact(
-            'admins',
+        return view('Admin.users.index', compact(
+            'Admins',
             'users',
             'q',
-            'adminsPageName',
+            'AdminsPageName',
             'usersPageName'
         ));
     }
@@ -63,7 +63,7 @@ class AdminUsersController extends Controller
      */
     public function create()
     {
-        return view('admin.users.create'); // الصفحة الآن لإضافة مدير فقط
+        return view('Admin.users.create'); // الصفحة الآن لإضافة مدير فقط
     }
 
     /**
@@ -95,9 +95,9 @@ class AdminUsersController extends Controller
         ]);
 
         // دايم مدير — الآن تعمل لأن assignRole أضفناها داخل الموديل وتطبّع الاسم تلقائيًا
-        $user->assignRole('admin');
+        $user->assignRole('Admin');
 
-        return redirect()->route('admin.users.index')
+        return redirect()->route('Admin.users.index')
             ->with('success', 'تم إضافة المدير بنجاح.');
     }
 
@@ -112,11 +112,11 @@ class AdminUsersController extends Controller
 
         $user = User::findOrFail($id);
 
-        if (!$user->hasRole('admin')) {
+        if (!$user->hasRole('Admin')) {
             return back()->with('error','هذه العملية خاصة بالمدراء فقط.');
         }
 
-        if ($user->hasRole('super_admin')) {
+        if ($user->hasRole('c')) {
             return back()->with('error','لا يمكن تعديل حالة المشرف العام.');
         }
 
@@ -138,11 +138,11 @@ class AdminUsersController extends Controller
     {
         $user = User::findOrFail($id);
 
-        if ($user->hasRole('super_admin')) {
+        if ($user->hasRole('SuperAdmin')) {
             return back()->with('error', 'لا يمكن حذف المشرف العام.');
         }
 
-        if (!$user->hasRole('admin')) {
+        if (!$user->hasRole('Admin')) {
             return back()->with('error', 'المستخدم ليس مديرًا.');
         }
 

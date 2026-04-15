@@ -9,7 +9,7 @@
         <h3 class="title mb-20">صور العقار</h3>
 
         <form method="POST"
-              action="{{ route('admin.unit.photos.upload') }}"
+              action="{{ route('Admin.unit.photos.upload') }}"
               enctype="multipart/form-data"
               class="mb-40">
             @csrf
@@ -41,7 +41,7 @@
                              style="width:100%; border-radius:10px; margin-bottom:10px;">
 
                         <form method="POST"
-                              action="{{ route('admin.unit.photos.delete',$photo) }}">
+                              action="{{ route('Admin.unit.photos.delete',$photo) }}">
                             @csrf
                             @method('DELETE')
 
@@ -58,7 +58,7 @@
 
         <div style="margin-top:30px;">
             <a class="btn"
-               href="{{ route('admin.license.form') }}">
+               href="{{ route('Admin.license.form') }}">
                 متابعة للتصريح
             </a>
         </div>

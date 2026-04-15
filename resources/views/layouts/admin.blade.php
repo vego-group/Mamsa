@@ -21,57 +21,78 @@
                 <div class="font-semibold text-lg">Mamsa</div>
             </div>
 
-            <nav class="space-y-3">
+          <nav class="space-y-3">
 
-                {{-- الرئيسية --}}
-                <a href="{{ route('admin.dashboard') }}"
-                   class="block rounded-full px-5 py-3 transition
-                   {{ request()->routeIs('admin.dashboard') ? 'bg-white/10' : 'hover:bg-white/10' }}">
-                    الرئيسية
-                </a>
+    {{-- الرئيسية --}}
+    <a href="{{ route('Admin.dashboard') }}"
+       class="block rounded-full px-5 py-3 transition
+       {{ request()->routeIs('Admin.dashboard') ? 'bg-white/10' : 'hover:bg-white/10' }}">
+        الرئيسية
+    </a>
 
-                {{-- المستخدمون (super admin فقط) --}}
-                @role('super_admin')
-                    @php
-                        $isUsersActive = request()->routeIs('admin.users.*')
-                            || (request()->routeIs('admin.dashboard') && request('tab') === 'admins');
-                    @endphp
+    {{-- المستخدمون (SuperAdmin فقط) --}}
+    @if(auth()->user()->hasRole('SuperAdmin'))
+        <a href="{{ route('Admin.users.index') }}"
+           class="block rounded-full px-5 py-3 transition
+           {{ request()->routeIs('Admin.users.*') ? 'bg-white/10' : 'hover:bg-white/10' }}">
+            المستخدمون
+        </a>
+    @endif
 
-                    <a href="{{ route('admin.users.index', ['tab' => 'admins']) }}"
-                       class="block rounded-full px-5 py-3 transition
-                       {{ $isUsersActive ? 'bg-white/10' : 'hover:bg-white/10' }}">
-                        المستخدمون
-                    </a>
-                @endrole
+    {{-- الوحدات --}}
+    <a href="{{ route('Admin.units.index') }}"
+       class="block rounded-full px-5 py-3 transition
+       {{ request()->routeIs('Admin.units.*') ? 'bg-white/10' : 'hover:bg-white/10' }}">
+        الوحدات
+    </a>
 
-                {{-- الوحدات --}}
-                @if(Route::has('admin.units.index'))
-                <a href="{{ route('admin.units.index') }}"
-                   class="block rounded-full px-5 py-3 transition
-                   {{ request()->routeIs('admin.units.*') ? 'bg-white/10' : 'hover:bg-white/10' }}">
-                    الوحدات
-                </a>
-                @endif
+    {{-- الحجوزات --}}
+    <a href="{{ route('Admin.bookings.index') }}"
+       class="block rounded-full px-5 py-3 transition
+       {{ request()->routeIs('Admin.bookings.*') ? 'bg-white/10' : 'hover:bg-white/10' }}">
+        الحجوزات
+    </a>
 
-                {{-- الحجوزات --}}
-                @if(Route::has('admin.bookings.index'))
-                <a href="{{ route('admin.bookings.index') }}"
-                   class="block rounded-full px-5 py-3 transition
-                   {{ request()->routeIs('admin.bookings.*') ? 'bg-white/10' : 'hover:bg-white/10' }}">
-                    الحجوزات
-                </a>
-                @endif
+    {{-- التقارير --}}
+    <a href="{{ route('Admin.reports.index') }}"
+       class="block rounded-full px-5 py-3 transition
+       {{ request()->routeIs('Admin.reports.*') ? 'bg-white/10' : 'hover:bg-white/10' }}">
+        التقارير
+    </a>
 
-                {{-- التقارير --}}
-                @if(Route::has('admin.reports.index'))
-                <a href="{{ route('admin.reports.index') }}"
-                   class="block rounded-full px-5 py-3 transition
-                   {{ request()->routeIs('admin.reports.*') ? 'bg-white/10' : 'hover:bg-white/10' }}">
-                    التقارير
-                </a>
-                @endif
+    {{-- الطلبات (SuperAdmin فقط) --}}
+    @if(auth()->user()->hasRole('SuperAdmin'))
+        <a href="{{ route('Admin.requests.index') }}"
+           class="block rounded-full px-5 py-3 transition
+           {{ request()->routeIs('Admin.requests.*') ? 'bg-white/10' : 'hover:bg-white/10' }}">
+            الطلبات
+        </a>
+    @endif
 
-            </nav>
+    {{-- الحساب --}}
+    <a href="{{ route('Admin.account.index') }}"
+       class="block rounded-full px-5 py-3 transition
+       {{ request()->routeIs('Admin.account.index') ? 'bg-white/10' : 'hover:bg-white/10' }}">
+        الحساب
+    </a>
+
+    {{-- تسجيل خروج --}}
+ <form method="POST" action="{{ route('logout') }}" class="mt-4">
+    @csrf
+    <button type="submit"
+        class="w-full flex items-center gap-2 rounded-full px-5 py-3 bg-red-600 hover:bg-red-700 text-white text-sm transition">
+
+        {{-- أيقونة خروج مطابقة للصورة (SVG) --}}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M18 12H9m9 0l-3-3m3 3l-3 3" />
+        </svg>
+
+        {{-- نص تسجيل الخروج --}}
+        <span>تسجيل خروج</span>
+    </button>
+</form>
 
             <div class="mt-auto pt-6 opacity-80 text-sm">
                 مرحبًا، {{ auth()->user()->name }}
@@ -84,7 +105,7 @@
 
             {{-- 🔥 رسالة المدير غير النشط --}}
            @if(auth()->check()
-    && auth()->user()->hasRole('admin') 
+    && auth()->user()->hasRole('Admin') 
     && intval(auth()->user()->is_active) !== 1)
 
     <div class="mb-4 bg-yellow-100 border border-yellow-300 text-yellow-900 px-4 py-3 rounded-xl text-sm font-bold">
@@ -98,5 +119,24 @@
 
     </div>
 
+<script>
+    if (window.history && window.history.pushState) {
+        window.history.pushState(null, null, window.location.href);
+        window.onpopstate = function () {
+            window.history.pushState(null, null, window.location.href);
+        };
+    }
+</script>
+@if(auth()->check())
+<script>
+    // منع الرجوع إلى صفحة تسجيل الدخول
+    if (window.history && window.history.pushState) {
+        window.history.pushState(null, null, window.location.href);
+        window.onpopstate = function () {
+            window.history.go(1);
+        };
+    }
+</script>
+@endif
 </body>
 </html>

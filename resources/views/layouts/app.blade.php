@@ -13,7 +13,7 @@
 {{ 
     request()->is('complete-profile*') || 
     request()->is('email-verify*') || 
-    request()->is('admin*') 
+    request()->is('Admin*') 
     ? 'hide-profile' : '' 
 }}">
 

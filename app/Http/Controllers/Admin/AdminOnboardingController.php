@@ -10,8 +10,8 @@ class AdminOnboardingController extends Controller
     {
         abort_unless(auth()->user()->isAdmin(), 403);
 
-        $details = auth()->user()->adminDetails;
+        $details = auth()->user()->AdminDetails;
 
-        return view('pages.admin.dashboard', compact('details'));
+        return view('pages.Admin.dashboard', compact('details'));
     }
 }

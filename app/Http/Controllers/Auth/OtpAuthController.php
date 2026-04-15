@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Role;
 use App\Services\OtpService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class OtpAuthController extends Controller
 {
@@ -15,7 +17,7 @@ class OtpAuthController extends Controller
     public function showPhoneForm(Request $request)
     {
         $intent = $request->query('intent', 'login');
-        return view('pages.Auth.phone', compact('intent'));
+        return view('login.phone', compact('intent'));
     }
 
     public function requestCode(Request $request)
@@ -34,6 +36,17 @@ class OtpAuthController extends Controller
         ]);
     }
 
+    public function resend(Request $request)
+    {
+        $request->validate([
+            'phone' => ['required','string']
+        ]);
+
+        $this->otp->request($request->phone, 'login', $request->ip());
+
+        return back()->with('status', 'تم إعادة إرسال الرمز');
+    }
+
     public function showConfirmForm(Request $request)
     {
         $intent = $request->query('intent','login');
@@ -41,7 +54,7 @@ class OtpAuthController extends Controller
 
         abort_if(!$phone, 404);
 
-        return view('pages.Auth.confirm', compact('intent','phone'));
+        return view('login.confirm', compact('intent','phone'));
     }
 
     public function verifyCode(Request $request)
@@ -49,7 +62,7 @@ class OtpAuthController extends Controller
         $validated = $request->validate([
             'phone'  => ['required','string','min:8','max:20'],
             'code'   => ['required','digits_between:4,8'],
-            'intent' => ['nullable','in:login,admin'] // 🔥 عدلنا هنا
+            'intent' => ['nullable','in:login,Admin']
         ]);
 
         if (!$this->otp->verify($validated['phone'], $validated['code'], 'login')) {
@@ -58,32 +71,40 @@ class OtpAuthController extends Controller
 
         $user = User::where('phone', $validated['phone'])->first();
 
-        // إنشاء مستخدم جديد
         if (!$user) {
             $user = User::create([
                 'phone' => $validated['phone'],
                 'name'  => null,
+                'is_active' => 1,
             ]);
         }
 
-        /* ==============================
-           Assign Role (مرة وحدة فقط)
-        ============================== */
-
+        // 🔥 دمج النظامين (roles + pivot)
         if (!$user->roles()->exists()) {
 
-            if ($validated['intent'] === 'admin') {
+            if ($validated['intent'] === 'Admin') {
                 $user->assignRole('Admin', true);
             } else {
                 $user->assignRole('User', true);
             }
+
+            // fallback لو roles ما اشتغل
+            if (!DB::table('user_roles')->where('user_id', $user->id)->exists()) {
+
+                $roleName = ($validated['intent'] === 'Admin') ? 'Admin' : 'user';
+
+                $role = Role::where('name', $roleName)->first();
+
+                if ($role) {
+                    DB::table('user_roles')->insert([
+                        'user_id' => $user->id,
+                        'role_id' => $role->id,
+                    ]);
+                }
+            }
         }
 
         Auth::login($user);
-
-        /* ==============================
-           أول مرة يكمل بياناته
-        ============================== */
 
         if (blank($user->name)) {
             return redirect()->route('auth.complete-profile', [
@@ -91,12 +112,8 @@ class OtpAuthController extends Controller
             ]);
         }
 
-        /* ==============================
-           التوجيه
-        ============================== */
-
         if ($user->isAdmin()) {
-            return redirect()->route('admin.dashboard');
+            return redirect()->route('Admin.dashboard');
         }
 
         return redirect()->route('home');

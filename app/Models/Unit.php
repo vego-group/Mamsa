@@ -14,46 +14,35 @@ class Unit extends Model
 
     protected $fillable = [
         'user_id',
-
         'unit_name',
         'unit_type',
-
+        'code',
         'price',
         'capacity',
         'bedrooms',
-
         'city',
         'district',
-
         'lat',
         'lng',
-
         'description',
-
         'tourism_permit_no',
         'tourism_permit_file',
-
         'company_license_no',
-
         'calendar_token',
         'calendar_external_url',
-
         'approval_status',
         'status',
-
         'cancellation_policy',
         'checkin_time',
         'checkout_time',
+        'rejection_reason',
     ];
 
-    // ✅ هنا مكانها الصحيح
     protected $casts = [
         'price' => 'decimal:2',
     ];
 
-    /* =========================
-        Relationships
-    ========================= */
+    /* ================= Relationships ================= */
 
     public function user()
     {
@@ -73,6 +62,16 @@ class Unit extends Model
     public function reviews()
     {
         return $this->hasMany(Review::class, 'unit_id');
+    }
+
+    public function features()
+    {
+        return $this->belongsToMany(
+            \App\Models\Feature::class,
+            'unit_features',
+            'unit_id',
+            'feature_id'
+        );
     }
 
     protected static function booted()

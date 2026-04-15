@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Mail;
 
-// 🔥 موديل admin_details (تأكدي موجود)
+// 🔥 موديل Admin_details (تأكدي موجود)
 use App\Models\AdminDetail;
 
 class CompleteProfileController extends Controller
@@ -17,10 +17,10 @@ class CompleteProfileController extends Controller
      */
     public function show(Request $request)
     {
-        // intent يحدد نوع المستخدم (login / admin)
+        // intent يحدد نوع المستخدم (login / Admin)
         $intent = $request->query('intent','login');
 
-        return view('pages.Auth.complete-profile', compact('intent'));
+        return view('login.complete-profile', compact('intent'));
     }
 
     /**
@@ -41,7 +41,7 @@ class CompleteProfileController extends Controller
         ];
 
         // 🔥 إذا Admin الإيميل إجباري
-        if ($intent === 'admin') {
+        if ($intent === 'Admin') {
             $rules['email'] = ['required','email','max:255', Rule::unique('users','email')->ignore($user->id)];
 
             // 🔥 التحقق حسب النوع
@@ -63,7 +63,7 @@ class CompleteProfileController extends Controller
         $newEmail = isset($data['email']) ? strtolower(trim($data['email'])) : null;
 
         // لو تغير الإيميل → نلغي التوثيق
-        if ($intent === 'admin' && $newEmail !== $user->email) {
+        if ($intent === 'Admin' && $newEmail !== $user->email) {
             $user->email_verified_at = null;
         }
 
@@ -81,10 +81,10 @@ class CompleteProfileController extends Controller
         $user->save();
 
         /* =====================================
-           🔥 حفظ بيانات الأدمن (admin_details)
+           🔥 حفظ بيانات الأدمن (Admin_details)
         ===================================== */
 
-        if ($intent === 'admin') {
+        if ($intent === 'Admin') {
 
             AdminDetail::updateOrCreate(
                 ['user_id' => $user->id],
@@ -105,15 +105,10 @@ class CompleteProfileController extends Controller
         }
 
         /* =====================================
-           🔥 إرسال OTP للإيميل (Admin فقط)
+        🔥 إرسال OTP للإيميل (للجميع بنفس أسلوبك)
         ===================================== */
 
-        if ($intent === 'admin') {
-
-            // تأكد الإيميل موجود
-            if (!$user->email) {
-                return back()->withErrors(['email' => 'الإيميل مطلوب']);
-            }
+        if (!empty($user->email)) {
 
             // إذا ما هو موثق
             if (is_null($user->email_verified_at)) {
@@ -140,23 +135,24 @@ class CompleteProfileController extends Controller
 
                 } catch (\Exception $e) {
 
-                    // في حال فشل الإرسال
                     return back()->withErrors([
                         'email' => 'فشل إرسال الإيميل تأكدي من الإعدادات'
                     ]);
                 }
 
-                // تحويل لصفحة التحقق من الإيميل
+                // 🔥 نفس مسماك القديم (لا تغيرينه)
                 return redirect()->route('auth.email.verify.form');
             }
-
-            // إذا موثق يدخل الداشبورد
-            return redirect()->route('admin.dashboard');
         }
 
+
         /* =====================================
-           المستخدم العادي
+        🔥 التوجيه النهائي (نفس منطقك)
         ===================================== */
+
+        if ($user->isAdmin()) {
+            return redirect()->route('Admin.dashboard');
+        }
 
         return redirect()->route('home');
     }

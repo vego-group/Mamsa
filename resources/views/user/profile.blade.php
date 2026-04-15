@@ -27,18 +27,8 @@
                 <input type="email" name="email" value="{{ auth()->user()->email }}">
             </div>
 
-            <div class="field-box">
-                <label>كلمة المرور الحالية</label>
-                <input type="password" name="current_password">
-            </div>
-
-            {{-- زر إظهار/إخفاء تغيير كلمة المرور --}}
-            <button type="button" class="link-btn" onclick="togglePassword()">
-                تغيير كلمة المرور
-            </button>
-
-            {{-- الحقول المخفية --}}
-            <div id="passwordArea" class="password-hidden">
+          
+            {{-- الحقول المخفية <div id="passwordArea" class="password-hidden">
 
                 <div class="field-box">
                     <label>تعيين كلمة المرور</label>
@@ -50,7 +40,8 @@
                     <input type="password" name="password_confirmation">
                 </div>
 
-            </div>
+            </div>--}}
+            
 
         </div>
 

@@ -8,8 +8,21 @@ class UnitDetailsController extends Controller
 {
     public function show(Unit $unit)
     {
-        $unit->load('images','owner');
+        // 🔥 تحميل كل العلاقات
+        $unit->load('images','user','reviews','features');
 
-        return view('pages.units.details', compact('unit'));
+        // 🔥 التحقق هل يقدر يقيم
+        $canReview = false;
+
+        if(auth()->check()){
+            $canReview = \App\Models\Booking::where('user_id', auth()->id())
+                ->where('unit_id', $unit->id)
+                ->where('status', 'confirmed')
+                ->whereDate('end_date', '<=', now())
+                ->exists();
+        }
+
+        // 🔥 نخلي view موحد
+        return view('units.details', compact('unit','canReview'));
     }
 }

@@ -440,7 +440,7 @@
   </div>
 
   {{-- فرد --}}
-  @if(auth()->user()->adminDetails?->type === 'individual')
+  @if(auth()->user()->AdminDetails?->type === 'individual')
 
     <div class="grid">
 
@@ -466,7 +466,7 @@
   @endif
 
   {{-- شركة --}}
-  @if(auth()->user()->adminDetails?->type === 'company')
+  @if(auth()->user()->AdminDetails?->type === 'company')
 
     <div class="grid">
 
@@ -501,7 +501,7 @@
           </div>
 
           <form id="unitForm" method="POST"
-                action="{{ route('admin.unit.store') }}"
+                action="{{ route('Admin.units.store') }}"
                 enctype="multipart/form-data">
 
               @csrf
@@ -526,7 +526,7 @@
                     </select>
                 </div>
 
-                @if(auth()->user()->admin->type === 'individual')
+                @if(auth()->user()->Admin->type === 'individual')
 
                   <div class="form-group">
                       <label>رقم الهوية</label>

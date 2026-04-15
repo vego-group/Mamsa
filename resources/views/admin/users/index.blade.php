@@ -1,4 +1,4 @@
-@extends('layouts.admin', ['title' => 'إدارة المستخدمين'])
+@extends('layouts.Admin', ['title' => 'إدارة المستخدمين'])
 
 @section('content')
     <h1 class="text-2xl font-semibold text-[#2f4b46] mb-4">إدارة المستخدمين</h1>
@@ -12,17 +12,17 @@
     @endif
 
     @php
-        $adminsTotal = method_exists($admins, 'total') ? $admins->total() : $admins->count();
+        $AdminsTotal = method_exists($Admins, 'total') ? $Admins->total() : $Admins->count();
         $usersTotal  = method_exists($users, 'total')  ? $users->total()  : $users->count();
-        $adminsPendingInPage = $admins->getCollection()->whereStrict('is_active', null)->count();
-        $activeTab = request('tab', 'admins'); // admins | users
+        $AdminsPendingInPage = $Admins->getCollection()->whereStrict('is_active', null)->count();
+        $activeTab = request('tab', 'Admins'); // Admins | users
     @endphp
 
     {{-- عدادات --}}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
         <div class="bg-white border border-gray-200 rounded-xl p-4">
             <div class="text-sm text-gray-500">عدد المدراء</div>
-            <div class="text-2xl font-semibold text-[#2f4b46]">{{ number_format($adminsTotal) }}</div>
+            <div class="text-2xl font-semibold text-[#2f4b46]">{{ number_format($AdminsTotal) }}</div>
         </div>
         <div class="bg-white border border-gray-200 rounded-xl p-4">
             <div class="text-sm text-gray-500">عدد المستخدمين العاديين</div>
@@ -30,13 +30,13 @@
         </div>
         <div class="bg-white border border-gray-200 rounded-xl p-4">
             <div class="text-sm text-gray-500">مدراء (قيد التفعيل) في الصفحة الحالية</div>
-            <div class="text-2xl font-semibold text-[#2f4b46]">{{ number_format($adminsPendingInPage) }}</div>
+            <div class="text-2xl font-semibold text-[#2f4b46]">{{ number_format($AdminsPendingInPage) }}</div>
         </div>
     </div>
 
     {{-- بحث + إضافة مدير --}}
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <form method="GET" action="{{ route('admin.users.index') }}" class="flex items-center gap-2">
+        <form method="GET" action="{{ route('Admin.users.index') }}" class="flex items-center gap-2">
             <input type="hidden" name="tab" value="{{ $activeTab }}">
             <input type="text" name="q" value="{{ request('q') }}"
                    placeholder="ابحث بالاسم / البريد / الجوال"
@@ -46,14 +46,14 @@
                 بحث
             </button>
             @if(request('q'))
-                <a href="{{ route('admin.users.index', ['tab' => $activeTab]) }}"
+                <a href="{{ route('Admin.users.index', ['tab' => $activeTab]) }}"
                    class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm">
                     مسح البحث
                 </a>
             @endif
         </form>
 
-        <a href="{{ route('admin.users.create') }}"
+        <a href="{{ route('Admin.users.create') }}"
            class="inline-flex items-center px-4 py-2 rounded-lg bg-[#2f4b46] text-white hover:bg-[#2a433f] text-sm">
             + إضافة مدير
         </a>
@@ -61,18 +61,18 @@
 
     {{-- Tabs --}}
     <div class="flex items-center gap-2 mb-4">
-        <a href="{{ route('admin.users.index', ['tab'=>'admins', 'q'=>request('q')]) }}"
-           class="px-4 py-2 rounded-lg text-sm {{ $activeTab==='admins' ? 'bg-[#2f4b46] text-white' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50' }}">
+        <a href="{{ route('Admin.users.index', ['tab'=>'Admins', 'q'=>request('q')]) }}"
+           class="px-4 py-2 rounded-lg text-sm {{ $activeTab==='Admins' ? 'bg-[#2f4b46] text-white' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50' }}">
             المدراء
         </a>
-        <a href="{{ route('admin.users.index', ['tab'=>'users', 'q'=>request('q')]) }}"
+        <a href="{{ route('Admin.users.index', ['tab'=>'users', 'q'=>request('q')]) }}"
            class="px-4 py-2 rounded-lg text-sm {{ $activeTab==='users' ? 'bg-[#2f4b46] text-white' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50' }}">
             المستخدمون العاديون
         </a>
     </div>
 
     {{-- ======= جدول المدراء ======= --}}
-    <section id="admins-section" class="{{ $activeTab==='admins' ? '' : 'hidden' }}">
+    <section id="Admins-section" class="{{ $activeTab==='Admins' ? '' : 'hidden' }}">
         <h2 class="text-lg font-semibold mb-2">المدراء</h2>
 
         <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden mb-6">
@@ -88,7 +88,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                @forelse($admins as $u)
+                @forelse($Admins as $u)
                     @php
                         $badge = is_null($u->is_active)
                             ? ['قيد التفعيل', 'bg-yellow-100 text-yellow-800 border-yellow-300']
@@ -109,7 +109,7 @@
                         <td class="py-3 px-4 text-center">
                             <div class="inline-flex items-center gap-2">
                                 {{-- تفعيل --}}
-                                <form method="POST" action="{{ route('admin.users.status', $u->id) }}"
+                                <form method="POST" action="{{ route('Admin.users.status', $u->id) }}"
                                       onsubmit="return confirm('تأكيد: ضبط الحالة إلى نشط؟');">
                                     @csrf
                                     <input type="hidden" name="status" value="active">
@@ -119,7 +119,7 @@
                                 </form>
 
                                 {{-- تعطيل --}}
-                                <form method="POST" action="{{ route('admin.users.status', $u->id) }}"
+                                <form method="POST" action="{{ route('Admin.users.status', $u->id) }}"
                                       onsubmit="return confirm('تأكيد: ضبط الحالة إلى معطّل؟');">
                                     @csrf
                                     <input type="hidden" name="status" value="inactive">
@@ -129,7 +129,7 @@
                                 </form>
 
                                 {{-- قيد --}}
-                                <form method="POST" action="{{ route('admin.users.status', $u->id) }}"
+                                <form method="POST" action="{{ route('Admin.users.status', $u->id) }}"
                                       onsubmit="return confirm('تأكيد: ضبط الحالة إلى قيد؟');">
                                     @csrf
                                     <input type="hidden" name="status" value="pending">
@@ -139,7 +139,7 @@
                                 </form>
 
                                 {{-- حذف مدير --}}
-                                <form method="POST" action="{{ route('admin.users.delete', $u->id) }}"
+                                <form method="POST" action="{{ route('Admin.users.delete', $u->id) }}"
                                       onsubmit="return confirm('تحذير: حذف المدير نهائيًا؟ لا يمكن التراجع.');">
                                     @csrf
                                     @method('DELETE')
@@ -158,7 +158,7 @@
         </div>
 
         <div class="mb-10">
-            {{ $admins->appends(['q'=>request('q'), 'tab'=>'admins'])->links() }}
+            {{ $Admins->appends(['q'=>request('q'), 'tab'=>'Admins'])->links() }}
         </div>
     </section>
 

@@ -4,32 +4,30 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 class RoleMiddleware
 {
     /**
      * التأكد من امتلاك المستخدم لأحد الأدوار المطلوبة.
-     * مثال الاستعمال:
-     *   RoleMiddleware:Super Admin,Admin
+     * مثال:
+     * RoleMiddleware:SuperAdmin,Admin
      */
-    public function handle(Request $request, Closure $next, ...$roles)
+    public function handle(Request $request, Closure $next, ...$roles): Response
     {
         $user = $request->user();
 
+        // ✅ لا redirect داخل middleware
         if (!$user) {
-            return redirect()->route('login');
+            abort(403);
         }
 
-        // تطبيع أسماء الأدوار
-        $normalized = array_map(function ($r) {
-            return ucwords(str_replace('_', ' ', trim($r)));
-        }, $roles);
-
-        // استخدم دالة الموديل
-        if (!$user->hasAnyRole($normalized)) {
+        // ✅ تحقق مباشر بدون تطبيع
+        if (!$user->hasAnyRole($roles)) {
             abort(403, 'ليس لديك الصلاحية لدخول هذه الصفحة.');
         }
 
+        // ✅ لازم نرجع Response دائمًا
         return $next($request);
     }
 }

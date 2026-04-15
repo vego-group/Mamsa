@@ -147,12 +147,14 @@
 
             <div class="card-content">
 
-                <div class="card-title">{{ $unit->name }}</div>
+                <div class="card-title">{{ $unit->unit_name }}</div>
 
                 <div class="card-location">
                     {{ $unit->city ?? 'غير محدد' }}
                     •
                     {{ $unit->bedrooms ?? '—' }} غرف
+                    •
+                    {{ $unit->capacity ?? '—' }} أشخاص
                 </div>
 
                 <div class="card-price">

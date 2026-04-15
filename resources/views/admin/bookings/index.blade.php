@@ -1,4 +1,4 @@
-@extends('layouts.admin', ['title' => 'إدارة الحجوزات'])
+@extends('layouts.Admin', ['title' => 'إدارة الحجوزات'])
 
 @section('content')
     <h1 class="text-2xl font-semibold text-[#2f4b46] mb-4">إدارة الحجوزات</h1>
@@ -11,7 +11,7 @@
     @endif
 
     {{-- شريط الفلاتر --}}
-    <form method="GET" action="{{ route('admin.bookings.index') }}"
+    <form method="GET" action="{{ route('Admin.bookings.index') }}"
           class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mb-4 items-end">
 
         {{-- بحث نصّي --}}
@@ -71,7 +71,7 @@
             </button>
 
             @if($q || $status || $unitId || $dateFrom || $dateTo)
-                <a href="{{ route('admin.bookings.index') }}"
+                <a href="{{ route('Admin.bookings.index') }}"
                    class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm">
                     مسح الفلاتر
                 </a>
@@ -99,7 +99,7 @@
                 <tr class="border-t">
                     <td class="py-3 px-4">{{ $b->id }}</td>
                     <td class="py-3 px-4">
-                        {{ $b->unit?->name }}
+                        {{ $b->unit?->unit_name }}
                         <span class="text-gray-500">({{ $b->unit?->code }})</span>
                     </td>
                     <td class="py-3 px-4">{{ $b->customer?->name ?? '—' }}</td>
@@ -117,7 +117,7 @@
                         <div class="inline-flex items-center gap-2">
                             @can('update', $b)
                                 {{-- تعديل الحالة سريعاً --}}
-                                <form action="{{ route('admin.bookings.update', $b->id) }}" method="POST"
+                                <form action="{{ route('Admin.bookings.update', $b->id) }}" method="POST"
                                       class="inline-flex items-center gap-2">
                                     @csrf
                                     @method('PUT')
@@ -134,7 +134,7 @@
                             @endcan
 
                             @can('delete', $b)
-                                <form action="{{ route('admin.bookings.destroy', $b->id) }}" method="POST"
+                                <form action="{{ route('Admin.bookings.destroy', $b->id) }}" method="POST"
                                       onsubmit="return confirm('تأكيد حذف الحجز؟');" class="inline">
                                     @csrf
                                     @method('DELETE')

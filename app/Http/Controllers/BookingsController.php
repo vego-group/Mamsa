@@ -22,12 +22,12 @@ class BookingsController extends Controller
         $dateTo   = $request->get('to');              // YYYY-MM-DD
 
         $query = \App\Models\Booking::query()
-            ->with(['unit.owner', 'customer'])
+            ->with(['unit.user', 'customer'])
             ->when($q !== '', function ($qb) use ($q) {
                 $qb->where(function ($sub) use ($q) {
                     $sub->whereHas('unit', function ($u) use ($q) {
-                            $u->where('name', 'like', "%{$q}%")
-                              ->orWhere('code', 'like', "%{$q}%");
+                          $u->where('unit_name', 'like', "%{$q}%")
+  ->orWhere('code', 'like', "%{$q}%");
                         })
                         ->orWhereHas('customer', function ($c) use ($q) {
                             $c->where('name', 'like', "%{$q}%")
@@ -41,8 +41,8 @@ class BookingsController extends Controller
             ->when($dateTo, fn($qb)   => $qb->whereDate('end_date', '<=', $dateTo))
             ->orderByDesc('id');
 
-        // admin يشوف حجوزات وحداته فقط
-        if ($request->user()->hasRole('admin') && !$request->user()->hasRole('super_admin')) {
+        // Admin يشوف حجوزات وحداته فقط
+        if ($request->user()->hasRole('Admin') && !$request->user()->hasRole('SuperAdmin')) {
             $query->whereHas('unit', fn($u) => $u->where('user_id', $request->user()->id));
         }
 
@@ -50,12 +50,12 @@ class BookingsController extends Controller
 
         // قائمة الوحدات للفلترة في أعلى الصفحة:
         $unitsList = \App\Models\Unit::query()
-            ->when($request->user()->hasRole('admin') && !$request->user()->hasRole('super_admin'),
+            ->when($request->user()->hasRole('Admin') && !$request->user()->hasRole('SuperAdmin'),
                 fn($u) => $u->where('user_id', $request->user()->id))
-            ->orderBy('name')
-            ->get(['id','name','code']);
+            ->orderBy('unit_name')
+->get(['id','unit_name','code']);
 
-        return view('admin.bookings.index', compact(
+        return view('Admin.bookings.index', compact(
             'bookings', 'q', 'status', 'unitId', 'dateFrom', 'dateTo', 'unitsList'
         ));
     }
@@ -74,9 +74,9 @@ class BookingsController extends Controller
             'notes'        => ['nullable','string','max:2000'],
         ]);
 
-        // admin لا يستطيع إنشاء حجز على وحدة لا يملكها
+        // Admin لا يستطيع إنشاء حجز على وحدة لا يملكها
         $unit = Unit::findOrFail($validated['unit_id']);
-        if ($request->user()->hasRole('admin') && $unit->user_id !== $request->user()->id) {
+        if ($request->user()->hasRole('Admin') && $unit->user_id !== $request->user()->id) {
             abort(403, 'لا يمكنك إنشاء حجز على وحدة لا تملكها.');
         }
 
