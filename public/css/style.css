@@ -1099,7 +1099,58 @@ right:-60px;
     display: none !important;
 }
 
+/* =========================
+   الصفحات الثابتة
+========================= */
 
+/* ستايل موحد */
+.static-page,
+.terms-page {
+    direction: rtl;
+    text-align: right;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 20px;
+    line-height: 1.9;
+    color: #3f5f56;
+    background-color: #f6f9f8;
+    border-radius: 12px;
+}
+
+/* العنوان الرئيسي */
+.static-page h1,
+.terms-page h1 {
+    font-size: 26px;
+    margin-bottom: 20px;
+    color: var(--green);
+}
+
+/* العناوين الفرعية */
+.static-page h2,
+.terms-page h2 {
+    font-size: 18px;
+    margin-top: 25px;
+    margin-bottom: 10px;
+    color: #2f5147;
+}
+
+/* النصوص */
+.static-page p,
+.terms-page p {
+    font-size: 15px;
+    color: #444;
+}
+
+/* القوائم */
+.static-page ul,
+.terms-page ul {
+    padding-right: 20px;
+}
+
+.static-page li,
+.terms-page li {
+    margin-bottom: 8px;
+}
 .login img{
   display: none;
 }

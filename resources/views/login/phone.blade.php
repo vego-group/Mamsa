@@ -20,11 +20,11 @@
   <div class="auth-card" style="max-width:520px; width:100%;">
 
       <h3 class="title">
-          {{ $intent === 'admin' ? 'ابدأ كشريك' : 'تسجيل الدخول' }}
+          {{ $intent === 'Admin' ? 'ابدأ كشريك' : 'تسجيل الدخول' }}
       </h3>
 
       <p class="muted mb-20">
-         {{ $intent === 'admin' 
+         {{ $intent === 'Admin' 
           ? 'أدخل رقم جوالك لبدء التسجيل كشريك وسنرسل لك رمز تحقق.' 
           : 'أدخل رقم جوالك لتسجيل الدخول وسنرسل لك رمز تحقق.' }}
       </p>

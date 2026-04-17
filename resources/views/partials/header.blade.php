@@ -30,8 +30,8 @@
 $hideProfileIcon = 
     request()->is('complete-profile*') || 
     request()->is('email-verify*') || 
-    request()->is('admin*') || 
-    request()->get('intent') === 'admin';
+    request()->is('Admin*') || 
+    request()->get('intent') === 'Admin';
 @endphp
 
       {{-- إذا المستخدم مسجل دخول --}}
@@ -77,7 +77,7 @@ $hideProfileIcon =
               تسجيل الدخول
            </a>
 
-            <a href="{{ route('auth.phone', ['intent' => 'admin']) }}" class="header-pill">
+            <a href="{{ route('auth.phone', ['intent' => 'Admin']) }}" class="header-pill">
               كن شريكًا معنا
             </a>
 

@@ -147,8 +147,11 @@ Route::post('/logout', function () {
     return redirect()->route('home');
 
 })->middleware('auth')->name('logout');
-
-
+/* ================= STATIC PAGES ================= */
+Route::view('/terms', 'pages.terms')->name('terms');
+Route::view('/about', 'pages.about')->name('about');
+Route::view('/how-it-works', 'pages.how-it-works')->name('howItWorks');
+Route::view('/contact', 'pages.contact')->name('contact');
 /* ================= ADMIN ================= */
 Route::prefix('Admin')
     ->middleware(['auth', \App\Http\Middleware\RoleMiddleware::class . ':SuperAdmin,Admin'])

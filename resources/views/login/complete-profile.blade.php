@@ -7,7 +7,7 @@
 @endphp
 
 <div class="center">
-  <div class="card" style="max-width:520px; width:100%;">
+  <div class="auth-card" style="max-width:520px; width:100%;">
 
     <h3 class="title">أكمل بيانات حسابك</h3>
 

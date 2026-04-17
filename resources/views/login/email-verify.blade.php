@@ -3,7 +3,7 @@
 @section('content')
 
 <div class="center">
-  <div class="card" style="max-width:500px;width:100%;">
+  <div class="auth-card" style="max-width:500px;width:100%;">
 
     <h3 class="title">تحقق من بريدك</h3>
 
