@@ -15,7 +15,7 @@
             <div class="w-full flex items-center justify-start">
                 <div class="text-right">
                     <div class="flex items-center justify-end gap-4">
-                        {{-- بدون كلمة ممسى (خليته فاضي مثل ما عندك) --}}
+                        {{-- بدون كلمة مَمـْسَى (خليته فاضي مثل ما عندك) --}}
                         <div class="text-white font-semibold text-2xl leading-none"></div>
 
                         <img
