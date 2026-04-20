@@ -61,7 +61,7 @@ class UnitsController extends Controller
                 ->get(['id','name']);
         }
 
-        return view('Admin.units.index', compact(
+        return view('admin.units.index', compact(
             'units','q','status','priceFrom','priceTo','ownerId','ownersList'
         ));
     }
@@ -164,7 +164,7 @@ class UnitsController extends Controller
             $unit->features()->sync($request->features);
         }
 
-        return redirect()->route('Admin.units.index')
+        return redirect()->route('admin.units.index')
             ->with('success', 'تم إضافة الوحدة وبانتظار موافقة الإدارة');
     }
 
@@ -229,7 +229,7 @@ class UnitsController extends Controller
             }
         }
 
-        return redirect()->route('Admin.units.index')
+        return redirect()->route('admin.units.index')
             ->with('success', 'تم تحديث الوحدة');
     }
 

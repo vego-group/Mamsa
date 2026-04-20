@@ -105,7 +105,7 @@
 
             {{-- 🔥 رسالة المدير غير النشط --}}
            @if(auth()->check()
-    && auth()->user()->hasRole('Admin') 
+    && auth()->user()->hasRole('Admin')
     && intval(auth()->user()->is_active) !== 1)
 
     <div class="mb-4 bg-yellow-100 border border-yellow-300 text-yellow-900 px-4 py-3 rounded-xl text-sm font-bold">

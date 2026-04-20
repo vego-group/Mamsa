@@ -1,4 +1,4 @@
-@extends('layouts.Admin', ['title' => 'إضافة مدير'])
+@extends('layouts.admin', ['title' => 'إضافة مدير'])
 
 @section('content')
     <div class="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
@@ -41,7 +41,7 @@
                        class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]">
             </div>
 
-            
+
             <div>
                 <label class="block mb-1 text-sm text-gray-700">الحالة</label>
                 <select name="status"

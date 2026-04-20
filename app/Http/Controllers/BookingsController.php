@@ -55,7 +55,7 @@ class BookingsController extends Controller
             ->orderBy('unit_name')
 ->get(['id','unit_name','code']);
 
-        return view('Admin.bookings.index', compact(
+        return view('admin.bookings.index', compact(
             'bookings', 'q', 'status', 'unitId', 'dateFrom', 'dateTo', 'unitsList'
         ));
     }

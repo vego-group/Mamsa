@@ -107,7 +107,7 @@ class ReportsController extends Controller
             $cursor->addMonth();
         }
 
-        return view('Admin.reports.index', [
+        return view('admin.reports.index', [
             'bookings'       => $bookings,
             'unitsList'      => $unitsList,
             'q'              => $request->get('q', ''),

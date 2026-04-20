@@ -1,9 +1,9 @@
-@extends('layouts.Admin', ['title' => 'تعديل عقار'])
+@extends('layouts.admin', ['title' => 'تعديل عقار'])
 
 @section('content')
 <div class="flex items-center justify-between mb-4">
   <h1 class="text-2xl font-semibold text-[#2f4b46]">تعديل: {{ $unit->unit_name }}</h1>
-  <a href="{{ route('Admin.units.index') }}" class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">رجوع</a>
+  <a href="{{ route('admin.units.index') }}" class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">رجوع</a>
 </div>
 
 @if($errors->any())
@@ -24,7 +24,7 @@
            class="w-full rounded-lg border-gray-300 focus:border-[#2f4b46] focus:ring-[#2f4b46]" required>
   </div>
 
- 
+
 
   <div>
     <label class="block mb-1 text-sm text-gray-700">نوع العقار</label>
@@ -145,9 +145,9 @@
                     @checked($unit->features->contains($feature->id))
                 >
 
-                <div class="flex items-center justify-between px-4 py-3 rounded-2xl border 
+                <div class="flex items-center justify-between px-4 py-3 rounded-2xl border
                             bg-gray-50 text-gray-700
-                            peer-checked:bg-[#2f4b46] peer-checked:text-white 
+                            peer-checked:bg-[#2f4b46] peer-checked:text-white
                             peer-checked:border-[#2f4b46]
                             hover:shadow-md hover:scale-[1.02]
                             transition duration-200">
@@ -210,7 +210,7 @@
 
   <div class="md:col-span-2 flex items-center gap-3 pt-2">
     <button type="submit" class="px-6 py-2.5 rounded-lg bg-[#2f4b46] text-white hover:bg-[#2a433f]">حفظ التغييرات</button>
-    <a href="{{ route('Admin.units.index') }}" class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">إلغاء</a>
+    <a href="{{ route('admin.units.index') }}" class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">إلغاء</a>
   </div>
 </form>
 @endsection

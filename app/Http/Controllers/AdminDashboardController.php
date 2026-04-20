@@ -124,7 +124,7 @@ $unitsCount = $unitsQuery->count();
         |--------------------------------------------------------------------------
         */
 
-        return view('Admin.dashboard', [
+        return view('admin.dashboard', [
             'isSuper'            => $isSuper,
             'usersCount'         => $usersCount,
             'unitsCount'         => $unitsCount,

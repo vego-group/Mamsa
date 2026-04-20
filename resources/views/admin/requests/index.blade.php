@@ -1,4 +1,4 @@
-@extends('layouts.Admin', ['title' => 'الطلبات'])
+@extends('layouts.admin', ['title' => 'الطلبات'])
 
 @section('content')
 
@@ -12,16 +12,16 @@
 <div class="flex gap-3 mb-6">
     <a href="{{ route('Admin.requests.index', ['tab' => 'individual']) }}"
        class="px-4 py-2 rounded-xl text-sm
-           {{ $activeTab === 'individual' 
-               ? 'bg-[#2f4b46] text-white' 
+           {{ $activeTab === 'individual'
+               ? 'bg-[#2f4b46] text-white'
                : 'bg-gray-200 text-gray-700' }}">
         الأفراد
     </a>
 
     <a href="{{ route('Admin.requests.index', ['tab' => 'companies']) }}"
        class="px-4 py-2 rounded-xl text-sm
-           {{ $activeTab === 'companies' 
-               ? 'bg-[#2f4b46] text-white' 
+           {{ $activeTab === 'companies'
+               ? 'bg-[#2f4b46] text-white'
                : 'bg-gray-200 text-gray-700' }}">
         الشركات
     </a>

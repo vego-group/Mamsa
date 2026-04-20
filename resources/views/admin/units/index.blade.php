@@ -1,4 +1,4 @@
-@extends('layouts.Admin', ['title' => 'إدارة الوحدات'])
+@extends('layouts.admin', ['title' => 'إدارة الوحدات'])
 
 @section('content')
 
@@ -241,7 +241,7 @@
                            text-red-700 bg-red-50
                            text-xs font-medium
                            hover:bg-red-100 transition">
-                   
+
                     <span>حذف</span>
                 </button>
             </form>

@@ -1,4 +1,4 @@
-@extends('layouts.Admin', ['title' => 'الرئيسية'])
+@extends('layouts.admin', ['title' => 'الرئيسية'])
 
 @section('content')
 

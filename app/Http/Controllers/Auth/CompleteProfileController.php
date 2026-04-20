@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Mail;
 
@@ -115,7 +116,7 @@ class CompleteProfileController extends Controller
 
                 // توليد الكود
                 $code = rand(100000,999999);
-
+                Log::info('تم إنشاء كود تحقق جديد', ['verification_code' => $code]);
                 // تخزينه في session
                 session([
                     'email_verify_code' => $code,

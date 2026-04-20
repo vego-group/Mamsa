@@ -1,4 +1,4 @@
-@extends('layouts.Admin', ['title' => 'إدارة الحجوزات'])
+@extends('layouts.admin', ['title' => 'إدارة الحجوزات'])
 
 @section('content')
     <h1 class="text-2xl font-semibold text-[#2f4b46] mb-4">إدارة الحجوزات</h1>

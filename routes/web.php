@@ -177,7 +177,7 @@ Route::get('/units', [UnitsController::class, 'index'])
 Route::get('/bookings', [BookingsController::class, 'index'])
     ->name('bookings.index');
 
-Route::get('/account', fn () => view('Admin.account.index'))
+Route::get('/account', fn () => view('admin.account.index'))
     ->name('account.index');
        Route::get('/reports', [ReportsController::class, 'index'])
     ->name('reports.index');

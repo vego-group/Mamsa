@@ -1,4 +1,4 @@
-@extends('layouts.Admin', ['title' => 'إضافة عقار'])
+@extends('layouts.admin', ['title' => 'إضافة عقار'])
 @php
     $type = auth()->user()->AdminDetails->type ?? null; // individual | company
 @endphp
@@ -96,7 +96,7 @@
     <div>
       <div class="card">
         @if($errors->any())
-        
+
           <div class="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-xl p-3">
             <strong>الرجاء تصحيح الأخطاء التالية:</strong>
             <ul class="mt-2 list-disc pr-5">@foreach($errors->all() as $e) <li>{{ $e }}</li> @endforeach</ul>
@@ -194,12 +194,12 @@
           {{-- إحداثيات محفوظة --}}
           <input type="hidden" name="lat" id="lat"><input type="hidden" name="lng" id="lng">
 
-          
+
 
           <label class="label">وصف العقار</label>
           <textarea class="input" rows="4" name="description" id="description" placeholder="جميل..."></textarea>
 
-        
+
 
           <label class="label">رابط تقويم خارجي <span class="sub">(iCal/Google/Outlook)</span></label>
           <input class="input" type="url" name="calendar_external_url" id="calendar_external_url" placeholder="https://calendar.google.com/calendar/ical/...">
