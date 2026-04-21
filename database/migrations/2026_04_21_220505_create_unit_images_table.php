@@ -9,13 +9,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('unit_images', function (Blueprint $table) {
-            $table->id();
+            $table->id(); // bigint unsigned auto increment
 
             $table->foreignId('unit_id')
                 ->constrained('units')
                 ->cascadeOnDelete();
 
             $table->string('image_url');
+            $table->boolean('is_main')->default(false);
+
             $table->timestamps();
         });
     }
