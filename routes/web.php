@@ -123,19 +123,22 @@ Route::middleware('auth')->group(function () {
 
 
 /* ================= REDIRECT ================= */
+
+
+Route::domain(env('ADMIN_DOMAIN', 'admin.mamsaa.com'))->middleware('auth')->group(function () {
+    Route::get('/dashboard', function () {
+        return view('admin.dashboard');
+    })->name('Admin.dashboard');
+
+});
 Route::get('/post-auth-redirect', function () {
-
     $user = Auth::user();
+    if ($user && ($user->isAdmin())) {
 
-    if ($user && $user->isAdmin()
-) {
         return redirect()->route('Admin.dashboard');
     }
-
     return redirect()->route('user.profile');
-
 })->middleware('auth')->name('post.auth.redirect');
-
 
 /* ================= LOGOUT ================= */
 Route::post('/logout', function () {
