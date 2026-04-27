@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('reviews', function (Blueprint $table) {
-            $table->id(); // bigint unsigned auto increment
+            $table->id();
 
             $table->foreignId('user_id')
                 ->constrained('users')
@@ -19,17 +19,15 @@ return new class extends Migration
                 ->constrained('units')
                 ->cascadeOnDelete();
 
-            $table->integer('rating');
+            // 1–5 مناسب جدًا
+            $table->unsignedTinyInteger('rating');
 
             $table->text('comment')->nullable();
 
             $table->timestamps();
 
-            // Unique user + unit (one review per user per unit)
+            // مستخدم واحد يقيّم الوحدة مرة وحدة فقط
             $table->unique(['user_id', 'unit_id']);
-
-            // Check constraint (1 to 5)
-            $table->check('rating >= 1 AND rating <= 5');
         });
     }
 

@@ -61,7 +61,7 @@ class OtpAuthController extends Controller
     {
         $validated = $request->validate([
             'phone'  => ['required','string','min:8','max:20'],
-            'code'   => ['required','digits_between:4,8'],
+            'code'   => ['required','digits:6'],
             'intent' => ['nullable','in:login,Admin']
         ]);
 

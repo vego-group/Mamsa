@@ -11,24 +11,23 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('users', function (Blueprint $table) {
-            $table->id();
-
-            $table->string('name')->nullable();
-
-            $table->string('phone', 20)->unique();
-
-            $table->string('email')->nullable();
-
-            $table->timestamp('email_verified_at')->nullable();
-
-            $table->boolean('is_active')->default(1);
-
-            $table->rememberToken();
-        });
         Schema::create('user_roles', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('role_id');
+
+            // Primary key مركب (مثل SQL اللي عندك)
+            $table->primary(['user_id', 'role_id']);
+
+            // Foreign keys
+            $table->foreign('user_id')
+                  ->references('id')
+                  ->on('users')
+                  ->cascadeOnDelete();
+
+            $table->foreign('role_id')
+                  ->references('id')
+                  ->on('roles')
+                  ->cascadeOnDelete();
         });
     }
 
@@ -37,7 +36,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('users');
         Schema::dropIfExists('user_roles');
     }
 };
