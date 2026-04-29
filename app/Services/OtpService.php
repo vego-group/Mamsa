@@ -34,8 +34,11 @@ class OtpService
         }
 
         // ✅ توليد كود 6 أرقام
-        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-
+        if (env('OTP_FIXED')) {
+            $code = env('OTP_FIXED');
+        } else {
+            $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        }
         OtpCode::create([
             'phone'        => $phone,
             'code'         => $code,
