@@ -1166,3 +1166,290 @@ right:-60px;
   border:1px solid var(--gray-200);
 }
 .card-lg{ padding:50px; }
+
+
+/* =================================================
+   📱 MOBILE HEADER – LOGO & ICONS FIX
+================================================= */
+@media (max-width: 540px){
+
+  /* الهيدر نفسه */
+  .header--hero{
+    padding: 10px 12px 0;
+    position: sticky ;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+
+    border-bottom-left-radius: 32px;
+    border-bottom-right-radius: 32px;
+  }
+  
+ .footer{
+    padding: 24px 16px;       
+    border-radius: 28px 28px 0 0;
+  }
+
+
+  /* حاوية الهيدر */
+  .header-container{
+    width: 100%;
+    max-width: 100%;
+
+    padding-left: 6px;
+    padding-right: 6px;
+
+    height: 90px;              /* التحكم بالطول */
+    border-radius: 9px;        /* ✅ صحيح */
+  }
+
+  /* الشعار */
+  .logo img{
+    width: 90px;
+    height: auto;
+    transform: none;
+  }
+
+  /* أزرار الدخول */
+  .header-actions{
+    display: flex;
+    gap: 8px;
+    transform: none;
+  }
+
+  .header-pill{
+    font-size: 12px;
+    padding: 5px 4px;
+    border-radius: 16px;
+  }
+
+  /* أيقونة الحساب */
+  .login img{
+    width: 24px;
+    height: 24px;
+    transform: none;
+  }
+
+  /* ✅ الإطار الخارجي للشريط */
+  .search-wrapper{
+    width: 94%;
+    margin: 16px auto;
+    padding: 8px;
+    border-radius: 999px;
+    overflow: visible;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+/* ✅ الحاوية الداخلية للأزرار */
+  .search-filters{
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 1px;
+  overflow: visible;    /* ✅ الشكل فقط */          
+  scrollbar-width: none;
+  padding-inline-start: 6px;
+  padding-inline-end: 6px;
+  }
+  .dropdown,
+#cityDropdown{
+  position: relative;
+}
+.dropdown-menu{
+  position: absolute;
+  bottom: 100%;
+  right: 0;              /* RTL */
+  margin-bottom: 8px;
+  z-index: 9999;
+}
+
+
+#cityDropdown{
+  order: 1;
+  }
+
+/* نوع الوحدة */
+#unitTypeDropdown{
+  order: 2;
+}
+
+/* عدد الأشخاص */
+.dropdown-container{
+  order: 3;
+}
+
+.search-filters::-webkit-scrollbar{
+  display: none;
+}
+
+/* تاريخ البداية */
+.date-wrapper:has(.filter-btn.start){
+  order: 4;
+}
+
+/* تاريخ انتهاء الحجز */
+.date-wrapper:has(.filter-btn.end){
+  order: 5;
+}
+
+/* =========================
+   ✅ زر المدينة
+========================= */
+.filter-btn.city{
+  max-width: 35px;
+  min-width: 35px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  height: 28px;       /* طول الزر */
+  font-size: 11px;   /* صغّر/كبّر النص */
+}
+
+
+/* عدد الأشخاص */
+.filter-btn.capcity{
+  max-width: 65px;
+  min-width: 65px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* النوع */
+.filter-btn.type{
+  max-width: 50px;
+  min-width: 50px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* =========================
+   ✅ القاعدة العامة للأزرار
+========================= */
+.filter-btn{
+  max-width: 64px;
+  height: 26px;
+  font-size: 10px;
+  padding: 0 6px;
+  line-height: 26px;
+  border-radius: 999px;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  display: inline-flex;
+  align-items: center;
+  
+  justify-content: center;  
+  padding-inline-start: 18px;     /* مساحة للسهم */
+  position: relative;
+  
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none;
+}
+.filter-btn::before{
+  content: none !important;
+}
+
+.filter-btn{
+  background-image: none !important;
+}
+
+.filter-btn::after{
+  content: "▾";
+  position: absolute;
+  inset-inline-start: 2px;   /* ✅ RTL: السهم يمين */
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 8px;
+  opacity: .6;
+  pointer-events: none;
+}
+/* الحاوية */
+#cityDropdownMenu{
+  position: absolute;        
+  top: auto;
+  bottom: auto;
+  width: 20px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  z-index: 10000;
+  display: none;
+  padding: 1px 0;     
+  line-height: 1;
+  font-size: 10px;        
+  letter-spacing: 0.3px; 
+  text-align: center;
+}
+#unitTypeDropdown{
+  position: relative;
+}
+#unitTypeMenu{
+ position: absolute;        
+  top: auto;
+  bottom: auto;
+  width: max-content;
+  min-width: 90px;
+  padding: 1px 1px;     
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  z-index: 10000;
+  display: none;
+}
+#dropdown-container{
+  position: relative;
+}
+#capcityMenu{
+  position: absolute;        
+  top: auto;
+  bottom: auto;
+  width: max-content;
+  min-width: 90px;
+  padding: 1px 1px;     
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  z-index: 10000;
+  display: none;
+
+}
+
+}
+@media (max-width: 540px){
+
+  /* الحاوية الخضراء */
+  .cards-section{
+    width: 96%;
+    padding: 20px;
+    border-radius: 28px;
+  }
+
+  /* شبكة الكروت */
+  .cards{
+    grid-template-columns: repeat(2, 1fr); /* ✅ كرتين في الصف */
+    gap: 12px;
+    justify-content: center;
+  }
+
+  /* الكرت */
+  .card{
+    width: 100%; /* ✅ يناسب الجوال */
+  }
+
+  /* صورة الكرت */
+  .card img{
+    height: 160px; /* ✅ أصغر للجوال */
+  }
+
+}
