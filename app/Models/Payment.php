@@ -11,11 +11,15 @@ class Payment extends Model
         'payment_method',
         'payment_status',
         'paid_at',
-        'amount'
+        'amount',
+        'moyasar_id',
+        'moyasar_reference',
+        'moyasar_response',
     ];
 
     protected $casts = [
-        'paid_at' => 'datetime'
+        'paid_at'          => 'datetime',
+        'moyasar_response' => 'array',
     ];
 
     public function booking()
