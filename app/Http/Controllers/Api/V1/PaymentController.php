@@ -104,11 +104,17 @@ class PaymentController extends Controller
     }
 
     /**
-     * Moyasar callback after card tokenization (called by frontend after Moyasar.js completes).
-     * Verifies payment with Moyasar API, then confirms the booking.
+     * Moyasar webhook callback — called by Moyasar server after payment completes.
+     * Verifies the secret token header, then re-fetches payment from Moyasar to confirm.
      */
     public function callback(Request $request): JsonResponse
     {
+        // Verify Moyasar webhook secret token
+        $webhookSecret = config('moyasar.webhook_secret');
+        if ($webhookSecret && $request->header('Authorization') !== $webhookSecret) {
+            return $this->error('Unauthorized', 401);
+        }
+
         $validated = $request->validate([
             'id'         => ['required', 'string'],    // Moyasar payment ID
             'status'     => ['required', 'string'],

@@ -8,6 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('unit_features')) return;
         Schema::create('unit_features', function (Blueprint $table) {
             $table->foreignId('unit_id')
                 ->constrained('units')

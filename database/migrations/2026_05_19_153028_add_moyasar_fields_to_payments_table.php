@@ -11,6 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasColumn('payments', 'moyasar_id')) return;
+
         Schema::table('payments', function (Blueprint $table) {
             $table->string('moyasar_id')->nullable()->after('booking_id')->index();
             $table->string('moyasar_reference')->nullable()->after('moyasar_id');

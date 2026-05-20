@@ -6,38 +6,27 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('users', function (Blueprint $table) {
-            $table->id();
+        if (Schema::hasTable('user_roles')) return;
 
-            $table->string('name')->nullable();
-
-            $table->string('phone', 20)->unique();
-
-            $table->string('email')->nullable();
-
-            $table->timestamp('email_verified_at')->nullable();
-
-            $table->boolean('is_active')->default(1);
-
-            $table->rememberToken();
-        });
         Schema::create('user_roles', function (Blueprint $table) {
             $table->id();
+
+            $table->foreignId('user_id')
+                ->constrained('users')
+                ->cascadeOnDelete();
+
+            $table->string('role', 50);
+
             $table->timestamps();
+
+            $table->unique(['user_id', 'role']);
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('users');
         Schema::dropIfExists('user_roles');
     }
 };

@@ -8,6 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('reviews')) return;
         Schema::create('reviews', function (Blueprint $table) {
             $table->id(); // bigint unsigned auto increment
 
@@ -25,11 +26,7 @@ return new class extends Migration
 
             $table->timestamps();
 
-            // Unique user + unit (one review per user per unit)
             $table->unique(['user_id', 'unit_id']);
-
-            // Check constraint (1 to 5)
-            $table->check('rating >= 1 AND rating <= 5');
         });
     }
 

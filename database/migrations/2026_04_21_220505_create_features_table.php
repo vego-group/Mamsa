@@ -8,6 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('features')) return;
         Schema::create('features', function (Blueprint $table) {
             $table->id(); // bigint unsigned auto increment
             $table->string('name');
