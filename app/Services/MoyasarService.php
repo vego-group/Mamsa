@@ -49,6 +49,56 @@ class MoyasarService
     }
 
     /**
+     * Step 1 of Apple Pay: validate merchant with Apple via Moyasar.
+     * Called when Apple Pay triggers onvalidatemerchant(event).
+     * Frontend sends event.validationURL → we forward to Moyasar → return merchantSession.
+     */
+    public function validateApplePayMerchant(string $validationUrl): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->post("{$this->baseUrl}/applepay/initiate", [
+                'validation_url' => $validationUrl,
+            ]);
+
+        if (! $response->successful()) {
+            Log::error('Apple Pay merchant validation failed', [
+                'status' => $response->status(),
+                'body'   => $response->json(),
+            ]);
+            throw new \RuntimeException('فشل التحقق من Apple Pay: ' . $response->json('message', 'خطأ غير معروف'));
+        }
+
+        return $response->json();
+    }
+
+    /**
+     * Step 2 of Apple Pay: charge using the Apple Pay payment token.
+     * Frontend sends the PKPaymentToken.paymentData (JSON object from Apple).
+     */
+    public function chargeWithApplePay(array $applePayToken, array $params): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->post("{$this->baseUrl}/payments", [
+                'amount'       => $params['amount_halalas'],
+                'currency'     => 'SAR',
+                'description'  => $params['description'],
+                'callback_url' => $params['callback_url'],
+                'source'       => [
+                    'type'  => 'applepay',
+                    'token' => $applePayToken,   // raw PKPaymentToken.paymentData object
+                ],
+                'metadata' => $params['metadata'] ?? [],
+            ]);
+
+        if ($response->status() >= 500) {
+            Log::error('Apple Pay charge failed', ['status' => $response->status(), 'body' => $response->json()]);
+            throw new \RuntimeException('خدمة الدفع غير متاحة حالياً، حاول مرة أخرى');
+        }
+
+        return $response->json();
+    }
+
+    /**
      * Charge using raw card details (use only when token flow is not possible).
      */
     public function charge(array $params): array

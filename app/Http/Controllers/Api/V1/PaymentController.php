@@ -121,24 +121,29 @@ class PaymentController extends Controller
             return $this->error('هذه العملية تمت معالجتها مسبقاً', 422);
         }
 
-        // Token only — raw card numbers must NEVER be sent to our server (PCI DSS compliance)
-        // The frontend uses Moyasar.js / Moyasar SDK with the publishable_key to tokenize
-        // the card directly with Moyasar, then sends only the resulting token here.
+        // Accept either:
+        // - Moyasar card token   (token_xxx)       → credit/debit card
+        // - Apple Pay token      (apple_pay_token)  → PKPaymentToken.paymentData object
         $validated = $request->validate([
-            'token' => ['required', 'string', 'starts_with:token_'],
+            'token'           => ['required_without:apple_pay_token', 'string', 'starts_with:token_'],
+            'apple_pay_token' => ['required_without:token', 'array'],
         ]);
 
         $booking     = $payment->booking;
         $unit        = $booking->unit;
         $callbackUrl = url("/api/v1/payments/callback?payment_id={$payment->id}");
 
+        $chargeParams = [
+            'amount_halalas' => (int) round($payment->amount * 100),
+            'description'    => "حجز وحدة {$unit->unit_name} — #{$booking->id}",
+            'callback_url'   => $callbackUrl,
+            'metadata'       => ['payment_id' => $payment->id, 'booking_id' => $booking->id],
+        ];
+
         try {
-            $result = $this->moyasar->chargeWithToken($validated['token'], [
-                'amount_halalas' => (int) round($payment->amount * 100),
-                'description'    => "حجز وحدة {$unit->unit_name} — #{$booking->id}",
-                'callback_url'   => $callbackUrl,
-                'metadata'       => ['payment_id' => $payment->id, 'booking_id' => $booking->id],
-            ]);
+            $result = isset($validated['apple_pay_token'])
+                ? $this->moyasar->chargeWithApplePay($validated['apple_pay_token'], $chargeParams)
+                : $this->moyasar->chargeWithToken($validated['token'], $chargeParams);
         } catch (\RuntimeException $e) {
             return $this->error($e->getMessage(), 503);
         }
@@ -251,6 +256,27 @@ class PaymentController extends Controller
             'booking_id'  => $payment->booking_id,
             'moyasar_id'  => $validated['id'],
         ], 'تم الدفع والحجز بنجاح');
+    }
+
+    /**
+     * Apple Pay — Step 1: Merchant Validation.
+     * Called by the frontend when Apple Pay fires onvalidatemerchant(event).
+     * We forward event.validationURL to Moyasar → return merchantSession to frontend.
+     * Frontend calls session.completeMerchantValidation(merchantSession).
+     */
+    public function applePayValidateMerchant(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'validation_url' => ['required', 'url'],
+        ]);
+
+        try {
+            $merchantSession = $this->moyasar->validateApplePayMerchant($validated['validation_url']);
+        } catch (\RuntimeException $e) {
+            return $this->error($e->getMessage(), 422);
+        }
+
+        return $this->success($merchantSession, 'تم التحقق من Apple Pay');
     }
 
     public function show(Payment $payment): JsonResponse

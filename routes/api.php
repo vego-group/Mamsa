@@ -56,6 +56,7 @@ Route::prefix('v1')->middleware([ForceJsonResponse::class])->group(function () {
         Route::prefix('payments')->name('api.payments.')->group(function () {
             Route::post('initiate', [PaymentController::class, 'initiate'])->name('initiate');
             Route::post('{payment}/pay', [PaymentController::class, 'pay'])->name('pay');
+            Route::post('apple-pay/validate-merchant', [PaymentController::class, 'applePayValidateMerchant'])->name('apple-pay.validate-merchant');
             Route::get('{payment}', [PaymentController::class, 'show'])->name('show');
         });
     });
