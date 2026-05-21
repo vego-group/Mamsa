@@ -18,36 +18,73 @@ class MoyasarService
     }
 
     /**
+     * Charge using a Moyasar card token (PCI-compliant — card never touches our server).
+     * Token is obtained by the frontend via Moyasar.js using the publishable key.
+     *
+     * status = 'paid'      → payment succeeded immediately
+     * status = 'initiated' → 3DS required, open source.transaction_url
+     * status = 'failed'    → card declined, check source.message
+     */
+    public function chargeWithToken(string $token, array $params): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->post("{$this->baseUrl}/payments", [
+                'amount'       => $params['amount_halalas'],
+                'currency'     => 'SAR',
+                'description'  => $params['description'],
+                'callback_url' => $params['callback_url'],
+                'source'       => [
+                    'type'  => 'token',
+                    'token' => $token,
+                ],
+                'metadata' => $params['metadata'] ?? [],
+            ]);
+
+        if ($response->status() >= 500) {
+            Log::error('Moyasar server error', ['status' => $response->status(), 'body' => $response->json()]);
+            throw new \RuntimeException('خدمة الدفع غير متاحة حالياً، حاول مرة أخرى');
+        }
+
+        return $response->json();
+    }
+
+    /**
+     * Charge using raw card details (use only when token flow is not possible).
+     */
+    public function charge(array $params): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->post("{$this->baseUrl}/payments", [
+                'amount'       => $params['amount_halalas'],
+                'currency'     => 'SAR',
+                'description'  => $params['description'],
+                'callback_url' => $params['callback_url'],
+                'source'       => [
+                    'type'   => 'creditcard',
+                    'name'   => $params['name'],
+                    'number' => $params['number'],
+                    'cvc'    => $params['cvc'],
+                    'month'  => $params['month'],
+                    'year'   => $params['year'],
+                    '3ds'    => true,
+                ],
+                'metadata' => $params['metadata'] ?? [],
+            ]);
+
+        if ($response->status() >= 500) {
+            Log::error('Moyasar server error', ['status' => $response->status(), 'body' => $response->json()]);
+            throw new \RuntimeException('خدمة الدفع غير متاحة حالياً، حاول مرة أخرى');
+        }
+
+        return $response->json();
+    }
+
+    /**
      * Create a Moyasar payment (returns payment object with hosted URL).
      */
     public function createPayment(array $params): array
     {
-        $response = Http::withBasicAuth($this->secretKey, '')
-            ->post("{$this->baseUrl}/payments", [
-                'amount'      => $params['amount_halalas'], // amount in halalas (SAR * 100)
-                'currency'    => 'SAR',
-                'description' => $params['description'],
-                'callback_url'=> $params['callback_url'],
-                'source'      => [
-                    'type'       => 'creditcard',
-                    'name'       => $params['name'] ?? '',
-                    'number'     => $params['card_number'] ?? '',
-                    'cvc'        => $params['card_cvc'] ?? '',
-                    'month'      => $params['card_month'] ?? '',
-                    'year'       => $params['card_year'] ?? '',
-                ],
-                'metadata'    => $params['metadata'] ?? [],
-            ]);
-
-        if (! $response->successful()) {
-            Log::error('Moyasar payment creation failed', [
-                'status' => $response->status(),
-                'body'   => $response->json(),
-            ]);
-            throw new \RuntimeException('فشل في إنشاء الدفع: '.$response->json('message', 'خطأ غير معروف'));
-        }
-
-        return $response->json();
+        return $this->charge($params);
     }
 
     /**

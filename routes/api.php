@@ -55,6 +55,7 @@ Route::prefix('v1')->middleware([ForceJsonResponse::class])->group(function () {
         /* --- Payments --- */
         Route::prefix('payments')->name('api.payments.')->group(function () {
             Route::post('initiate', [PaymentController::class, 'initiate'])->name('initiate');
+            Route::post('{payment}/pay', [PaymentController::class, 'pay'])->name('pay');
             Route::get('{payment}', [PaymentController::class, 'show'])->name('show');
         });
     });
