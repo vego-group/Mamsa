@@ -1,0 +1,39 @@
+# ── Environment ──────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ──────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.suo
+*.user
+
+# ── Laravel (backend) ────────────────────────────────────────
+backend/vendor/
+backend/bootstrap/cache/*.php
+backend/storage/logs/
+backend/storage/app/public/
+backend/storage/framework/cache/
+backend/storage/framework/sessions/
+backend/storage/framework/views/
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# ── Vue / Node (frontend) ────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# ── Docker dev override (local-only) ─────────────────────────
+docker-compose.override.yml
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log

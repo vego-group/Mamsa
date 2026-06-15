@@ -1,0 +1,116 @@
+<?php
+
+use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
+use App\Http\Controllers\Api\V1\BookingController;
+use App\Http\Controllers\Api\V1\PaymentController;
+use App\Http\Controllers\Api\V1\ReviewController;
+use App\Http\Controllers\Api\V1\UnitController;
+use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\Partner;
+use App\Http\Controllers\Api\V1\Admin;
+use Illuminate\Support\Facades\Route;
+
+Route::prefix('v1')->group(function () {
+
+    /* ===================== AUTH (public) ===================== */
+    Route::prefix('auth')->name('api.auth.')->group(function () {
+        Route::post('request-otp', [OtpAuthController::class, 'requestOtp'])
+            ->middleware('throttle:5,1')->name('request-otp');
+
+        Route::post('verify-otp', [OtpAuthController::class, 'verifyOtp'])
+            ->middleware('throttle:10,1')->name('verify-otp');
+
+        Route::post('resend-otp', [OtpAuthController::class, 'resendOtp'])
+            ->middleware('throttle:3,1')->name('resend-otp');
+
+        Route::post('refresh', [OtpAuthController::class, 'refresh'])
+            ->middleware('throttle:10,1')->name('refresh');
+    });
+
+    /* ===================== PUBLIC ===================== */
+    Route::prefix('units')->name('api.units.')->group(function () {
+        Route::get('/', [UnitController::class, 'index'])->name('index');
+        Route::get('{unit}', [UnitController::class, 'show'])->name('show');
+        Route::post('{unit}/availability', [UnitController::class, 'checkAvailability'])->name('availability');
+    });
+
+    /* ===================== AUTHENTICATED ===================== */
+    Route::middleware('auth:sanctum')->group(function () {
+
+        /* Auth utilities */
+        Route::prefix('auth')->name('api.auth.')->group(function () {
+            Route::get('me', [OtpAuthController::class, 'me'])->name('me');
+            Route::post('complete-profile', [OtpAuthController::class, 'completeProfile'])->name('complete-profile');
+            Route::post('logout', [OtpAuthController::class, 'logout'])->name('logout');
+        });
+
+        /* User (guest role) */
+        Route::prefix('user')->name('api.user.')->group(function () {
+            Route::get('profile', [UserController::class, 'profile'])->name('profile');
+            Route::put('profile', [UserController::class, 'updateProfile'])->name('profile.update');
+            Route::get('bookings', [UserController::class, 'bookings'])->name('bookings');
+        });
+
+        /* Bookings */
+        Route::prefix('bookings')->name('api.bookings.')->group(function () {
+            Route::post('/', [BookingController::class, 'store'])->name('store');
+            Route::get('{booking}', [BookingController::class, 'show'])->name('show');
+            Route::post('{booking}/cancel', [BookingController::class, 'cancel'])->name('cancel');
+        });
+
+        /* Payments */
+        Route::prefix('payments')->name('api.payments.')->group(function () {
+            Route::post('initiate', [PaymentController::class, 'initiate'])->name('initiate');
+            Route::post('pay', [PaymentController::class, 'pay'])->name('pay');
+            Route::post('apple-pay/validate-merchant', [PaymentController::class, 'applePayValidateMerchant'])->name('apple-pay.validate');
+            Route::get('{payment}', [PaymentController::class, 'show'])->name('show');
+        });
+
+        /* Reviews */
+        Route::post('reviews', [ReviewController::class, 'store'])->name('api.reviews.store');
+
+        /* =============== PARTNER =============== */
+        Route::prefix('partner')->name('api.partner.')->middleware('role:Individual,Company')->group(function () {
+            Route::get('dashboard', [Partner\DashboardController::class, 'index'])->name('dashboard');
+            Route::get('profile', [Partner\ProfileController::class, 'show'])->name('profile');
+            Route::put('profile', [Partner\ProfileController::class, 'update'])->name('profile.update');
+
+            Route::prefix('units')->name('units.')->group(function () {
+                Route::get('/', [Partner\UnitController::class, 'index'])->name('index');
+                Route::post('/', [Partner\UnitController::class, 'store'])->name('store');
+                Route::get('{unit}', [Partner\UnitController::class, 'show'])->name('show');
+                Route::put('{unit}', [Partner\UnitController::class, 'update'])->name('update');
+                Route::delete('{unit}', [Partner\UnitController::class, 'destroy'])->name('destroy');
+                Route::post('{unit}/submit', [Partner\UnitController::class, 'submit'])->name('submit');
+            });
+
+            Route::get('bookings', [Partner\BookingController::class, 'index'])->name('bookings.index');
+        });
+
+        /* =============== ADMIN =============== */
+        Route::prefix('admin')->name('api.admin.')->middleware('role:Admin,SuperAdmin')->group(function () {
+            Route::get('dashboard', [Admin\DashboardController::class, 'index'])->name('dashboard');
+
+            Route::prefix('users')->name('users.')->group(function () {
+                Route::get('/', [Admin\UserController::class, 'index'])->name('index');
+                Route::post('/', [Admin\UserController::class, 'store'])->name('store');
+                Route::patch('{user}/status', [Admin\UserController::class, 'updateStatus'])->name('status');
+                Route::delete('{user}', [Admin\UserController::class, 'destroy'])->name('destroy');
+            });
+
+            Route::prefix('requests')->name('requests.')->group(function () {
+                Route::get('/', [Admin\RequestController::class, 'index'])->name('index');
+                Route::get('{unit}', [Admin\RequestController::class, 'show'])->name('show');
+                Route::post('{unit}/approve', [Admin\RequestController::class, 'approve'])->name('approve');
+                Route::post('{unit}/reject', [Admin\RequestController::class, 'reject'])->name('reject');
+            });
+
+            Route::get('units', [Admin\UnitController::class, 'index'])->name('units.index');
+            Route::get('bookings', [Admin\BookingController::class, 'index'])->name('bookings.index');
+        });
+    });
+
+    /* ===================== PAYMENT WEBHOOK (no auth) ===================== */
+    Route::post('payments/callback', [PaymentController::class, 'callback'])
+        ->name('api.payments.callback');
+});
