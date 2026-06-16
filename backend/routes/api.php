@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Auth\AdminAuthController;
 use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
+use App\Http\Controllers\Api\V1\Auth\PartnerAuthController;
 use App\Http\Controllers\Api\V1\BookingController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReviewController;
@@ -14,6 +16,14 @@ Route::prefix('v1')->group(function () {
 
     /* ===================== AUTH (public) ===================== */
     Route::prefix('auth')->name('api.auth.')->group(function () {
+        // Back-office (Admin / SuperAdmin) email + password login
+        Route::post('admin/login', [AdminAuthController::class, 'login'])
+            ->middleware('throttle:5,1')->name('admin.login');
+
+        // Self-service partner onboarding (OTP-verified)
+        Route::post('partner/register', [PartnerAuthController::class, 'register'])
+            ->middleware('throttle:5,1')->name('partner.register');
+
         Route::post('request-otp', [OtpAuthController::class, 'requestOtp'])
             ->middleware('throttle:5,1')->name('request-otp');
 
@@ -62,6 +72,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('payments')->name('api.payments.')->group(function () {
             Route::post('initiate', [PaymentController::class, 'initiate'])->name('initiate');
             Route::post('pay', [PaymentController::class, 'pay'])->name('pay');
+            Route::post('verify', [PaymentController::class, 'verify'])->name('verify');
             Route::post('apple-pay/validate-merchant', [PaymentController::class, 'applePayValidateMerchant'])->name('apple-pay.validate');
             Route::get('{payment}', [PaymentController::class, 'show'])->name('show');
         });
@@ -70,7 +81,7 @@ Route::prefix('v1')->group(function () {
         Route::post('reviews', [ReviewController::class, 'store'])->name('api.reviews.store');
 
         /* =============== PARTNER =============== */
-        Route::prefix('partner')->name('api.partner.')->middleware('role:Individual,Company')->group(function () {
+        Route::prefix('partner')->name('api.partner.')->middleware('role:Individual|Company')->group(function () {
             Route::get('dashboard', [Partner\DashboardController::class, 'index'])->name('dashboard');
             Route::get('profile', [Partner\ProfileController::class, 'show'])->name('profile');
             Route::put('profile', [Partner\ProfileController::class, 'update'])->name('profile.update');
@@ -88,7 +99,7 @@ Route::prefix('v1')->group(function () {
         });
 
         /* =============== ADMIN =============== */
-        Route::prefix('admin')->name('api.admin.')->middleware('role:Admin,SuperAdmin')->group(function () {
+        Route::prefix('admin')->name('api.admin.')->middleware('role:Admin|SuperAdmin')->group(function () {
             Route::get('dashboard', [Admin\DashboardController::class, 'index'])->name('dashboard');
 
             Route::prefix('users')->name('users.')->group(function () {

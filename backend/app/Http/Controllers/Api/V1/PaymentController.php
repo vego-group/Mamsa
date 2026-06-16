@@ -1,125 +1,198 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Payment\InitiatePaymentRequest;
+use App\Http\Requests\Payment\PayPaymentRequest;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Services\MoyasarService;
+use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class PaymentController extends Controller
 {
-    public function __construct(private MoyasarService $moyasar) {}
+    use ApiResponse;
 
-    public function initiate(Request $request): JsonResponse
+    public function __construct(private readonly MoyasarService $moyasar) {}
+
+    /**
+     * Step 1 — create (or fetch) the pending payment for a booking and hand the
+     * frontend everything it needs to render the Moyasar form.
+     */
+    public function initiate(InitiatePaymentRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'booking_id'     => ['required', 'exists:bookings,id'],
-            'payment_method' => ['required', 'in:mada,visa,mastercard,apple_pay'],
-        ]);
+        $data = $request->validated();
 
         $booking = Booking::where('id', $data['booking_id'])
             ->where('user_id', auth()->id())
             ->where('status', 'pending')
+            ->with('unit')
             ->firstOrFail();
 
         $payment = Payment::firstOrCreate(
             ['booking_id' => $booking->id],
             [
                 'amount'         => $booking->total_amount,
-                'payment_method' => $data['payment_method'],
+                'payment_method' => $data['payment_method'] ?? 'card',
                 'payment_status' => 'pending',
-            ]
+            ],
         );
 
-        $description = 'حجز وحدة #' . $booking->id;
-
-        $response = $this->moyasar->initiate(
-            (int) ($booking->total_amount * 100),
-            $description,
-            $data['payment_method'],
-            $payment->id
-        );
-
-        $payment->update([
-            'moyasar_id'       => $response['id'] ?? null,
-            'moyasar_response' => $response,
+        return $this->success([
+            'payment_id'      => $payment->id,
+            'booking_id'      => $booking->id,
+            'amount'          => (float) $booking->total_amount,
+            'amount_halalas'  => (int) round($booking->total_amount * 100),
+            'currency'        => config('moyasar.currency', 'SAR'),
+            'description'     => 'حجز وحدة #'.$booking->id.' - '.$booking->unit->unit_name,
+            'publishable_key' => $this->moyasar->getPublishableKey(),
+            'callback_url'    => url('/api/v1/payments/callback'),
+            'test_mode'       => $this->isTestMode(),
         ]);
-
-        return response()->json($response);
     }
 
-    public function pay(Request $request): JsonResponse
+    /**
+     * Step 2 — charge. Real mode uses a Moyasar.js card token (or Apple Pay token);
+     * test mode (no secret key configured) simulates a successful charge so the
+     * end-to-end flow works without live credentials.
+     */
+    public function pay(PayPaymentRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'payment_id'       => ['required', 'exists:payments,id'],
-            'token'            => ['nullable', 'string'],
-            'apple_pay_token'  => ['nullable', 'string'],
-            'save_card'        => ['boolean'],
-        ]);
+        $data = $request->validated();
 
         $payment = Payment::where('id', $data['payment_id'])
             ->whereHas('booking', fn ($q) => $q->where('user_id', auth()->id()))
             ->where('payment_status', 'pending')
+            ->with('booking')
             ->firstOrFail();
 
+        // ── Test mode ──────────────────────────────────────────────
+        if ($this->isTestMode()) {
+            return $this->markPaid($payment, ['id' => 'test_'.uniqid(), 'status' => 'paid', 'test' => true]);
+        }
+
+        // ── Live Moyasar charge ────────────────────────────────────
+        $params = [
+            'amount_halalas' => (int) round($payment->amount * 100),
+            'description'    => 'حجز وحدة #'.$payment->booking_id,
+            'callback_url'   => url('/api/v1/payments/callback'),
+            'metadata'       => ['payment_id' => $payment->id, 'booking_id' => $payment->booking_id],
+        ];
+
         if (! empty($data['apple_pay_token'])) {
-            $response = $this->moyasar->payWithApplePay(
-                $payment->moyasar_id,
-                $data['apple_pay_token']
-            );
+            $response = $this->moyasar->chargeWithApplePay($data['apple_pay_token'], $params);
+        } elseif (! empty($data['token'])) {
+            $response = $this->moyasar->chargeWithToken($data['token'], $params);
         } else {
-            $response = $this->moyasar->pay(
-                $payment->moyasar_id,
-                $data['token']
-            );
+            return $this->error('رمز الدفع مطلوب', 422);
         }
 
         $status = $response['status'] ?? 'failed';
 
         $payment->update([
-            'payment_status'   => $status === 'paid' ? 'paid' : 'failed',
-            'paid_at'          => $status === 'paid' ? now() : null,
+            'moyasar_id'       => $response['id'] ?? null,
             'moyasar_response' => $response,
+            // 'initiated' means 3DS is pending — keep the payment open until callback.
+            'payment_status'   => match ($status) {
+                'paid'      => 'paid',
+                'initiated' => 'pending',
+                default     => 'failed',
+            },
+            'paid_at'          => $status === 'paid' ? now() : null,
         ]);
 
         if ($status === 'paid') {
             $payment->booking->update(['status' => 'confirmed']);
         }
 
-        return response()->json($response);
+        return $this->success([
+            'status'          => $status,
+            'payment_id'      => $payment->id,
+            // For 3DS the frontend must redirect the user to this URL.
+            'transaction_url' => $response['source']['transaction_url'] ?? null,
+            'message'         => $response['source']['message'] ?? null,
+        ], $status === 'paid' ? 'تم الدفع بنجاح' : 'تتطلب العملية إجراءً إضافياً');
     }
 
-    public function callback(Request $request): JsonResponse
+    /**
+     * Verify a payment completed via the Moyasar hosted form. The form charges
+     * Moyasar directly (card never touches our server) and returns a Moyasar
+     * payment id; we re-fetch it server-side, validate amount + status, and
+     * confirm the booking only when genuinely paid.
+     */
+    public function verify(Request $request): JsonResponse
     {
-        $payload = $request->all();
-        $moyasarId = $payload['id'] ?? null;
-
-        if (! $moyasarId) {
-            return response()->json(['ok' => false], 400);
-        }
-
-        $payment = Payment::where('moyasar_id', $moyasarId)->first();
-
-        if (! $payment) {
-            return response()->json(['ok' => false], 404);
-        }
-
-        $status = $payload['status'] ?? 'failed';
-
-        $payment->update([
-            'payment_status'   => $status === 'paid' ? 'paid' : 'failed',
-            'paid_at'          => $status === 'paid' ? now() : null,
-            'moyasar_response' => $payload,
+        $data = $request->validate([
+            'payment_id' => ['required', 'integer', 'exists:payments,id'],
+            'moyasar_id' => ['required', 'string'],
         ]);
 
-        if ($status === 'paid') {
+        $payment = Payment::where('id', $data['payment_id'])
+            ->whereHas('booking', fn ($q) => $q->where('user_id', auth()->id()))
+            ->with('booking')
+            ->firstOrFail();
+
+        $remote = $this->moyasar->fetchPayment($data['moyasar_id']);
+
+        $status   = $remote['status'] ?? 'failed';
+        $amountOk = (int) ($remote['amount'] ?? 0) === (int) round($payment->amount * 100);
+        $paid     = $status === 'paid' && $amountOk;
+
+        $payment->update([
+            'moyasar_id'       => $data['moyasar_id'],
+            'moyasar_response' => $remote,
+            'payment_method'   => $remote['source']['type'] ?? $payment->payment_method,
+            'payment_status'   => $paid ? 'paid' : ($status === 'failed' ? 'failed' : 'pending'),
+            'paid_at'          => $paid ? now() : null,
+        ]);
+
+        if ($paid) {
             $payment->booking->update(['status' => 'confirmed']);
         }
 
-        return response()->json(['ok' => true]);
+        return $this->success([
+            'status'     => $paid ? 'paid' : $status,
+            'payment_id' => $payment->id,
+            'booking_id' => $payment->booking_id,
+            'message'    => $remote['source']['message'] ?? null,
+        ], $paid ? 'تم الدفع بنجاح' : 'لم يكتمل الدفع');
+    }
+
+    /**
+     * Moyasar redirect/webhook callback — re-verifies status server-side.
+     */
+    public function callback(Request $request): JsonResponse
+    {
+        $moyasarId = $request->input('id');
+
+        if (! $moyasarId) {
+            return $this->error('معرف الدفع مفقود', 400);
+        }
+
+        $payment = Payment::where('moyasar_id', $moyasarId)->with('booking')->first();
+
+        if (! $payment) {
+            return $this->error('الدفع غير موجود', 404);
+        }
+
+        $verified = $this->moyasar->verifyCallback($moyasarId, (float) $payment->amount);
+
+        $payment->update([
+            'payment_status'   => $verified ? 'paid' : 'failed',
+            'paid_at'          => $verified ? now() : null,
+            'moyasar_response' => $request->all(),
+        ]);
+
+        if ($verified) {
+            $payment->booking->update(['status' => 'confirmed']);
+        }
+
+        return $this->success(['ok' => true, 'status' => $verified ? 'paid' : 'failed']);
     }
 
     public function applePayValidateMerchant(Request $request): JsonResponse
@@ -128,17 +201,38 @@ class PaymentController extends Controller
             'validation_url' => ['required', 'string'],
         ]);
 
-        $session = $this->moyasar->validateApplePayMerchant($data['validation_url']);
-
-        return response()->json($session);
+        return $this->success($this->moyasar->validateApplePayMerchant($data['validation_url']));
     }
 
     public function show(Payment $payment): JsonResponse
     {
         if ($payment->booking->user_id !== auth()->id()) {
-            return response()->json(['message' => 'غير مصرح'], 403);
+            return $this->error('غير مصرح', 403);
         }
 
-        return response()->json($payment->load('booking'));
+        return $this->success($payment->load('booking.unit'));
+    }
+
+    private function markPaid(Payment $payment, array $response): JsonResponse
+    {
+        $payment->update([
+            'payment_status'   => 'paid',
+            'paid_at'          => now(),
+            'moyasar_id'       => $response['id'] ?? null,
+            'moyasar_response' => $response,
+        ]);
+
+        $payment->booking->update(['status' => 'confirmed']);
+
+        return $this->success([
+            'status'     => 'paid',
+            'payment_id' => $payment->id,
+            'test'       => $response['test'] ?? false,
+        ], 'تم الدفع بنجاح');
+    }
+
+    private function isTestMode(): bool
+    {
+        return blank(config('moyasar.secret_key'));
     }
 }

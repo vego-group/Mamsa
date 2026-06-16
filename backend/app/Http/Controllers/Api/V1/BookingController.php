@@ -79,6 +79,7 @@ class BookingController extends Controller
             'end_date'     => $data['end_date'],
             'guests'       => $data['guests'],
             'total_amount' => $total,
+            'status'       => 'pending', // explicit so the in-memory model matches the DB default
             'notes'        => $data['notes'] ?? null,
         ]);
 

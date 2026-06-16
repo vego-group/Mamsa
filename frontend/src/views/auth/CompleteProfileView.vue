@@ -75,7 +75,10 @@ async function submit() {
   try {
     const { data } = await authApi.completeProfile({ name: name.value.trim(), email: email.value || undefined })
     auth.setUser(data.data)
-    router.replace({ name: 'dashboard' })
+    // Honor a pending booking redirect saved before login, else route by role.
+    const redirect = localStorage.getItem('post_login_redirect')
+    localStorage.removeItem('post_login_redirect')
+    router.replace(redirect && redirect.startsWith('/') ? redirect : auth.homeRoute(data.data))
   } catch (err) {
     error.value = err.response?.data?.message || 'حدث خطأ، حاول مجدداً'
   } finally {

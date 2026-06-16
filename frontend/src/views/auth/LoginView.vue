@@ -49,6 +49,18 @@
             <span v-else>إرسال رمز التحقق</span>
           </button>
         </form>
+
+        <!-- Join as partner -->
+        <div class="mt-6 pt-5 border-t border-outline-variant text-center">
+          <p class="text-on-surface-variant text-body-sm mb-2">تملك وحدات وترغب بتأجيرها؟</p>
+          <RouterLink
+            :to="{ name: 'partner-register' }"
+            class="inline-flex items-center justify-center gap-2 w-full py-3 rounded-lg border border-primary text-primary font-arabic font-bold hover:bg-primary/5 transition-colors"
+          >
+            <span class="material-symbols-outlined text-[20px]">handshake</span>
+            انضم كشريك
+          </RouterLink>
+        </div>
       </div>
     </div>
   </div>
@@ -56,10 +68,11 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { authApi } from '@/api/auth'
 
 const router = useRouter()
+const route  = useRoute()
 const phone  = ref('')
 const error  = ref('')
 const loading = ref(false)
@@ -79,6 +92,8 @@ async function submit() {
     const res = await authApi.requestOtp(fullPhone)
     const query = { phone: fullPhone }
     if (res.data?.data?.debug_otp) query.debug_otp = res.data.data.debug_otp
+    // Preserve any post-login redirect (e.g. a unit the guest tried to book)
+    if (route.query.redirect) query.redirect = route.query.redirect
     router.push({ name: 'otp', query })
   } catch (err) {
     error.value = err.response?.data?.message || 'حدث خطأ، حاول مجدداً'

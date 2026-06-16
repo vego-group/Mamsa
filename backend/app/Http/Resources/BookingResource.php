@@ -42,7 +42,7 @@ class BookingResource extends JsonResource
             'pending'   => 'قيد الانتظار',
             'confirmed' => 'مؤكد',
             'cancelled' => 'ملغى',
-            default     => $this->status,
+            default     => (string) ($this->status ?? ''),
         };
     }
 }

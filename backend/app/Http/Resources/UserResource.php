@@ -18,7 +18,10 @@ class UserResource extends JsonResource
             'is_active'        => (bool) $this->is_active,
             'roles'            => $this->getRoleNames(),
             'permissions'      => $this->when(
-                $request->is('api/v1/auth/me') || $request->is('api/v1/auth/verify-otp'),
+                $request->is('api/v1/auth/me')
+                    || $request->is('api/v1/auth/verify-otp')
+                    || $request->is('api/v1/auth/admin/login')
+                    || $request->is('api/v1/auth/partner/register'),
                 fn () => $this->getAllPermissions()->pluck('name')
             ),
             'is_admin'         => $this->isAdmin(),

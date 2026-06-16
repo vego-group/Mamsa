@@ -101,6 +101,17 @@ const auth    = useAuthStore()
 
 const phone    = route.query.phone || ''
 const debugOtp = route.query.debug_otp || null
+
+/**
+ * Returns the path a guest was sent to login from (e.g. a unit page they
+ * tried to book), consuming it so it only applies once. Query param wins,
+ * falling back to the value stashed in localStorage before redirecting.
+ */
+function consumeRedirect() {
+  const target = route.query.redirect || localStorage.getItem('post_login_redirect')
+  localStorage.removeItem('post_login_redirect')
+  return target && typeof target === 'string' && target.startsWith('/') ? target : null
+}
 const digits   = ref(['', '', '', '', '', ''])
 const inputs  = ref([])
 const error   = ref('')
@@ -155,11 +166,14 @@ async function submit() {
   error.value = ''
   loading.value = true
   try {
-    await auth.verify(phone, digits.value.join(''))
+    const result = await auth.verify(phone, digits.value.join(''))
     if (auth.needsProfile) {
+      // New users finish their profile first; redirect is preserved for after.
       router.replace({ name: 'complete-profile' })
     } else {
-      router.replace({ name: 'dashboard' })
+      // Prefer an explicit post-login redirect (e.g. a unit being booked),
+      // otherwise route by the freshly returned role — never stale state.
+      router.replace(consumeRedirect() || auth.homeRoute(result.user))
     }
   } catch (err) {
     error.value = err.response?.data?.errors?.code?.[0]

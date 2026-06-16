@@ -17,6 +17,16 @@ export const useAuthStore = defineStore('auth', () => {
     user.value?.roles?.some((r) => r === 'Individual' || r === 'Company'),
   )
 
+  // Single source of truth for "where does this account belong after login".
+  // Pass an explicit user (e.g. a fresh login response) to avoid any reliance
+  // on possibly-stale store state.
+  function homeRoute(u = user.value) {
+    const roles = u?.roles || []
+    if (roles.some((r) => r === 'Admin' || r === 'SuperAdmin')) return { name: 'admin-dashboard' }
+    if (roles.some((r) => r === 'Individual' || r === 'Company')) return { name: 'partner-dashboard' }
+    return { name: 'account' } // regular renter → their bookings dashboard
+  }
+
   function setTokens(access, refresh) {
     accessToken.value  = access
     refreshToken.value = refresh
@@ -34,6 +44,22 @@ export const useAuthStore = defineStore('auth', () => {
     setTokens(data.data.access_token, data.data.refresh_token)
     setUser(data.data.user)
     needsProfile.value = data.data.needs_profile ?? false
+    return data.data
+  }
+
+  // Email + password login for back-office roles (Admin / SuperAdmin)
+  async function adminLogin(email, password) {
+    const { data } = await authApi.adminLogin(email, password)
+    setTokens(data.data.access_token, data.data.refresh_token)
+    setUser(data.data.user)
+    return data.data
+  }
+
+  // OTP-verified self-service partner registration (Individual / Company)
+  async function partnerRegister(payload) {
+    const { data } = await authApi.partnerRegister(payload)
+    setTokens(data.data.access_token, data.data.refresh_token)
+    setUser(data.data.user)
     return data.data
   }
 
@@ -55,7 +81,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     user, accessToken, refreshToken, needsProfile,
-    isAuthenticated, isAdmin, isPartner,
-    setTokens, setUser, verify, fetchMe, logout,
+    isAuthenticated, isAdmin, isPartner, homeRoute,
+    setTokens, setUser, verify, adminLogin, partnerRegister, fetchMe, logout,
   }
 })

@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker exec mamsa_backend *)",
+      "Bash(pkill -f \"vite --host\")",
+      "Bash(nohup npm run dev -- --host 0.0.0.0 --port 5174)",
+      "Bash(echo \"PID: $!\")",
+      "Read(//tmp/**)",
+      "Bash(npx tailwindcss *)",
+      "Bash(curl -s -X POST http://localhost:5174/api/v1/auth/admin/login -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"email\":\"superadmin@mamsaa.sa\",\"password\":\"Password1\",\"device\":\"admin-web\"}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/auth/admin/login -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"email\":\"superadmin@mamsaa.sa\",\"password\":\"Password1\",\"device\":\"admin-web\"}')",
+      "Bash(npm run *)",
+      "Bash(grep -E '\\\\$table->' /root/Mamsaa/backend/database/migrations/2026_06_15_000002_create_units_table.php)",
+      "Bash(curl -s http://localhost:8080/api/v1/partner/dashboard -H 'Authorization: Bearer 7|N5Bz7KS38EVdU8FJqouJ3IqiTNMawMa1F1occ6dCe5bfe375' -H 'Accept: application/json')",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/partner/units -H 'Authorization: Bearer 7|N5Bz7KS38EVdU8FJqouJ3IqiTNMawMa1F1occ6dCe5bfe375' -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{\"unit_name\":\"شقة اختبار\",\"unit_type\":\"apartment\",\"price\":450,\"capacity\":4,\"bedrooms\":2,\"city\":\"الرياض\",\"district\":\"الملقا\",\"description\":\"وحدة تجريبية\",\"features\":[\"واي فاي\",\"مسبح\"]}')",
+      "Bash(curl -s http://localhost:8080/api/v1/partner/dashboard -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Accept: application/json')",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/partner/units -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{\"unit_name\":\"شقة اختبار\",\"unit_type\":\"apartment\",\"price\":450,\"capacity\":4,\"bedrooms\":2,\"city\":\"الرياض\",\"district\":\"الملقا\",\"description\":\"وحدة تجريبية\",\"features\":[\"واي فاي\",\"مسبح\"]}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/partner/units/1/submit -H 'Authorization: Bearer 7|N5Bz7KS38EVdU8FJqouJ3IqiTNMawMa1F1occ6dCe5bfe375' -H 'Accept: application/json')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('has partner_detail:', 'partner_detail' in d, '| type:', d.get\\('partner_detail',{}\\).get\\('type'\\)\\)\")",
+      "Bash(grep -nE \"function |protected \\\\\\\\\\\\$\" /root/Mamsaa/backend/app/Models/Unit.php)",
+      "Bash(curl -s \"http://localhost:8080/api/v1/units\" -H \"Accept: application/json\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); b=d.get\\('data',d\\); print\\('booking id:',b.get\\('id'\\),'| nights:',b.get\\('nights'\\),'| total:',b.get\\('total_amount'\\),'| status:',b.get\\('status'\\)\\)\")",
+      "Bash(curl -s -o /dev/null -w 'HTTP %{http_code}\\\\n' -X POST http://localhost:8080/api/v1/bookings -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{\"unit_id\":1,\"start_date\":\"2026-08-01\",\"end_date\":\"2026-08-03\",\"guests\":2}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); b=d.get\\('data',d\\); print\\('id:',b.get\\('id'\\),'| nights:',b.get\\('nights'\\),'| total:',b.get\\('total_amount'\\),'| status:',b.get\\('status'\\),'|',b.get\\('status_label'\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/auth/request-otp -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{\"phone\":\"+966555333444\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); u=d.get\\('data',{}\\).get\\('user',{}\\); print\\('roles:',u.get\\('roles'\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/auth/request-otp -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{\"phone\":\"__TRACKED_VAR__\"}')",
+      "Bash(grep -E '\\\\$table->' /root/Mamsaa/backend/database/migrations/2026_06_15_000007_create_payments_table.php)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\)['data']; u=d['user']; print\\('roles:',u['roles'],'| is_admin:',u['is_admin'],'| is_partner:',u['is_partner']\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); items=d.get\\('data',d\\) if isinstance\\(d.get\\('data',d\\),list\\) else d.get\\('data',[]\\); print\\(' count:',len\\(items\\) if isinstance\\(items,list\\) else 'wrapped:', type\\(d\\).__name__, list\\(d.keys\\(\\)\\) if isinstance\\(d,dict\\) else ''\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\)['data']; print\\('test_mode:',d['test_mode'],'| amount_halalas:',d['amount_halalas'],'| pub_key:',d['publishable_key'][:10]+'...' if d['publishable_key'] else 'EMPTY'\\)\")"
+    ]
+  }
+}

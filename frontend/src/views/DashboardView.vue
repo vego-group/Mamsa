@@ -87,10 +87,18 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
+import { onBeforeMount } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const auth   = useAuthStore()
+
+// Admins/partners are bounced to their panel; regular users stay on this view.
+onBeforeMount(() => {
+  if (auth.isAdmin || auth.isPartner) {
+    router.replace(auth.homeRoute())
+  }
+})
 
 const navItems = [
   { label: 'الرئيسية',    icon: 'home',             active: true  },
