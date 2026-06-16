@@ -37,3 +37,5 @@ docker-compose.override.yml
 
 # ── Logs ─────────────────────────────────────────────────────
 *.log
+CLAUDE.md
+.claude/settings.local.json
