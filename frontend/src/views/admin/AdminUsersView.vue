@@ -7,94 +7,96 @@
       </div>
       <button
         class="flex items-center gap-2 px-5 py-3 bg-primary text-on-primary rounded-xl font-bold shadow-sm hover:bg-primary-container transition-colors"
-        @click="showAddAdminModal = true"
+        @click="openAddModal"
       >
         <span class="material-symbols-outlined text-[18px]">add</span>
-        إضافة مدير
+        إضافة مستخدم
       </button>
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-1 border-b border-outline-variant mb-6">
+    <div class="flex gap-1 border-b border-outline-variant mb-6 overflow-x-auto">
       <button
         v-for="tab in tabs"
         :key="tab.key"
-        class="px-6 py-3 font-title-sm text-title-sm transition-all border-b-4"
-        :class="activeTab === tab.key
-          ? 'text-primary border-primary'
-          : 'text-on-surface-variant border-transparent hover:text-primary'"
-        @click="activeTab = tab.key"
+        class="px-6 py-3 font-title-sm text-title-sm transition-all border-b-4 whitespace-nowrap"
+        :class="activeTab === tab.key ? 'text-primary border-primary' : 'text-on-surface-variant border-transparent hover:text-primary'"
+        @click="changeTab(tab.key)"
       >
         {{ tab.label }}
         <span class="mr-2 px-2 py-0.5 rounded-full text-label-caps" :class="activeTab === tab.key ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'">
-          {{ tab.count }}
+          {{ counts[tab.key] ?? 0 }}
         </span>
       </button>
     </div>
 
-    <!-- Search + filter row -->
+    <!-- Search -->
     <div class="flex gap-3 mb-6">
       <div class="relative flex-1">
         <span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
         <input
           v-model="search"
+          @keyup.enter="load"
           class="w-full pr-12 pl-4 py-2.5 bg-white border border-outline-variant rounded-xl text-body-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-          placeholder="ابحث بالاسم أو رقم الجوال..."
+          placeholder="ابحث بالاسم أو الجوال أو البريد... (اضغط Enter)"
         />
       </div>
-      <select class="px-4 py-2.5 bg-white border border-outline-variant rounded-xl text-body-sm focus:ring-2 focus:ring-primary/20 outline-none">
-        <option>جميع الحالات</option>
-        <option>نشط</option>
-        <option>موقوف</option>
-      </select>
     </div>
 
-    <!-- Users table -->
-    <div class="bg-white rounded-2xl border border-outline-variant shadow-sm overflow-hidden">
-      <table class="w-full">
+    <!-- Loading -->
+    <div v-if="loading" class="bg-white rounded-2xl border border-outline-variant p-4 space-y-3">
+      <div v-for="i in 5" :key="i" class="animate-pulse flex items-center gap-3">
+        <div class="w-9 h-9 rounded-full bg-surface-container"></div>
+        <div class="flex-1 space-y-2"><div class="h-3 bg-surface-container rounded w-1/3"></div><div class="h-2 bg-surface-container rounded w-1/4"></div></div>
+      </div>
+    </div>
+
+    <!-- Empty -->
+    <div v-else-if="users.length === 0" class="text-center py-16 text-on-surface-variant bg-white rounded-2xl border border-outline-variant">
+      <span class="material-symbols-outlined text-5xl mb-3 block">group_off</span>
+      <p class="font-title-sm text-title-sm">لا يوجد مستخدمون مطابقون</p>
+    </div>
+
+    <!-- Table -->
+    <div v-else class="bg-white rounded-2xl border border-outline-variant shadow-sm overflow-x-auto">
+      <table class="w-full min-w-[640px]">
         <thead>
           <tr class="bg-surface-container-low border-b border-outline-variant">
             <th class="text-right py-3 px-4 font-label-caps text-label-caps text-on-surface-variant">المستخدم</th>
             <th class="text-right py-3 px-4 font-label-caps text-label-caps text-on-surface-variant hidden md:table-cell">رقم الجوال</th>
-            <th class="text-right py-3 px-4 font-label-caps text-label-caps text-on-surface-variant hidden lg:table-cell">الدور</th>
+            <th class="text-right py-3 px-4 font-label-caps text-label-caps text-on-surface-variant">الدور</th>
             <th class="text-right py-3 px-4 font-label-caps text-label-caps text-on-surface-variant">الحالة</th>
             <th class="py-3 px-4"></th>
           </tr>
         </thead>
         <tbody>
-          <tr
-            v-for="user in filteredUsers"
-            :key="user.id"
-            class="border-b border-outline-variant/50 last:border-0 hover:bg-surface-container-low/50 transition-colors"
-          >
+          <tr v-for="user in users" :key="user.id" class="border-b border-outline-variant/50 last:border-0 hover:bg-surface-container-low/50 transition-colors">
             <td class="py-3 px-4">
               <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-full bg-secondary-container flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
                   {{ initials(user.name) }}
                 </div>
                 <div>
-                  <p class="font-body-md font-semibold text-on-surface leading-tight">{{ user.name }}</p>
+                  <p class="font-body-md font-semibold text-on-surface leading-tight">{{ user.name || '—' }}</p>
                   <p class="text-body-sm text-on-surface-variant">{{ user.email || '—' }}</p>
                 </div>
               </div>
             </td>
-            <td class="py-3 px-4 hidden md:table-cell">
-              <span class="font-numeric-data text-body-sm text-on-surface" dir="ltr">{{ user.phone }}</span>
-            </td>
-            <td class="py-3 px-4 hidden lg:table-cell">
-              <span class="px-2.5 py-1 rounded-full text-[12px] font-bold" :class="roleClass(user.role)">{{ user.roleLabel }}</span>
-            </td>
+            <td class="py-3 px-4 hidden md:table-cell"><span class="font-numeric-data text-body-sm text-on-surface" dir="ltr">{{ user.phone }}</span></td>
+            <td class="py-3 px-4"><span class="px-2.5 py-1 rounded-full text-[12px] font-bold" :class="roleClass(user.role)">{{ roleLabel(user.role) }}</span></td>
             <td class="py-3 px-4">
-              <span class="px-2.5 py-1 rounded-full text-[12px] font-bold" :class="user.active ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-container text-on-surface-variant'">
-                {{ user.active ? 'نشط' : 'موقوف' }}
-              </span>
+              <button
+                class="px-2.5 py-1 rounded-full text-[12px] font-bold transition-colors"
+                :class="user.is_active ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-surface-container text-on-surface-variant hover:bg-outline-variant'"
+                :disabled="busyId === user.id"
+                @click="toggleStatus(user)"
+              >
+                {{ user.is_active ? 'نشط' : 'موقوف' }}
+              </button>
             </td>
             <td class="py-3 px-4">
               <div class="flex items-center gap-2 justify-end">
-                <button class="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-primary transition-colors">
-                  <span class="material-symbols-outlined text-[18px]">edit</span>
-                </button>
-                <button class="p-1.5 rounded-lg hover:bg-error-container text-on-surface-variant hover:text-error transition-colors" @click="confirmDelete(user)">
+                <button class="p-1.5 rounded-lg hover:bg-error-container text-on-surface-variant hover:text-error transition-colors disabled:opacity-40" :disabled="busyId === user.id" @click="confirmDelete(user)">
                   <span class="material-symbols-outlined text-[18px]">delete</span>
                 </button>
               </div>
@@ -104,42 +106,59 @@
       </table>
     </div>
 
-    <!-- Add Admin Modal -->
+    <!-- Pagination -->
+    <div v-if="meta.last_page > 1" class="flex items-center justify-center gap-2 mt-4">
+      <button class="px-3 py-1.5 rounded-lg border border-outline-variant text-body-sm disabled:opacity-40" :disabled="page <= 1" @click="goPage(page - 1)">السابق</button>
+      <span class="text-body-sm text-on-surface-variant">{{ page }} / {{ meta.last_page }}</span>
+      <button class="px-3 py-1.5 rounded-lg border border-outline-variant text-body-sm disabled:opacity-40" :disabled="page >= meta.last_page" @click="goPage(page + 1)">التالي</button>
+    </div>
+
+    <!-- Add user modal -->
     <Teleport to="body">
-      <div v-if="showAddAdminModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div v-if="showAddModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl border border-outline-variant shadow-xl w-full max-w-md p-6" dir="rtl">
           <div class="flex items-center justify-between mb-6">
-            <h2 class="font-headline-md text-headline-md text-primary">إضافة مدير جديد</h2>
-            <button class="p-2 hover:bg-surface-container rounded-lg" @click="showAddAdminModal = false">
-              <span class="material-symbols-outlined">close</span>
-            </button>
+            <h2 class="font-headline-md text-headline-md text-primary">إضافة مستخدم جديد</h2>
+            <button class="p-2 hover:bg-surface-container rounded-lg" @click="showAddModal = false"><span class="material-symbols-outlined">close</span></button>
           </div>
-          <form class="space-y-4" @submit.prevent="addAdmin">
+          <form class="space-y-4" @submit.prevent="createUser">
             <div>
               <label class="block text-body-sm font-bold text-on-surface mb-1.5">الاسم الكامل</label>
-              <input v-model="newAdmin.name" class="w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-xl text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" placeholder="اسم المدير" required />
+              <input v-model="form.name" class="field" :class="{ 'border-error': errors.name }" placeholder="اسم المستخدم" required />
+              <p v-if="errors.name" class="text-error text-body-sm mt-1">{{ errors.name }}</p>
             </div>
             <div>
               <label class="block text-body-sm font-bold text-on-surface mb-1.5">رقم الجوال</label>
-              <input v-model="newAdmin.phone" class="w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-xl text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" placeholder="+966XXXXXXXXX" dir="ltr" required />
+              <input v-model="form.phone" class="field" :class="{ 'border-error': errors.phone }" placeholder="+9665XXXXXXXX" dir="ltr" required />
+              <p v-if="errors.phone" class="text-error text-body-sm mt-1">{{ errors.phone }}</p>
             </div>
             <div>
-              <label class="block text-body-sm font-bold text-on-surface mb-1.5">الصلاحية</label>
-              <select v-model="newAdmin.role" class="w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-xl text-body-md focus:ring-2 focus:ring-primary/20 outline-none">
+              <label class="block text-body-sm font-bold text-on-surface mb-1.5">البريد الإلكتروني (اختياري)</label>
+              <input v-model="form.email" type="email" class="field" :class="{ 'border-error': errors.email }" dir="ltr" />
+              <p v-if="errors.email" class="text-error text-body-sm mt-1">{{ errors.email }}</p>
+            </div>
+            <div>
+              <label class="block text-body-sm font-bold text-on-surface mb-1.5">الدور</label>
+              <select v-model="form.role" class="field">
+                <option value="User">مستخدم</option>
+                <option value="Individual">شريك فرد</option>
+                <option value="Company">شريك شركة</option>
                 <option value="Admin">مدير</option>
                 <option value="SuperAdmin">مدير عام</option>
               </select>
             </div>
             <div class="flex gap-3 pt-2">
-              <button type="submit" class="flex-1 py-3 bg-primary text-on-primary rounded-xl font-bold hover:bg-primary-container transition-colors">إضافة</button>
-              <button type="button" class="flex-1 py-3 border border-outline-variant rounded-xl font-bold text-on-surface hover:bg-surface-container transition-colors" @click="showAddAdminModal = false">إلغاء</button>
+              <button type="submit" class="flex-1 py-3 bg-primary text-on-primary rounded-xl font-bold hover:bg-primary-container transition-colors disabled:opacity-50" :disabled="saving">
+                {{ saving ? 'جارٍ الحفظ...' : 'إضافة' }}
+              </button>
+              <button type="button" class="flex-1 py-3 border border-outline-variant rounded-xl font-bold text-on-surface hover:bg-surface-container transition-colors" @click="showAddModal = false">إلغاء</button>
             </div>
           </form>
         </div>
       </div>
     </Teleport>
 
-    <!-- Delete Confirm Modal -->
+    <!-- Delete confirm -->
     <Teleport to="body">
       <div v-if="deleteTarget" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl border border-outline-variant shadow-xl w-full max-w-sm p-6 text-center" dir="rtl">
@@ -147,58 +166,62 @@
             <span class="material-symbols-outlined text-error text-3xl">delete_forever</span>
           </div>
           <h2 class="font-headline-md text-headline-md text-on-surface mb-2">تأكيد الحذف</h2>
-          <p class="text-body-md text-on-surface-variant mb-6">هل أنت متأكد من حذف حساب <strong>{{ deleteTarget.name }}</strong>؟ لا يمكن التراجع عن هذا الإجراء.</p>
+          <p class="text-body-md text-on-surface-variant mb-6">حذف حساب <strong>{{ deleteTarget.name }}</strong>؟ لا يمكن التراجع.</p>
           <div class="flex gap-3">
-            <button class="flex-1 py-3 bg-error text-on-error rounded-xl font-bold hover:opacity-90 transition-opacity" @click="deleteUser">حذف</button>
+            <button class="flex-1 py-3 bg-error text-on-error rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-50" :disabled="busyId === deleteTarget.id" @click="deleteUser">حذف</button>
             <button class="flex-1 py-3 border border-outline-variant rounded-xl font-bold text-on-surface hover:bg-surface-container transition-colors" @click="deleteTarget = null">إلغاء</button>
           </div>
         </div>
       </div>
     </Teleport>
+
+    <!-- Toast -->
+    <Transition name="fade">
+      <div v-if="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-white font-bold text-body-sm" :class="toast.type === 'error' ? 'bg-error' : 'bg-primary'">
+        {{ toast.msg }}
+      </div>
+    </Transition>
   </AdminLayout>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import AdminLayout from '@/layouts/AdminLayout.vue'
+import { adminApi } from '@/api/admin'
 
+const loading = ref(true)
+const saving = ref(false)
+const busyId = ref(null)
+const users = ref([])
+const counts = ref({})
+const meta = ref({ last_page: 1 })
+const page = ref(1)
 const activeTab = ref('all')
 const search = ref('')
-const showAddAdminModal = ref(false)
+const showAddModal = ref(false)
 const deleteTarget = ref(null)
-const newAdmin = ref({ name: '', phone: '', role: 'Admin' })
+const toast = ref(null)
+const errors = reactive({})
+
+const form = reactive({ name: '', phone: '', email: '', role: 'Admin' })
 
 const tabs = [
-  { key: 'all',      label: 'الكل',              count: 1248 },
-  { key: 'admins',   label: 'المدراء',            count: 5 },
-  { key: 'partners', label: 'الشركاء',            count: 234 },
-  { key: 'users',    label: 'المستخدمون العاديون', count: 1009 },
+  { key: 'all',      label: 'الكل' },
+  { key: 'admins',   label: 'المدراء' },
+  { key: 'partners', label: 'الشركاء' },
+  { key: 'users',    label: 'المستخدمون' },
 ]
 
-const users = ref([
-  { id: 1, name: 'أحمد محمد العمري',  phone: '+966501234567', email: 'ahmed@example.com',  role: 'SuperAdmin', roleLabel: 'مدير عام',  active: true },
-  { id: 2, name: 'سارة خالد الأحمد', phone: '+966509876543', email: 'sara@example.com',   role: 'Admin',      roleLabel: 'مدير',      active: true },
-  { id: 3, name: 'محمد الفهد',        phone: '+966551234567', email: null,                  role: 'Individual', roleLabel: 'فرد',       active: true },
-  { id: 4, name: 'نورة القحطاني',     phone: '+966561234567', email: null,                  role: 'Company',    roleLabel: 'شركة',      active: true },
-  { id: 5, name: 'خالد الشمري',       phone: '+966571234567', email: null,                  role: 'User',       roleLabel: 'مستخدم',    active: false },
-  { id: 6, name: 'هند العتيبي',       phone: '+966581234567', email: 'hind@example.com',   role: 'User',       roleLabel: 'مستخدم',    active: true },
-])
-
-const filteredUsers = computed(() => {
-  return users.value.filter(u => {
-    const matchSearch = !search.value || u.name.includes(search.value) || u.phone.includes(search.value)
-    const matchTab = activeTab.value === 'all'
-      || (activeTab.value === 'admins'   && ['Admin','SuperAdmin'].includes(u.role))
-      || (activeTab.value === 'partners' && ['Individual','Company'].includes(u.role))
-      || (activeTab.value === 'users'    && u.role === 'User')
-    return matchSearch && matchTab
-  })
-})
-
-function initials(name) {
-  return name.split(' ').slice(0, 2).map(w => w[0]).join('')
+function showToast(msg, type = 'success') {
+  toast.value = { msg, type }
+  setTimeout(() => (toast.value = null), 2800)
 }
-
+function initials(name) {
+  return (name || '').split(' ').slice(0, 2).map((w) => w[0]).join('') || '؟'
+}
+function roleLabel(role) {
+  return { SuperAdmin: 'مدير عام', Admin: 'مدير', Individual: 'فرد', Company: 'شركة', User: 'مستخدم' }[role] || role || '—'
+}
 function roleClass(role) {
   return {
     SuperAdmin: 'bg-purple-100 text-purple-700',
@@ -206,27 +229,101 @@ function roleClass(role) {
     Individual: 'bg-secondary-container text-on-secondary-container',
     Company:    'bg-secondary-container text-on-secondary-container',
     User:       'bg-surface-container text-on-surface-variant',
-  }[role]
+  }[role] || 'bg-surface-container text-on-surface-variant'
+}
+
+async function load() {
+  loading.value = true
+  try {
+    const params = { page: page.value }
+    if (activeTab.value !== 'all') params.role = activeTab.value
+    if (search.value) params.search = search.value
+    const { data } = await adminApi.listUsers(params)
+    users.value = data.data ?? []
+    counts.value = data.counts ?? {}
+    meta.value = data.meta ?? { last_page: 1 }
+  } catch (e) {
+    showToast('تعذّر تحميل المستخدمين', 'error')
+  } finally {
+    loading.value = false
+  }
+}
+
+function changeTab(key) {
+  activeTab.value = key
+  page.value = 1
+  load()
+}
+function goPage(p) {
+  page.value = p
+  load()
+}
+
+function openAddModal() {
+  Object.keys(errors).forEach((k) => delete errors[k])
+  Object.assign(form, { name: '', phone: '', email: '', role: 'Admin' })
+  showAddModal.value = true
+}
+
+async function createUser() {
+  Object.keys(errors).forEach((k) => delete errors[k])
+  saving.value = true
+  try {
+    await adminApi.createUser({ ...form, email: form.email || undefined })
+    showAddModal.value = false
+    showToast('تم إضافة المستخدم')
+    page.value = 1
+    await load()
+  } catch (e) {
+    if (e.response?.status === 422 && e.response.data?.errors) {
+      for (const [f, m] of Object.entries(e.response.data.errors)) errors[f] = m[0]
+    } else {
+      showToast(e.response?.data?.message || 'تعذّر الإضافة', 'error')
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
+async function toggleStatus(user) {
+  busyId.value = user.id
+  try {
+    const { data } = await adminApi.updateUserStatus(user.id, !user.is_active)
+    user.is_active = (data.data ?? data).is_active
+    showToast('تم تحديث الحالة')
+  } catch (e) {
+    showToast(e.response?.data?.message || 'تعذّر تحديث الحالة', 'error')
+  } finally {
+    busyId.value = null
+  }
 }
 
 function confirmDelete(user) {
   deleteTarget.value = user
 }
-
-function deleteUser() {
-  users.value = users.value.filter(u => u.id !== deleteTarget.value.id)
-  deleteTarget.value = null
+async function deleteUser() {
+  const u = deleteTarget.value
+  busyId.value = u.id
+  try {
+    await adminApi.deleteUser(u.id)
+    showToast('تم حذف المستخدم')
+    deleteTarget.value = null
+    await load()
+  } catch (e) {
+    showToast(e.response?.data?.message || 'تعذّر الحذف', 'error')
+  } finally {
+    busyId.value = null
+  }
 }
 
-function addAdmin() {
-  users.value.unshift({
-    id: Date.now(),
-    ...newAdmin.value,
-    roleLabel: newAdmin.value.role === 'SuperAdmin' ? 'مدير عام' : 'مدير',
-    email: null,
-    active: true,
-  })
-  showAddAdminModal.value = false
-  newAdmin.value = { name: '', phone: '', role: 'Admin' }
-}
+onMounted(load)
 </script>
+
+<style scoped>
+.field {
+  @apply w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-xl text-body-md
+         focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all;
+}
+.fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

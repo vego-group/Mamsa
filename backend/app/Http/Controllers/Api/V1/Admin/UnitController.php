@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
@@ -13,6 +15,14 @@ class UnitController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = Unit::with(['images', 'owner']);
+
+        if ($search = trim((string) $request->query('search', ''))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('unit_name', 'like', "%{$search}%")
+                  ->orWhere('code', 'like', "%{$search}%")
+                  ->orWhere('city', 'like', "%{$search}%");
+            });
+        }
 
         if ($request->filled('approval_status')) {
             $query->where('approval_status', $request->approval_status);
