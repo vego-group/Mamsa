@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Api\V1\Partner;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\Unit;
+use App\Models\User;
+use App\Notifications\NewUnitRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
 class UnitController extends Controller
@@ -97,7 +100,8 @@ class UnitController extends Controller
         ]);
 
         // FR-066: editing an approved unit resets it to pending
-        if ($unit->approval_status === 'approved') {
+        $resetToPending = $unit->approval_status === 'approved';
+        if ($resetToPending) {
             $data['approval_status'] = 'pending';
         }
 
@@ -108,6 +112,10 @@ class UnitController extends Controller
                 return \App\Models\Feature::firstOrCreate(['name' => $name])->id;
             });
             $unit->features()->sync($featureIds);
+        }
+
+        if ($resetToPending) {
+            $this->notifyAdminsOfRequest($unit);
         }
 
         return response()->json(new UnitResource($unit->fresh()->load(['images', 'features'])));
@@ -140,6 +148,21 @@ class UnitController extends Controller
 
         $unit->update(['approval_status' => 'pending']);
 
+        $this->notifyAdminsOfRequest($unit);
+
         return response()->json(new UnitResource($unit->fresh()));
+    }
+
+    /**
+     * Notify all Admins/SuperAdmins that a unit is awaiting review
+     * (in-app + email). FR-101.
+     */
+    private function notifyAdminsOfRequest(Unit $unit): void
+    {
+        $admins = User::role(['Admin', 'SuperAdmin'])->get();
+
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, new NewUnitRequest($unit->loadMissing('owner')));
+        }
     }
 }

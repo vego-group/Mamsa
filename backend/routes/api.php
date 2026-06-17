@@ -119,6 +119,13 @@ Route::prefix('v1')->group(function () {
             Route::get('units', [Admin\UnitController::class, 'index'])->name('units.index');
             Route::get('bookings', [Admin\BookingController::class, 'index'])->name('bookings.index');
             Route::get('reports', [Admin\ReportController::class, 'index'])->name('reports');
+
+            Route::prefix('notifications')->name('notifications.')->group(function () {
+                Route::get('/', [Admin\NotificationController::class, 'index'])->name('index');
+                Route::get('unread-count', [Admin\NotificationController::class, 'unreadCount'])->name('unread');
+                Route::post('read-all', [Admin\NotificationController::class, 'markAllAsRead'])->name('read-all');
+                Route::post('{id}/read', [Admin\NotificationController::class, 'markAsRead'])->name('read');
+            });
         });
     });
 
