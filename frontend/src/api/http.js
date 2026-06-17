@@ -1,7 +1,14 @@
 import axios from 'axios'
 
+// API base URL.
+// - Dev: leave VITE_API_BASE_URL unset → '/api/v1' is proxied by Vite to the
+//   local backend (see vite.config.js).
+// - Prod: set VITE_API_BASE_URL to the deployed API, e.g.
+//   https://api.mamsa.com/api/v1
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+
 const http = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE,
   headers: {
     Accept: 'application/json',
     'Content-Type': 'application/json',
@@ -51,7 +58,7 @@ http.interceptors.response.use(
       }
 
       try {
-        const { data } = await axios.post('/api/v1/auth/refresh', {
+        const { data } = await axios.post(`${API_BASE}/auth/refresh`, {
           refresh_token: refreshToken,
         })
         const newAccess = data.data.access_token

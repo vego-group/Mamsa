@@ -12,6 +12,11 @@ class BookingResource extends JsonResource
         return [
             'id'           => $this->id,
             'unit'         => $this->whenLoaded('unit', fn () => new UnitResource($this->unit)),
+            'user'         => $this->whenLoaded('user', fn () => [
+                'id'    => $this->user?->id,
+                'name'  => $this->user?->name,
+                'phone' => $this->user?->phone,
+            ]),
             'start_date'   => $this->start_date?->toDateString(),
             'end_date'     => $this->end_date?->toDateString(),
             'nights'       => $this->nights,

@@ -168,7 +168,15 @@ class PaymentController extends Controller
      */
     public function callback(Request $request): JsonResponse
     {
-        $moyasarId = $request->input('id');
+        // Verify the webhook secret token when configured (Moyasar includes the
+        // token you set on the webhook). Reject forged calls.
+        $webhookSecret = (string) config('moyasar.webhook_secret');
+        if ($webhookSecret !== '' && ! hash_equals($webhookSecret, (string) $request->input('secret_token'))) {
+            return $this->error('توقيع غير صالح', 401);
+        }
+
+        // Webhook payload nests the payment under `data`; redirect uses top-level `id`.
+        $moyasarId = $request->input('data.id', $request->input('id'));
 
         if (! $moyasarId) {
             return $this->error('معرف الدفع مفقود', 400);

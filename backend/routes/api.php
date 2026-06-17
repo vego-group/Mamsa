@@ -118,6 +118,7 @@ Route::prefix('v1')->group(function () {
 
             Route::get('units', [Admin\UnitController::class, 'index'])->name('units.index');
             Route::get('bookings', [Admin\BookingController::class, 'index'])->name('bookings.index');
+            Route::get('reports', [Admin\ReportController::class, 'index'])->name('reports');
         });
     });
 

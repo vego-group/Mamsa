@@ -13,6 +13,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Trust the reverse proxy / load balancer so the app sees the real
+        // client IP and https scheme (TLS terminated at the edge).
+        $trustedProxies = env('TRUSTED_PROXIES', '');
+        $middleware->trustProxies(
+            at: $trustedProxies === '*'
+                ? '*'
+                : array_values(array_filter(explode(',', (string) $trustedProxies))),
+        );
+
         $middleware->api(prepend: [
             \App\Http\Middleware\ForceJsonResponse::class,
         ]);
