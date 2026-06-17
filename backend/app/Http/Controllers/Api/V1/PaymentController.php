@@ -10,6 +10,7 @@ use App\Http\Requests\Payment\PayPaymentRequest;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\User;
+use App\Notifications\BookingConfirmed;
 use App\Notifications\NewBooking;
 use App\Services\MoyasarService;
 use App\Traits\ApiResponse;
@@ -251,13 +252,21 @@ class PaymentController extends Controller
         $booking->update(['status' => 'confirmed']);
         $booking->loadMissing('unit.owner', 'user');
 
-        $recipients = User::role(['Admin', 'SuperAdmin'])->get();
-        if ($owner = $booking->unit?->owner) {
-            $recipients = $recipients->push($owner)->unique('id');
-        }
+        // Best-effort: a mail/SMS failure must never break a paid booking.
+        try {
+            $recipients = User::role(['Admin', 'SuperAdmin'])->get();
+            if ($owner = $booking->unit?->owner) {
+                $recipients = $recipients->push($owner)->unique('id');
+            }
 
-        if ($recipients->isNotEmpty()) {
-            Notification::send($recipients, new NewBooking($booking));
+            if ($recipients->isNotEmpty()) {
+                Notification::send($recipients, new NewBooking($booking));
+            }
+
+            // FR-034 / FR-100: SMS booking confirmation to the guest.
+            $booking->user?->notify(new BookingConfirmed($booking));
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 

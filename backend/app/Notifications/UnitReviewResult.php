@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Models\Unit;
+use App\Notifications\Channels\SmsChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -27,7 +28,16 @@ class UnitReviewResult extends Notification
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return ['database', 'mail', SmsChannel::class];
+    }
+
+    public function toSms(object $notifiable): string
+    {
+        $name = $this->unit->unit_name;
+
+        return $this->approved
+            ? 'ممسى: تمت الموافقة على وحدتك "' . $name . '" وأصبحت ظاهرة على المنصة.'
+            : 'ممسى: تم رفض وحدتك "' . $name . '". السبب: ' . ($this->reason ?? '-');
     }
 
     public function toMail(object $notifiable): MailMessage

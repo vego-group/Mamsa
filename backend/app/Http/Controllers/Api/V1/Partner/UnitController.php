@@ -159,10 +159,14 @@ class UnitController extends Controller
      */
     private function notifyAdminsOfRequest(Unit $unit): void
     {
-        $admins = User::role(['Admin', 'SuperAdmin'])->get();
+        try {
+            $admins = User::role(['Admin', 'SuperAdmin'])->get();
 
-        if ($admins->isNotEmpty()) {
-            Notification::send($admins, new NewUnitRequest($unit->loadMissing('owner')));
+            if ($admins->isNotEmpty()) {
+                Notification::send($admins, new NewUnitRequest($unit->loadMissing('owner')));
+            }
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 }
