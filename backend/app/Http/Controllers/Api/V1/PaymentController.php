@@ -9,10 +9,13 @@ use App\Http\Requests\Payment\InitiatePaymentRequest;
 use App\Http\Requests\Payment\PayPaymentRequest;
 use App\Models\Booking;
 use App\Models\Payment;
+use App\Models\User;
+use App\Notifications\NewBooking;
 use App\Services\MoyasarService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 
 class PaymentController extends Controller
 {
@@ -107,7 +110,7 @@ class PaymentController extends Controller
         ]);
 
         if ($status === 'paid') {
-            $payment->booking->update(['status' => 'confirmed']);
+            $this->confirmBooking($payment->booking);
         }
 
         return $this->success([
@@ -152,7 +155,7 @@ class PaymentController extends Controller
         ]);
 
         if ($paid) {
-            $payment->booking->update(['status' => 'confirmed']);
+            $this->confirmBooking($payment->booking);
         }
 
         return $this->success([
@@ -197,7 +200,7 @@ class PaymentController extends Controller
         ]);
 
         if ($verified) {
-            $payment->booking->update(['status' => 'confirmed']);
+            $this->confirmBooking($payment->booking);
         }
 
         return $this->success(['ok' => true, 'status' => $verified ? 'paid' : 'failed']);
@@ -230,13 +233,32 @@ class PaymentController extends Controller
             'moyasar_response' => $response,
         ]);
 
-        $payment->booking->update(['status' => 'confirmed']);
+        $this->confirmBooking($payment->booking);
 
         return $this->success([
             'status'     => 'paid',
             'payment_id' => $payment->id,
             'test'       => $response['test'] ?? false,
         ], 'تم الدفع بنجاح');
+    }
+
+    /**
+     * Confirm a paid booking and notify the unit's partner + all admins
+     * (in-app + email). Single entry point for every payment success path.
+     */
+    private function confirmBooking(Booking $booking): void
+    {
+        $booking->update(['status' => 'confirmed']);
+        $booking->loadMissing('unit.owner', 'user');
+
+        $recipients = User::role(['Admin', 'SuperAdmin'])->get();
+        if ($owner = $booking->unit?->owner) {
+            $recipients = $recipients->push($owner)->unique('id');
+        }
+
+        if ($recipients->isNotEmpty()) {
+            Notification::send($recipients, new NewBooking($booking));
+        }
     }
 
     private function isTestMode(): bool

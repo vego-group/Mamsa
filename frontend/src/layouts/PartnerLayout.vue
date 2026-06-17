@@ -8,8 +8,11 @@
         </button>
         <span class="font-title-sm text-title-sm">{{ pageTitle }}</span>
       </div>
-      <div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center text-primary font-bold text-sm">
-        {{ initials }}
+      <div class="flex items-center gap-3">
+        <NotificationBell variant="mobile" base-path="/partner/notifications" />
+        <div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center text-primary font-bold text-sm">
+          {{ initials }}
+        </div>
       </div>
     </header>
 
@@ -23,6 +26,7 @@
       <!-- Desktop top bar -->
       <header class="hidden lg:flex sticky top-0 z-40 bg-white border-b border-outline-variant shadow-sm flex-row-reverse justify-between items-center px-gutter py-4">
         <div class="flex items-center gap-3">
+          <NotificationBell variant="desktop" base-path="/partner/notifications" />
           <div class="text-right">
             <p class="text-body-sm font-bold text-on-surface leading-none">{{ auth.user?.name || 'شريك' }}</p>
             <p class="text-[11px] text-on-surface-variant">{{ isCompany ? 'شركة' : 'فرد' }}</p>
@@ -46,6 +50,7 @@ import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import PartnerSidebar from '@/components/partner/PartnerSidebar.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
 
 const auth = useAuthStore()
 const route = useRoute()

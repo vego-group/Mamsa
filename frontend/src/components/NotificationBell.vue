@@ -64,10 +64,11 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { adminApi } from '@/api/admin'
+import http from '@/api/http'
 
-defineProps({
+const props = defineProps({
   variant: { type: String, default: 'desktop' }, // 'desktop' | 'mobile'
+  basePath: { type: String, default: '/admin/notifications' }, // role-scoped endpoint
 })
 
 const router = useRouter()
@@ -80,7 +81,7 @@ let pollTimer = null
 
 async function fetchUnread() {
   try {
-    const res = await adminApi.notificationsUnread()
+    const res = await http.get(`${props.basePath}/unread-count`)
     unreadCount.value = (res.data.data ?? res.data).unread_count ?? 0
   } catch (e) {
     // ignore transient errors
@@ -90,7 +91,7 @@ async function fetchUnread() {
 async function fetchList() {
   loading.value = true
   try {
-    const res = await adminApi.notifications()
+    const res = await http.get(props.basePath)
     const data = res.data.data ?? res.data
     items.value = data.items ?? []
     unreadCount.value = data.unread_count ?? 0
@@ -108,7 +109,7 @@ function toggle() {
 
 async function markAll() {
   try {
-    await adminApi.markAllNotificationsRead()
+    await http.post(`${props.basePath}/read-all`)
     items.value = items.value.map((n) => ({ ...n, read: true }))
     unreadCount.value = 0
   } catch (e) { /* noop */ }
@@ -117,7 +118,7 @@ async function markAll() {
 async function openItem(n) {
   if (!n.read) {
     try {
-      await adminApi.markNotificationRead(n.id)
+      await http.post(`${props.basePath}/${n.id}/read`)
       n.read = true
       unreadCount.value = Math.max(0, unreadCount.value - 1)
     } catch (e) { /* noop */ }

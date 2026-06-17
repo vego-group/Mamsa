@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Controllers\Api\V1\Admin;
+namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Traits\ApiResponse;
@@ -10,8 +10,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * In-app notification center for Admin/SuperAdmin (FR-101, screen G-3).
- * Backed by Laravel database notifications on the authenticated user.
+ * In-app notification center (FR-101, screen G-3). Backed by Laravel database
+ * notifications on the authenticated user, so it serves any role — Admin /
+ * SuperAdmin and Partner (Individual / Company) — via their own route group.
  */
 class NotificationController extends Controller
 {

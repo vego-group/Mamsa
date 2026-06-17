@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\Unit;
+use App\Notifications\UnitReviewResult;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -78,6 +79,8 @@ class RequestController extends Controller
 
         $unit->update(['approval_status' => 'approved', 'rejection_reason' => null]);
 
+        $unit->loadMissing('owner')->owner?->notify(new UnitReviewResult($unit, approved: true));
+
         return $this->success(['unit' => new UnitResource($unit->fresh())], 'تمت الموافقة');
     }
 
@@ -95,6 +98,8 @@ class RequestController extends Controller
             'approval_status'  => 'rejected',
             'rejection_reason' => $data['reason'],
         ]);
+
+        $unit->loadMissing('owner')->owner?->notify(new UnitReviewResult($unit, approved: false, reason: $data['reason']));
 
         return $this->success(['unit' => new UnitResource($unit->fresh())], 'تم الرفض');
     }

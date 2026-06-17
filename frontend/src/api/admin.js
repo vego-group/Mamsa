@@ -29,10 +29,5 @@ export const adminApi = {
 
     // التقارير
     reports: () => http.get('/admin/reports'),
-
-    // الإشعارات (داخل التطبيق)
-    notifications: () => http.get('/admin/notifications'),
-    notificationsUnread: () => http.get('/admin/notifications/unread-count'),
-    markNotificationRead: (id) => http.post(`/admin/notifications/${id}/read`),
-    markAllNotificationsRead: () => http.post('/admin/notifications/read-all'),
+    // ملاحظة: إشعارات لوحة التحكم يتعامل معها NotificationBell عبر basePath
 }

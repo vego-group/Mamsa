@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\Auth\AdminAuthController;
 use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
 use App\Http\Controllers\Api\V1\Auth\PartnerAuthController;
 use App\Http\Controllers\Api\V1\BookingController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReviewController;
 use App\Http\Controllers\Api\V1\UnitController;
@@ -96,6 +97,13 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::get('bookings', [Partner\BookingController::class, 'index'])->name('bookings.index');
+
+            Route::prefix('notifications')->name('notifications.')->group(function () {
+                Route::get('/', [NotificationController::class, 'index'])->name('index');
+                Route::get('unread-count', [NotificationController::class, 'unreadCount'])->name('unread');
+                Route::post('read-all', [NotificationController::class, 'markAllAsRead'])->name('read-all');
+                Route::post('{id}/read', [NotificationController::class, 'markAsRead'])->name('read');
+            });
         });
 
         /* =============== ADMIN =============== */
@@ -121,10 +129,10 @@ Route::prefix('v1')->group(function () {
             Route::get('reports', [Admin\ReportController::class, 'index'])->name('reports');
 
             Route::prefix('notifications')->name('notifications.')->group(function () {
-                Route::get('/', [Admin\NotificationController::class, 'index'])->name('index');
-                Route::get('unread-count', [Admin\NotificationController::class, 'unreadCount'])->name('unread');
-                Route::post('read-all', [Admin\NotificationController::class, 'markAllAsRead'])->name('read-all');
-                Route::post('{id}/read', [Admin\NotificationController::class, 'markAsRead'])->name('read');
+                Route::get('/', [NotificationController::class, 'index'])->name('index');
+                Route::get('unread-count', [NotificationController::class, 'unreadCount'])->name('unread');
+                Route::post('read-all', [NotificationController::class, 'markAllAsRead'])->name('read-all');
+                Route::post('{id}/read', [NotificationController::class, 'markAsRead'])->name('read');
             });
         });
     });
