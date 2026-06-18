@@ -188,6 +188,26 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 In the Moyasar dashboard add `https://your-domain.com/api/v1/payments/callback`
 and set its secret token equal to `MOYASAR_WEBHOOK_SECRET`.
 
+### A.9 — Apple Pay (web)
+
+Apple Pay rides on the Moyasar hosted form (it already lists `applepay` in its
+methods), but Apple only renders the button once the domain is verified:
+
+1. Moyasar Dashboard → **Settings → Apple Pay → Web** → add your production
+   domain and make sure the Apple Pay certificate is activated.
+2. Click **Download Association** and save the file — with **no extension** — to:
+   ```
+   frontend/public/.well-known/apple-developer-merchantid-domain-association
+   ```
+   Vite ships it to the build output and nginx serves it verbatim (see the
+   dedicated `location` block in `frontend/nginx.conf`). After deploy, confirm
+   `https://your-domain.com/.well-known/apple-developer-merchantid-domain-association`
+   returns the raw file (not the SPA `index.html`).
+3. Back in the dashboard, click **Verify**. The button then appears
+   automatically on Safari / Apple devices over HTTPS — no app code change.
+
+> Requires HTTPS (see A.6). Apple Pay never renders over plain HTTP.
+
 ---
 
 ## 1. Frontend → Vercel
