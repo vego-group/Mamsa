@@ -9,10 +9,7 @@
         <span class="font-title-sm text-title-sm">{{ pageTitle }}</span>
       </div>
       <div class="flex items-center gap-3">
-        <button class="relative p-2 hover:bg-white/10 rounded-lg">
-          <span class="material-symbols-outlined">notifications</span>
-          <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-primary"></span>
-        </button>
+        <NotificationBell variant="mobile" />
         <div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center text-primary font-bold text-sm">
           {{ adminInitials }}
         </div>
@@ -37,10 +34,7 @@
       <!-- Desktop top bar -->
       <header class="hidden lg:flex sticky top-0 z-40 bg-white border-b border-outline-variant shadow-sm flex-row-reverse justify-between items-center px-gutter py-4">
         <div class="flex items-center gap-4">
-          <button class="relative w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors">
-            <span class="material-symbols-outlined text-on-surface-variant">notifications</span>
-            <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-white"></span>
-          </button>
+          <NotificationBell variant="desktop" />
           <button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors">
             <span class="material-symbols-outlined text-on-surface-variant">settings</span>
           </button>
@@ -79,6 +73,7 @@ import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import AdminSidebar from '@/components/admin/AdminSidebar.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
 
 const auth = useAuthStore()
 const route = useRoute()

@@ -10,8 +10,10 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             RolesAndPermissionsSeeder::class,
+            CancellationPolicySeeder::class,   // before units so they can reference a policy
             DevUsersSeeder::class,
             SampleUnitsSeeder::class,
+            OffersSeeder::class,
         ]);
     }
 }

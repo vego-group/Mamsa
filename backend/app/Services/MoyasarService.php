@@ -171,6 +171,51 @@ class MoyasarService
         }
     }
 
+    /**
+     * Refund a captured payment — SRS 2.3.3 / 3.1.
+     * Pass $amountHalalas for a partial refund; omit it for a full refund.
+     * Refunds are automatic on Moyasar (no manual approval).
+     */
+    public function refund(string $moyasarId, ?int $amountHalalas = null): array
+    {
+        $payload = $amountHalalas !== null ? ['amount' => $amountHalalas] : [];
+
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->post("{$this->baseUrl}/payments/{$moyasarId}/refund", $payload);
+
+        if (! $response->successful()) {
+            Log::error('Moyasar refund failed', [
+                'moyasar_id' => $moyasarId,
+                'status'     => $response->status(),
+                'body'       => $response->json(),
+            ]);
+            throw new \RuntimeException('فشل تنفيذ الاسترداد: '.$response->json('message', 'خطأ غير معروف'));
+        }
+
+        return $response->json();
+    }
+
+    /**
+     * Void a payment captured within ~2h — SRS 2.3.3. Cheaper/faster than a
+     * refund because it releases the hold before settlement (full amount only).
+     */
+    public function void(string $moyasarId): array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->post("{$this->baseUrl}/payments/{$moyasarId}/void");
+
+        if (! $response->successful()) {
+            Log::error('Moyasar void failed', [
+                'moyasar_id' => $moyasarId,
+                'status'     => $response->status(),
+                'body'       => $response->json(),
+            ]);
+            throw new \RuntimeException('فشل إلغاء عملية الدفع: '.$response->json('message', 'خطأ غير معروف'));
+        }
+
+        return $response->json();
+    }
+
     public function getPublishableKey(): string
     {
         return $this->publishableKey;

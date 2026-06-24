@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\Unit;
+use App\Notifications\UnitReviewResult;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -78,6 +79,8 @@ class RequestController extends Controller
 
         $unit->update(['approval_status' => 'approved', 'rejection_reason' => null]);
 
+        $this->notifyOwner($unit, approved: true);
+
         return $this->success(['unit' => new UnitResource($unit->fresh())], 'تمت الموافقة');
     }
 
@@ -96,7 +99,22 @@ class RequestController extends Controller
             'rejection_reason' => $data['reason'],
         ]);
 
+        $this->notifyOwner($unit, approved: false, reason: $data['reason']);
+
         return $this->success(['unit' => new UnitResource($unit->fresh())], 'تم الرفض');
+    }
+
+    /**
+     * Notify the unit's partner of the review result (in-app + email + SMS).
+     * Best-effort — a delivery failure must not fail the admin action.
+     */
+    private function notifyOwner(Unit $unit, bool $approved, ?string $reason = null): void
+    {
+        try {
+            $unit->loadMissing('owner')->owner?->notify(new UnitReviewResult($unit, $approved, $reason));
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /** @return array<string,int> */

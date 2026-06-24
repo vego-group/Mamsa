@@ -2,15 +2,20 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Bookings\CancelBookingAction;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BookingResource;
 use App\Models\Booking;
 use App\Models\Unit;
+use App\Services\CancellationPolicyService;
+use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class BookingController extends Controller
 {
+    use ApiResponse;
+
     public function show(Booking $booking): BookingResource|JsonResponse
     {
         if ($booking->user_id !== auth()->id()) {
@@ -22,19 +27,35 @@ class BookingController extends Controller
         return new BookingResource($booking);
     }
 
-    public function cancel(Request $request, Booking $booking): JsonResponse
+    /**
+     * Preview the refund the guest would receive if they cancelled now —
+     * FR-043/044. Read-only; never touches the gateway.
+     */
+    public function cancellationPreview(Booking $booking, CancellationPolicyService $policy): JsonResponse
     {
         if ($booking->user_id !== auth()->id()) {
-            return response()->json(['message' => 'غير مصرح'], 403);
+            return $this->error('غير مصرح', 403);
         }
 
-        if ($booking->status !== 'pending') {
-            return response()->json(['message' => 'لا يمكن إلغاء هذا الحجز'], 422);
+        return $this->success($policy->quote($booking)->toArray());
+    }
+
+    /**
+     * Cancel a booking and run the automatic refund/void — FR-046/047.
+     * All business rules live in CancelBookingAction; the controller stays thin.
+     */
+    public function cancel(Booking $booking, CancelBookingAction $action): JsonResponse
+    {
+        if ($booking->user_id !== auth()->id()) {
+            return $this->error('غير مصرح', 403);
         }
 
-        $booking->update(['status' => 'cancelled']);
+        $quote = $action->execute($booking, $booking->user);
 
-        return response()->json(['message' => 'تم الإلغاء بنجاح']);
+        return $this->success(
+            $quote->toArray(),
+            $quote->refundAmount > 0 ? 'تم الإلغاء وسيتم رد المبلغ المستحق' : 'تم إلغاء الحجز',
+        );
     }
 
     public function store(Request $request): JsonResponse

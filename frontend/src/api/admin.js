@@ -29,4 +29,5 @@ export const adminApi = {
 
     // التقارير
     reports: () => http.get('/admin/reports'),
+    // ملاحظة: إشعارات لوحة التحكم يتعامل معها NotificationBell عبر basePath
 }

@@ -9,16 +9,24 @@ use App\Http\Requests\Payment\InitiatePaymentRequest;
 use App\Http\Requests\Payment\PayPaymentRequest;
 use App\Models\Booking;
 use App\Models\Payment;
+use App\Models\User;
+use App\Notifications\BookingConfirmed;
+use App\Notifications\NewBooking;
+use App\Services\CancellationPolicyService;
 use App\Services\MoyasarService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 
 class PaymentController extends Controller
 {
     use ApiResponse;
 
-    public function __construct(private readonly MoyasarService $moyasar) {}
+    public function __construct(
+        private readonly MoyasarService $moyasar,
+        private readonly CancellationPolicyService $cancellationPolicy,
+    ) {}
 
     /**
      * Step 1 — create (or fetch) the pending payment for a booking and hand the
@@ -107,7 +115,7 @@ class PaymentController extends Controller
         ]);
 
         if ($status === 'paid') {
-            $payment->booking->update(['status' => 'confirmed']);
+            $this->confirmBooking($payment->booking);
         }
 
         return $this->success([
@@ -152,7 +160,7 @@ class PaymentController extends Controller
         ]);
 
         if ($paid) {
-            $payment->booking->update(['status' => 'confirmed']);
+            $this->confirmBooking($payment->booking);
         }
 
         return $this->success([
@@ -197,7 +205,7 @@ class PaymentController extends Controller
         ]);
 
         if ($verified) {
-            $payment->booking->update(['status' => 'confirmed']);
+            $this->confirmBooking($payment->booking);
         }
 
         return $this->success(['ok' => true, 'status' => $verified ? 'paid' : 'failed']);
@@ -230,13 +238,53 @@ class PaymentController extends Controller
             'moyasar_response' => $response,
         ]);
 
-        $payment->booking->update(['status' => 'confirmed']);
+        $this->confirmBooking($payment->booking);
 
         return $this->success([
             'status'     => 'paid',
             'payment_id' => $payment->id,
             'test'       => $response['test'] ?? false,
         ], 'تم الدفع بنجاح');
+    }
+
+    /**
+     * Confirm a paid booking and notify the unit's partner + all admins
+     * (in-app + email). Single entry point for every payment success path.
+     */
+    private function confirmBooking(Booking $booking): void
+    {
+        // Idempotency: a webhook + redirect can both land here. Freeze + notify once.
+        if ($booking->status === Booking::STATUS_CONFIRMED) {
+            return;
+        }
+
+        $booking->loadMissing('unit.cancellationPolicy.tiers');
+
+        // FR-036: freeze the cancellation policy onto the booking at payment time
+        // so later partner edits never alter this booking's refund terms.
+        $booking->update([
+            'status'                => Booking::STATUS_CONFIRMED,
+            'cancellation_snapshot' => $this->cancellationPolicy->snapshotForBooking($booking),
+        ]);
+
+        $booking->loadMissing('unit.owner', 'user');
+
+        // Best-effort: a mail/SMS failure must never break a paid booking.
+        try {
+            $recipients = User::role(['Admin', 'SuperAdmin'])->get();
+            if ($owner = $booking->unit?->owner) {
+                $recipients = $recipients->push($owner)->unique('id');
+            }
+
+            if ($recipients->isNotEmpty()) {
+                Notification::send($recipients, new NewBooking($booking));
+            }
+
+            // FR-034 / FR-100: SMS booking confirmation to the guest.
+            $booking->user?->notify(new BookingConfirmed($booking));
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     private function isTestMode(): bool

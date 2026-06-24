@@ -17,6 +17,8 @@ class Unit extends Model
         'price',
         'capacity',
         'bedrooms',
+        'bathrooms',
+        'area',
         'city',
         'district',
         'lat',
@@ -29,6 +31,7 @@ class Unit extends Model
         'rejection_reason',
         'status',
         'cancellation_policy',
+        'cancellation_policy_id',
         'checkin_time',
         'checkout_time',
         'calendar_token',
@@ -45,6 +48,11 @@ class Unit extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function cancellationPolicy(): BelongsTo
+    {
+        return $this->belongsTo(CancellationPolicy::class);
     }
 
     public function images(): HasMany

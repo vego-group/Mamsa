@@ -1,0 +1,18 @@
+# Production overlay for a VPS. Run it EXPLICITLY so the dev override
+# (docker-compose.override.yml — bind-mounts source, runs as root) is NOT
+# auto-loaded:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Laravel runtime config (APP_*, FGC SMS, Moyasar, MAIL, CORS, …) is read from
+# the mounted backend/.env file. Mounting the file (rather than relying on
+# Docker `environment:`) sidesteps php-fpm's default `clear_env`, which would
+# otherwise hide injected env vars from PHP.
+services:
+  backend:
+    volumes:
+      - ./backend/.env:/var/www/html/.env:ro
+
+  worker:
+    volumes:
+      - ./backend/.env:/var/www/html/.env:ro
