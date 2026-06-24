@@ -25,3 +25,9 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# SQLite databases (local data — never commit)
+*.sqlite
+*.sqlite3
+/database/*.sqlite
+/mamsa
