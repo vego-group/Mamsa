@@ -12,6 +12,7 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Notifications\BookingConfirmed;
 use App\Notifications\NewBooking;
+use App\Services\CancellationPolicyService;
 use App\Services\MoyasarService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -22,7 +23,10 @@ class PaymentController extends Controller
 {
     use ApiResponse;
 
-    public function __construct(private readonly MoyasarService $moyasar) {}
+    public function __construct(
+        private readonly MoyasarService $moyasar,
+        private readonly CancellationPolicyService $cancellationPolicy,
+    ) {}
 
     /**
      * Step 1 — create (or fetch) the pending payment for a booking and hand the
@@ -249,7 +253,20 @@ class PaymentController extends Controller
      */
     private function confirmBooking(Booking $booking): void
     {
-        $booking->update(['status' => 'confirmed']);
+        // Idempotency: a webhook + redirect can both land here. Freeze + notify once.
+        if ($booking->status === Booking::STATUS_CONFIRMED) {
+            return;
+        }
+
+        $booking->loadMissing('unit.cancellationPolicy.tiers');
+
+        // FR-036: freeze the cancellation policy onto the booking at payment time
+        // so later partner edits never alter this booking's refund terms.
+        $booking->update([
+            'status'                => Booking::STATUS_CONFIRMED,
+            'cancellation_snapshot' => $this->cancellationPolicy->snapshotForBooking($booking),
+        ]);
+
         $booking->loadMissing('unit.owner', 'user');
 
         // Best-effort: a mail/SMS failure must never break a paid booking.
