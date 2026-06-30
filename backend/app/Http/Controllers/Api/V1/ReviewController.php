@@ -19,13 +19,12 @@ class ReviewController extends Controller
             'comment'    => ['required', 'string', 'min:10', 'max:1000'],
         ]);
 
-        // NOTE: the spec says reviews are allowed once a booking is `completed`,
-        // but there is currently no mechanism that transitions bookings to that
-        // state, so `confirmed` is used. Switch to STATUS_COMPLETED once a
-        // checkout-completion job exists.
+        // FR-050: reviews are only allowed once the stay is completed. The
+        // bookings:complete scheduled command transitions Confirmed → Completed
+        // after checkout.
         $booking = Booking::where('id', $data['booking_id'])
             ->where('user_id', auth()->id())
-            ->where('status', Booking::STATUS_CONFIRMED)
+            ->where('status', Booking::STATUS_COMPLETED)
             ->firstOrFail();
 
         if ($booking->review()->exists()) {
