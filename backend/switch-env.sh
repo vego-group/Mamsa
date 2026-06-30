@@ -17,9 +17,23 @@
 #
 set -euo pipefail
 
-PHP="${PHP_BIN:-php}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
+
+# Resolve a PHP >= 8.4 binary. Honour PHP_BIN, else probe common alt-php paths,
+# else fall back to `php` only if it is new enough. The default shell `php` on
+# shared hosting is often 7.x and fails artisan's platform check.
+detect_php() {
+    if [ -n "${PHP_BIN:-}" ]; then echo "$PHP_BIN"; return; fi
+    for p in /opt/alt/php84/usr/bin/php /opt/alt/php83/usr/bin/php /opt/alt/php82/usr/bin/php; do
+        [ -x "$p" ] && { echo "$p"; return; }
+    done
+    if command -v php >/dev/null 2>&1; then
+        ver="$(php -r 'echo PHP_VERSION_ID;' 2>/dev/null || echo 0)"
+        [ "$ver" -ge 80200 ] && { echo "php"; return; }
+    fi
+    echo ""
+}
 
 show_status() {
     if [ -f .env ]; then
@@ -38,6 +52,12 @@ esac
 
 if [ ! -f "$SRC" ]; then
     echo "✗ $SRC not found. Create it first (see header / ENVIRONMENTS.md)."
+    exit 1
+fi
+
+PHP="$(detect_php)"
+if [ -z "$PHP" ]; then
+    echo "✗ No PHP >= 8.2 found. Set PHP_BIN, e.g. PHP_BIN=/opt/alt/php84/usr/bin/php $0 $*"
     exit 1
 fi
 
