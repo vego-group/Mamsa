@@ -61,7 +61,33 @@ php artisan cache:table && php artisan migrate --force
 OTP_STORE=database
 ```
 
-## 4. Database migration
+## 4. Email verification — Resend (FR-005 / FR-006)
+
+Partner registration sends a verification code by email
+(`POST /auth/email/verify` + `/auth/email/request-otp`). The code uses Laravel's
+`Mail` facade (driver-agnostic), so any mailer works — but **Resend is
+recommended on shared hosting** because it sends over HTTPS API, avoiding the
+SMTP ports (25/465/587) that Hostinger commonly blocks.
+
+```bash
+# install the official Laravel driver (one-time)
+composer require resend/resend-laravel
+```
+
+```env
+MAIL_MAILER=resend            # default is 'log' which NEVER sends — must change in prod
+RESEND_API_KEY=re_xxxxxxxxxxxx
+MAIL_FROM_ADDRESS="no-reply@mamsaa.com"
+MAIL_FROM_NAME="مَمسَى"
+```
+
+- In the Resend dashboard, verify domain `mamsaa.com` and add the **SPF + DKIM**
+  DNS records (otherwise mail lands in spam).
+- After deploy run `php artisan view:cache` to compile the email template.
+- To test without live mail: `MAIL_MAILER=log` → read the code from
+  `storage/logs/laravel.log`, then switch back to `resend`.
+
+## 5. Database migration
 
 A migration adds `unique(booking_id)` to `payments` (DB-level idempotency so the
 `firstOrCreate` race can't create duplicate payments).
@@ -73,11 +99,13 @@ php artisan tinker --execute="echo \App\Models\Payment::groupBy('booking_id')->h
 php artisan migrate --force
 ```
 
-## 5. Pre-launch verification
+## 6. Pre-launch verification
 
 - [ ] `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL` https — confirmed.
 - [ ] Moyasar **live** keys set; webhook registered with matching secret.
 - [ ] `SMS_DRIVER=fgc` with valid FGC creds + approved sender.
+- [ ] `MAIL_MAILER=resend` with valid API key + domain SPF/DKIM verified; real
+      partner email code received (not just logged).
 - [ ] `php artisan migrate --force` ran clean (unique booking_id applied).
 - [ ] `config:cache` + `route:cache` rebuilt after every `.env` change.
 - [ ] Real OTP received on a live phone (not just logged).
