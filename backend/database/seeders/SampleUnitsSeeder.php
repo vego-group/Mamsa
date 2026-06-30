@@ -102,29 +102,151 @@ class SampleUnitsSeeder extends Seeder
                     'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=900',
                 ],
             ],
+
+            // ── Chalets (شاليهات) ──────────────────────────────────────
+            [
+                'owner' => $individual,
+                'unit_name' => 'شاليه راقٍ مع مسبح وجلسات خارجية',
+                'unit_type' => 'chalet',
+                'price' => 1200, 'capacity' => 8, 'bedrooms' => 3,
+                'city' => 'الطائف', 'district' => 'حي الشفا',
+                'description' => 'شاليه عصري بمسبح خاص وجلسات خارجية مظللة، أجواء عائلية هادئة وإطلالة على المرتفعات.',
+                'features' => ['مسبح', 'شواء', 'واي فاي', 'موقف سيارات', 'مكيف', 'حديقة'],
+                'images' => [
+                    'https://images.unsplash.com/photo-1542718610-a1d656d1884c?w=900',
+                    'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=900',
+                ],
+            ],
+            [
+                'owner' => $company,
+                'unit_name' => 'شاليه عائلي بمسبح مدفأ',
+                'unit_type' => 'chalet',
+                'price' => 950, 'capacity' => 6, 'bedrooms' => 2,
+                'city' => 'أبها', 'district' => 'حي الموظفين',
+                'description' => 'شاليه مريح بمسبح مدفأ ومرافق متكاملة، مثالي للعطلات القصيرة في أجواء الجنوب الباردة.',
+                'features' => ['مسبح', 'مكيف', 'واي فاي', 'مطبخ', 'موقف سيارات'],
+                'images' => [
+                    'https://images.unsplash.com/photo-1449844908441-8829872d2607?w=900',
+                    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=900',
+                ],
+            ],
+
+            // ── Rest houses (استراحات) ─────────────────────────────────
+            [
+                'owner' => $individual,
+                'unit_name' => 'استراحة واسعة بمسبح وملعب',
+                'unit_type' => 'rest',
+                'price' => 800, 'capacity' => 20, 'bedrooms' => 2,
+                'city' => 'الرياض', 'district' => 'حي العمارية',
+                'description' => 'استراحة كبيرة بمسبح وملعب كرة قدم ومجالس واسعة، تتسع للتجمعات والمناسبات.',
+                'features' => ['مسبح', 'ملعب', 'شواء', 'واي فاي', 'موقف سيارات', 'مكيف'],
+                'images' => [
+                    'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900',
+                    'https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=900',
+                ],
+            ],
+
+            // ── Resorts (منتجعات) ──────────────────────────────────────
+            [
+                'owner' => $company,
+                'unit_name' => 'منتجع صحي بإطلالة جبلية',
+                'unit_type' => 'resort',
+                'price' => 1800, 'capacity' => 4, 'bedrooms' => 1,
+                'city' => 'أبها', 'district' => 'السودة',
+                'description' => 'منتجع صحي هادئ بإطلالة بانورامية على الجبال، يوفر تجربة استجمام راقية وخدمات سبا.',
+                'features' => ['مسبح', 'سبا', 'واي فاي', 'مطعم', 'مكيف', 'موقف سيارات'],
+                'images' => [
+                    'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=900',
+                    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=900',
+                ],
+            ],
+
+            // ── Camps (مخيمات) ─────────────────────────────────────────
+            [
+                'owner' => $individual,
+                'unit_name' => 'مخيم صحراوي فاخر',
+                'unit_type' => 'camp',
+                'price' => 600, 'capacity' => 12, 'bedrooms' => 1,
+                'city' => 'الرياض', 'district' => 'الثمامة',
+                'description' => 'مخيم صحراوي بخيام مكيّفة وجلسات نار ومرافق حديثة، تجربة برّية أصيلة قرب المدينة.',
+                'features' => ['مكيف', 'شواء', 'واي فاي', 'موقف سيارات', 'جلسة نار'],
+                'images' => [
+                    'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=900',
+                    'https://images.unsplash.com/photo-1537905569824-f89f14cceb68?w=900',
+                ],
+            ],
+
+            // ── Luxury tier (3000–5000 ر.س/ليلة) — gives the price slider real inventory ──
+            [
+                'owner' => $company,
+                'unit_name' => 'فيلا فاخرة مع إطلالة على البحر',
+                'unit_type' => 'villa',
+                'price' => 3500, 'capacity' => 12, 'bedrooms' => 6,
+                'city' => 'جدة', 'district' => 'حي الشاطئ',
+                'description' => 'فيلا فخمة على الواجهة البحرية بمسبح لا متناهٍ وشاطئ خاص، تشطيبات راقية وخدمة كاملة للمناسبات المميزة.',
+                'features' => ['مسبح', 'شاطئ خاص', 'واي فاي', 'حديقة', 'شواء', 'موقف سيارات', 'مكيف'],
+                'images' => [
+                    'https://images.unsplash.com/photo-1613977257363-707ba9348227?w=900',
+                    'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=900',
+                ],
+            ],
+            [
+                'owner' => $company,
+                'unit_name' => 'منتجع خاص بمسابح وسبا',
+                'unit_type' => 'resort',
+                'price' => 4200, 'capacity' => 16, 'bedrooms' => 8,
+                'city' => 'أبها', 'district' => 'السودة',
+                'description' => 'منتجع متكامل بمسابح متعددة وسبا ومطعم خاص، إطلالات جبلية ساحرة وخصوصية تامة للنزلاء.',
+                'features' => ['مسبح', 'سبا', 'مطعم', 'واي فاي', 'موقف سيارات', 'مكيف', 'حديقة'],
+                'images' => [
+                    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=900',
+                    'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=900',
+                ],
+            ],
+            [
+                'owner' => $individual,
+                'unit_name' => 'قصر ريفي للمناسبات الكبرى',
+                'unit_type' => 'villa',
+                'price' => 4800, 'capacity' => 30, 'bedrooms' => 10,
+                'city' => 'الرياض', 'district' => 'الدرعية',
+                'description' => 'قصر ريفي واسع بقاعات احتفالات ومجالس فخمة وحدائق غنّاء، مثالي للأعراس والمناسبات الكبيرة.',
+                'features' => ['مسبح', 'قاعة مناسبات', 'حديقة', 'شواء', 'واي فاي', 'موقف سيارات', 'مكيف'],
+                'images' => [
+                    'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900',
+                    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=900',
+                ],
+            ],
         ];
 
         foreach ($units as $data) {
             /** @var User $owner */
             $owner = $data['owner'];
 
-            $unit = $owner->units()->create([
-                'unit_name'           => $data['unit_name'],
-                'unit_type'           => $data['unit_type'],
-                'code'                => strtoupper(Str::random(8)),
-                'price'               => $data['price'],
-                'capacity'            => $data['capacity'],
-                'bedrooms'            => $data['bedrooms'],
-                'city'                => $data['city'],
-                'district'            => $data['district'],
-                'description'         => $data['description'],
-                'approval_status'     => 'approved',
-                'status'              => 'available',
-                'cancellation_policy' => '48_hours',
-                'checkin_time'        => '15:00',
-                'checkout_time'       => '12:00',
-                'calendar_token'      => Str::random(60),
-            ]);
+            // Idempotent: keyed on (owner, unit_name) so re-seeding never duplicates.
+            $unit = $owner->units()->firstOrCreate(
+                ['unit_name' => $data['unit_name']],
+                [
+                    'unit_type'           => $data['unit_type'],
+                    'code'                => strtoupper(Str::random(8)),
+                    'price'               => $data['price'],
+                    'capacity'            => $data['capacity'],
+                    'bedrooms'            => $data['bedrooms'],
+                    'city'                => $data['city'],
+                    'district'            => $data['district'],
+                    'description'         => $data['description'],
+                    'approval_status'     => 'approved',
+                    'status'              => 'available',
+                    'cancellation_policy' => '48_hours',
+                    'checkin_time'        => '15:00',
+                    'checkout_time'       => '12:00',
+                    'calendar_token'      => Str::random(60),
+                ]
+            );
+
+            // Only attach features/images for freshly created units.
+            if (! $unit->wasRecentlyCreated) {
+                continue;
+            }
 
             // Features
             $featureIds = collect($data['features'])

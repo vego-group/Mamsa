@@ -17,6 +17,8 @@ class UnitResource extends JsonResource
             'price'               => $this->price,
             'capacity'            => $this->capacity,
             'bedrooms'            => $this->bedrooms,
+            'bathrooms'           => $this->bathrooms,
+            'area'                => $this->area,
             'city'                => $this->city,
             'district'            => $this->district,
             'lat'                 => $this->lat,

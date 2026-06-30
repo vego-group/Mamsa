@@ -36,7 +36,7 @@ class CancelBookingAction
         private readonly MoyasarService $moyasar,
     ) {}
 
-    public function execute(Booking $booking, ?User $actor = null): RefundQuote
+    public function execute(Booking $booking, ?User $actor = null, ?string $reason = null): RefundQuote
     {
         // Terminal states cannot be cancelled.
         if (in_array($booking->status, [Booking::STATUS_CANCELLED, Booking::STATUS_COMPLETED], true)) {
@@ -45,7 +45,7 @@ class CancelBookingAction
 
         // Unpaid booking: release it immediately, no money involved.
         if ($booking->status === Booking::STATUS_PENDING) {
-            DB::transaction(fn () => $this->markCancelled($booking, null, $actor));
+            DB::transaction(fn () => $this->markCancelled($booking, null, $actor, $reason));
 
             return new RefundQuote(true, 0.0, 0, null, 0);
         }
@@ -65,12 +65,12 @@ class CancelBookingAction
             [$gatewayResult, $useVoid] = $this->runGatewayRefund($payment, $quote);
         }
 
-        DB::transaction(function () use ($booking, $payment, $quote, $gatewayResult, $useVoid, $actor) {
+        DB::transaction(function () use ($booking, $payment, $quote, $gatewayResult, $useVoid, $actor, $reason) {
             if ($quote->refundAmount > 0 && $payment) {
                 $this->recordRefund($booking, $payment, $quote, $gatewayResult, $useVoid, $actor);
             }
 
-            $this->markCancelled($booking, $quote, $actor);
+            $this->markCancelled($booking, $quote, $actor, $reason);
         });
 
         $this->notifyGuest($booking, $quote);
@@ -147,13 +147,15 @@ class CancelBookingAction
         ], $actor?->id);
     }
 
-    private function markCancelled(Booking $booking, ?RefundQuote $quote, ?User $actor): void
+    private function markCancelled(Booking $booking, ?RefundQuote $quote, ?User $actor, ?string $reason = null): void
     {
         $before = ['status' => $booking->status];
 
         $booking->update([
-            'status'       => Booking::STATUS_CANCELLED,
-            'cancelled_at' => now(),
+            'status'              => Booking::STATUS_CANCELLED,
+            'cancelled_at'        => now(),
+            'cancellation_reason' => $reason,
+            'cancelled_by'        => $this->resolveActor($booking, $actor),
         ]);
 
         // The unit's dates free up automatically: availability is derived from
@@ -163,6 +165,20 @@ class CancelBookingAction
             'refund_amount'  => $quote?->refundAmount ?? 0,
             'refund_percent' => $quote?->refundPercent ?? 0,
         ], $actor?->id);
+    }
+
+    /**
+     * Classify who triggered the cancellation for the "ملغي" card.
+     * The booking owner → customer; any other authenticated actor → admin;
+     * no actor (e.g. an automated job) → system.
+     */
+    private function resolveActor(Booking $booking, ?User $actor): string
+    {
+        return match (true) {
+            $actor === null                  => 'system',
+            $actor->id === $booking->user_id => 'customer',
+            default                          => 'admin',
+        };
     }
 
     private function notifyGuest(Booking $booking, RefundQuote $quote): void

@@ -4,12 +4,19 @@ namespace App\Services;
 
 use App\Services\Sms\SmsProvider;
 use App\Support\PhoneNumber;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 
 class OtpService
 {
     public function __construct(private SmsProvider $sms) {}
+
+    /** Cache store holding OTP codes — configurable so non-Redis envs work. */
+    private function cache(): CacheRepository
+    {
+        return Cache::store(config('otp.store'));
+    }
 
     public function request(string $rawPhone, string $purpose = 'login', ?string $ip = null): string
     {
@@ -31,7 +38,7 @@ class OtpService
 
         $code = $this->generateCode();
 
-        Cache::store('redis')->put(
+        $this->cache()->put(
             $this->key($phone, $purpose),
             ['code' => $code, 'attempts' => 0, 'sent_at' => now()->timestamp, 'ip' => $ip],
             $ttl
@@ -66,7 +73,7 @@ class OtpService
         $maxAttempts = (int) config('otp.max_attempts', 3);
 
         if ($otp['attempts'] >= $maxAttempts) {
-            Cache::store('redis')->forget($key);
+            $this->cache()->forget($key);
             throw ValidationException::withMessages([
                 'code' => ['تم تجاوز الحد الأقصى للمحاولات. يرجى طلب رمز جديد.'],
             ]);
@@ -75,7 +82,7 @@ class OtpService
         // Persist incremented attempt count before checking the code,
         // so brute-force attempts are counted even if the request is aborted.
         $otp['attempts']++;
-        Cache::store('redis')->put($key, $otp, (int) config('otp.exp_minutes', 5) * 60);
+        $this->cache()->put($key, $otp, (int) config('otp.exp_minutes', 5) * 60);
 
         if (! hash_equals((string) $otp['code'], trim($code))) {
             $remaining = $maxAttempts - $otp['attempts'];
@@ -84,12 +91,12 @@ class OtpService
             ]);
         }
 
-        Cache::store('redis')->forget($key);
+        $this->cache()->forget($key);
     }
 
     private function get(string $phone, string $purpose): ?array
     {
-        return Cache::store('redis')->get($this->key($phone, $purpose));
+        return $this->cache()->get($this->key($phone, $purpose));
     }
 
     private function key(string $phone, string $purpose): string

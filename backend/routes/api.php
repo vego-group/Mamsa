@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OfferController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReviewController;
+use App\Http\Controllers\Api\V1\TestimonialController;
 use App\Http\Controllers\Api\V1\UnitController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\Partner;
@@ -51,6 +52,7 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::get('offers', [OfferController::class, 'index'])->name('api.offers.index');
+    Route::get('testimonials', [TestimonialController::class, 'index'])->name('api.testimonials.index');
 
     /* ===================== AUTHENTICATED ===================== */
     Route::middleware('auth:sanctum')->group(function () {

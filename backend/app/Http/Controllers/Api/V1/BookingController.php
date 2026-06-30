@@ -22,7 +22,7 @@ class BookingController extends Controller
             return response()->json(['message' => 'غير مصرح'], 403);
         }
 
-        $booking->load(['unit.images', 'payment', 'review']);
+        $booking->load(['unit.images', 'unit.features', 'unit.owner', 'payment', 'review']);
 
         return new BookingResource($booking);
     }
@@ -44,13 +44,17 @@ class BookingController extends Controller
      * Cancel a booking and run the automatic refund/void — FR-046/047.
      * All business rules live in CancelBookingAction; the controller stays thin.
      */
-    public function cancel(Booking $booking, CancelBookingAction $action): JsonResponse
+    public function cancel(Request $request, Booking $booking, CancelBookingAction $action): JsonResponse
     {
         if ($booking->user_id !== auth()->id()) {
             return $this->error('غير مصرح', 403);
         }
 
-        $quote = $action->execute($booking, $booking->user);
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $quote = $action->execute($booking, $booking->user, $data['reason'] ?? null);
 
         return $this->success(
             $quote->toArray(),
@@ -90,8 +94,8 @@ class BookingController extends Controller
             return response()->json(['message' => 'الوحدة محجوزة في هذه الفترة'], 422);
         }
 
-        $nights = now()->parse($data['start_date'])->diffInDays($data['end_date']);
-        $total  = $unit->price * $nights;
+        $nights  = now()->parse($data['start_date'])->diffInDays($data['end_date']);
+        $pricing = $this->priceBreakdown((float) $unit->price, $nights);
 
         $booking = Booking::create([
             'unit_id'      => $unit->id,
@@ -99,11 +103,39 @@ class BookingController extends Controller
             'start_date'   => $data['start_date'],
             'end_date'     => $data['end_date'],
             'guests'       => $data['guests'],
-            'total_amount' => $total,
+            'nightly_rate' => $pricing['nightly_rate'],
+            'subtotal'     => $pricing['subtotal'],
+            'service_fee'  => $pricing['service_fee'],
+            'cleaning_fee' => $pricing['cleaning_fee'],
+            'taxes'        => $pricing['taxes'],
+            'total_amount' => $pricing['total'],
             'status'       => 'pending', // explicit so the in-memory model matches the DB default
             'notes'        => $data['notes'] ?? null,
         ]);
 
         return response()->json(new BookingResource($booking->load('unit.images')), 201);
+    }
+
+    /**
+     * Itemise a booking total from the unit's nightly price (ملخص السعر).
+     * Fees come from config/booking.php and are frozen onto the row by store().
+     *
+     * @return array{nightly_rate: float, subtotal: float, service_fee: float, cleaning_fee: float, taxes: float, total: float}
+     */
+    private function priceBreakdown(float $nightly, int $nights): array
+    {
+        $subtotal    = round($nightly * $nights, 2);
+        $serviceFee  = round($subtotal * (float) config('booking.service_fee_rate'), 2);
+        $cleaningFee = round((float) config('booking.cleaning_fee'), 2);
+        $taxes       = round($subtotal * (float) config('booking.tax_rate'), 2);
+
+        return [
+            'nightly_rate' => $nightly,
+            'subtotal'     => $subtotal,
+            'service_fee'  => $serviceFee,
+            'cleaning_fee' => $cleaningFee,
+            'taxes'        => $taxes,
+            'total'        => round($subtotal + $serviceFee + $cleaningFee + $taxes, 2),
+        ];
     }
 }
