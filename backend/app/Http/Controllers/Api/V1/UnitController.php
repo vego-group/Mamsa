@@ -222,4 +222,28 @@ class UnitController extends Controller
 
         return response()->json(['available' => ! $conflict]);
     }
+
+    /**
+     * List a unit's reviews (newest first). Public — shown on the unit detail
+     * page. Shape matches the review object the frontend adapter expects.
+     */
+    public function reviews(Unit $unit): JsonResponse
+    {
+        $reviews = $unit->reviews()
+            ->with('user:id,name')
+            ->latest()
+            ->get()
+            ->map(fn ($r) => [
+                'id'         => (string) $r->id,
+                'booking_id' => (string) $r->booking_id,
+                'unit_id'    => (string) $r->unit_id,
+                'user_id'    => (string) $r->user_id,
+                'user_name'  => $r->user?->name,
+                'rating'     => $r->rating,
+                'comment'    => $r->comment,
+                'created_at' => $r->created_at,
+            ]);
+
+        return response()->json($reviews);
+    }
 }

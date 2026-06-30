@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
 use App\Http\Controllers\Api\V1\Auth\PartnerAuthController;
 use App\Http\Controllers\Api\V1\BookingController;
+use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OfferController;
 use App\Http\Controllers\Api\V1\PaymentController;
@@ -49,11 +50,16 @@ Route::prefix('v1')->group(function () {
         Route::get('cities', [UnitController::class, 'cities'])->name('cities');
         Route::get('budgets', [UnitController::class, 'budgets'])->name('budgets');
         Route::get('{unit}', [UnitController::class, 'show'])->name('show');
+        Route::get('{unit}/reviews', [UnitController::class, 'reviews'])->name('reviews');
         Route::post('{unit}/availability', [UnitController::class, 'checkAvailability'])->name('availability');
     });
 
     Route::get('offers', [OfferController::class, 'index'])->name('api.offers.index');
     Route::get('testimonials', [TestimonialController::class, 'index'])->name('api.testimonials.index');
+
+    // §9 — public contact form
+    Route::post('contact', [ContactController::class, 'store'])
+        ->middleware('throttle:5,1')->name('api.contact.store');
 
     /* ===================== AUTHENTICATED ===================== */
     Route::middleware('auth:sanctum')->group(function () {
