@@ -79,8 +79,8 @@ Route::prefix('v1')->group(function () {
             Route::post('{booking}/cancel', [BookingController::class, 'cancel'])->name('cancel');
         });
 
-        /* Payments */
-        Route::prefix('payments')->name('api.payments.')->group(function () {
+        /* Payments — throttled to blunt card-testing / abuse of the charge path */
+        Route::prefix('payments')->name('api.payments.')->middleware('throttle:20,1')->group(function () {
             Route::post('initiate', [PaymentController::class, 'initiate'])->name('initiate');
             Route::post('pay', [PaymentController::class, 'pay'])->name('pay');
             Route::post('verify', [PaymentController::class, 'verify'])->name('verify');

@@ -36,6 +36,8 @@ class OtpService
             }
         }
 
+        $this->enforceDailyCaps($phone, $ip);
+
         $code = $this->generateCode();
 
         $this->cache()->put(
@@ -102,6 +104,40 @@ class OtpService
     private function key(string $phone, string $purpose): string
     {
         return "otp:{$purpose}:{$phone}";
+    }
+
+    /**
+     * Cap OTP sends per phone and per IP per calendar day to blunt SMS-pumping
+     * fraud. Counters auto-expire at midnight. A breach throws before any SMS
+     * is sent (and before the cooldown counter is touched).
+     */
+    private function enforceDailyCaps(string $phone, ?string $ip): void
+    {
+        $day = now()->format('Ymd');
+
+        $checks = [
+            ['otp:cap:phone:'.$phone.':'.$day, (int) config('otp.max_per_phone_per_day', 10)],
+            ['otp:cap:ip:'.($ip ?? 'unknown').':'.$day, (int) config('otp.max_per_ip_per_day', 30)],
+        ];
+
+        foreach ($checks as [$cacheKey, $max]) {
+            if ($max <= 0) {
+                continue; // 0 = disabled
+            }
+
+            if ((int) $this->cache()->get($cacheKey, 0) >= $max) {
+                throw ValidationException::withMessages([
+                    'phone' => ['تم تجاوز الحد المسموح من المحاولات اليوم. حاول غداً.'],
+                ]);
+            }
+        }
+
+        // Increment only after both limits pass, so a blocked request is not counted.
+        foreach ($checks as [$cacheKey, $max]) {
+            if ($max > 0) {
+                $this->cache()->put($cacheKey, (int) $this->cache()->get($cacheKey, 0) + 1, now()->endOfDay());
+            }
+        }
     }
 
     private function generateCode(): string

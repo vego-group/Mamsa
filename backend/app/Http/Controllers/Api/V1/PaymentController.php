@@ -34,6 +34,8 @@ class PaymentController extends Controller
      */
     public function initiate(InitiatePaymentRequest $request): JsonResponse
     {
+        $this->assertGatewayConfigured();
+
         $data = $request->validated();
 
         $booking = Booking::where('id', $data['booking_id'])
@@ -71,6 +73,8 @@ class PaymentController extends Controller
      */
     public function pay(PayPaymentRequest $request): JsonResponse
     {
+        $this->assertGatewayConfigured();
+
         $data = $request->validated();
 
         $payment = Payment::where('id', $data['payment_id'])
@@ -196,6 +200,13 @@ class PaymentController extends Controller
             return $this->error('الدفع غير موجود', 404);
         }
 
+        // Idempotency: a redirect + webhook (or duplicate webhooks) can both land
+        // here. Once paid, never re-evaluate — a later spurious call must not
+        // flip a settled payment back to failed.
+        if ($payment->payment_status === 'paid') {
+            return $this->success(['ok' => true, 'status' => 'paid']);
+        }
+
         $verified = $this->moyasar->verifyCallback($moyasarId, (float) $payment->amount);
 
         $payment->update([
@@ -287,8 +298,25 @@ class PaymentController extends Controller
         }
     }
 
+    /**
+     * Test mode simulates a successful charge so the flow works without live
+     * credentials. It is ONLY ever allowed outside production — a missing secret
+     * key in production is a misconfiguration, never a licence to fake payments.
+     */
     private function isTestMode(): bool
     {
-        return blank(config('moyasar.secret_key'));
+        return blank(config('moyasar.secret_key')) && ! app()->isProduction();
+    }
+
+    /**
+     * Fail fast if the gateway is not configured in production. Prevents both
+     * silent test-mode fakes and confusing downstream 401s from Moyasar.
+     */
+    private function assertGatewayConfigured(): void
+    {
+        if (app()->isProduction()
+            && (blank(config('moyasar.secret_key')) || blank(config('moyasar.publishable_key')))) {
+            abort(503, 'بوابة الدفع غير مهيأة. يرجى المحاولة لاحقاً.');
+        }
     }
 }
