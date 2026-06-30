@@ -82,6 +82,13 @@ Route::prefix('v1')->group(function () {
             Route::get('profile', [UserController::class, 'profile'])->name('profile');
             Route::put('profile', [UserController::class, 'updateProfile'])->name('profile.update');
             Route::get('bookings', [UserController::class, 'bookings'])->name('bookings');
+
+            // §7.2 / §7.3 — account management
+            Route::post('change-phone', [UserController::class, 'changePhone'])
+                ->middleware('throttle:5,1')->name('change-phone');
+            Route::post('change-phone/verify', [UserController::class, 'verifyChangePhone'])
+                ->middleware('throttle:10,1')->name('change-phone.verify');
+            Route::delete('account', [UserController::class, 'deleteAccount'])->name('account.delete');
         });
 
         /* Bookings */
