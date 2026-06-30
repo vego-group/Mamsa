@@ -12,15 +12,20 @@ class ReviewController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
+        // Validation per requirements §6.1: rating 1-5, comment 10-1000 chars.
         $data = $request->validate([
             'booking_id' => ['required', 'exists:bookings,id'],
             'rating'     => ['required', 'integer', 'min:1', 'max:5'],
-            'comment'    => ['nullable', 'string', 'max:1000'],
+            'comment'    => ['required', 'string', 'min:10', 'max:1000'],
         ]);
 
+        // NOTE: the spec says reviews are allowed once a booking is `completed`,
+        // but there is currently no mechanism that transitions bookings to that
+        // state, so `confirmed` is used. Switch to STATUS_COMPLETED once a
+        // checkout-completion job exists.
         $booking = Booking::where('id', $data['booking_id'])
             ->where('user_id', auth()->id())
-            ->where('status', 'confirmed')
+            ->where('status', Booking::STATUS_CONFIRMED)
             ->firstOrFail();
 
         if ($booking->review()->exists()) {
@@ -32,9 +37,21 @@ class ReviewController extends Controller
             'user_id'    => auth()->id(),
             'unit_id'    => $booking->unit_id,
             'rating'     => $data['rating'],
-            'comment'    => $data['comment'] ?? null,
+            'comment'    => $data['comment'],
         ]);
 
-        return response()->json($review, 201);
+        $review->load('user:id,name');
+
+        // Shape matches the review object the frontend adapter expects.
+        return response()->json([
+            'id'         => (string) $review->id,
+            'booking_id' => (string) $review->booking_id,
+            'unit_id'    => (string) $review->unit_id,
+            'user_id'    => (string) $review->user_id,
+            'user_name'  => $review->user?->name,
+            'rating'     => $review->rating,
+            'comment'    => $review->comment,
+            'created_at' => $review->created_at,
+        ], 201);
     }
 }
