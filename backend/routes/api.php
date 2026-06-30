@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Auth\AdminAuthController;
+use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
 use App\Http\Controllers\Api\V1\Auth\PartnerAuthController;
 use App\Http\Controllers\Api\V1\BookingController;
@@ -62,6 +63,12 @@ Route::prefix('v1')->group(function () {
             Route::get('me', [OtpAuthController::class, 'me'])->name('me');
             Route::post('complete-profile', [OtpAuthController::class, 'completeProfile'])->name('complete-profile');
             Route::post('logout', [OtpAuthController::class, 'logout'])->name('logout');
+
+            // FR-005 / FR-006 — partner email verification
+            Route::post('email/request-otp', [EmailVerificationController::class, 'send'])
+                ->middleware('throttle:5,1')->name('email.request');
+            Route::post('email/verify', [EmailVerificationController::class, 'verify'])
+                ->middleware('throttle:10,1')->name('email.verify');
         });
 
         /* User (guest role) */

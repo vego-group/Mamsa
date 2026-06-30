@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\PartnerRegisterRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\EmailVerificationService;
 use App\Services\OtpService;
 use App\Services\RefreshTokenService;
 use App\Support\PhoneNumber;
@@ -28,6 +29,7 @@ class PartnerAuthController extends Controller
     public function __construct(
         private readonly OtpService $otp,
         private readonly RefreshTokenService $refreshTokens,
+        private readonly EmailVerificationService $emails,
     ) {}
 
     public function register(PartnerRegisterRequest $request): JsonResponse
@@ -73,12 +75,24 @@ class PartnerAuthController extends Controller
 
         $pair = $this->refreshTokens->issuePair($user, $data['device'] ?? 'partner-web');
 
+        // FR-005 — fire off the email verification code. Best-effort: a mail
+        // hiccup must never fail the registration itself.
+        $needsEmailVerification = $user->email && ! $user->email_verified_at;
+        if ($needsEmailVerification) {
+            try {
+                $this->emails->send($user);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
         return $this->success([
-            'access_token'  => $pair['access_token'],
-            'refresh_token' => $pair['refresh_token'],
-            'token_type'    => 'Bearer',
-            'expires_in'    => (int) config('tokens.access_minutes', 60) * 60,
-            'user'          => new UserResource($pair['user']->load('roles')),
+            'access_token'             => $pair['access_token'],
+            'refresh_token'            => $pair['refresh_token'],
+            'token_type'               => 'Bearer',
+            'expires_in'               => (int) config('tokens.access_minutes', 60) * 60,
+            'needs_email_verification' => (bool) $needsEmailVerification,
+            'user'                     => new UserResource($pair['user']->load('roles')),
         ], 'تم تسجيلك كشريك بنجاح', 201);
     }
 }
