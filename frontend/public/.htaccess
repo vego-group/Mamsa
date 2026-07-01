@@ -1,0 +1,29 @@
+# SPA history-mode fallback for Apache / LiteSpeed (Hostinger shared hosting).
+# Vite copies public/ into dist/, so this ships in the build. Any request that
+# is not a real file/dir is rewritten to index.html so vue-router can handle it.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Force HTTPS (Hostinger terminates TLS at the edge).
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # Serve existing files/dirs as-is.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Everything else → the SPA entrypoint.
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Long-cache the fingerprinted asset bundles; never cache the HTML shell.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|woff2?|avif|webp|png|jpg|jpeg|gif|svg)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
