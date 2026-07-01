@@ -8,10 +8,15 @@ namespace App\Support;
  */
 class Media
 {
+    /** Hard fallback so a missing/empty config value can never yield an empty path. */
+    public const DEFAULT_IMAGE_PATH = 'defaults/unit-default.avif';
+
     /** Relative path of the default image on the public storage disk. */
     public static function defaultImagePath(): string
     {
-        return (string) config('app.default_image_path');
+        $path = trim((string) config('app.default_image_path'));
+
+        return $path !== '' ? $path : self::DEFAULT_IMAGE_PATH;
     }
 
     /** Absolute, servable URL of the default image (respects APP_URL). */

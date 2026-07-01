@@ -18,12 +18,20 @@ class UnitImage extends Model
 
     public function getUrlAttribute(): string
     {
-        // Pass through absolute URLs (e.g. seeded sample photos); otherwise
-        // resolve a locally-stored path against the public storage disk.
-        if (str_starts_with($this->path, 'http://') || str_starts_with($this->path, 'https://')) {
-            return $this->path;
+        $path = trim((string) $this->path);
+
+        // Empty/legacy rows fall back to the bundled default so the URL is never
+        // just "<base>/storage" (which happens when the path is blank).
+        if ($path === '') {
+            return \App\Support\Media::defaultImageUrl();
         }
 
-        return asset('storage/' . $this->path);
+        // Pass through absolute URLs (e.g. seeded sample photos); otherwise
+        // resolve a locally-stored path against the public storage disk.
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        return asset('storage/' . $path);
     }
 }
