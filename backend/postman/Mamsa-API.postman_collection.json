@@ -1007,6 +1007,230 @@
             "description": "Soft-delete: scrub PII, revoke tokens. Returns 204."
           },
           "response": []
+        },
+        {
+          "name": "Add Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/cards",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "cards"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"brand\": \"mada\",\n  \"last4\": \"4321\",\n  \"exp_month\": 8,\n  \"exp_year\": 2028\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Saved cards store metadata only (brand/last4/expiry) — never the full PAN. First card added becomes the default."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = (j && j.data) ? j.data : j;",
+                  "const row = Array.isArray(d) ? d[0] : d;",
+                  "if (row && row.id != null) pm.collectionVariables.set('card_id', row.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Cards",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/cards",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "cards"
+              ]
+            },
+            "description": "[{ id, brand, last4, exp_month, exp_year, is_default }] — brand ∈ visa|mastercard|mada. Default first."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Default Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/cards/{{card_id}}/default",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "cards",
+                "{{card_id}}",
+                "default"
+              ]
+            },
+            "description": "Marks this card the default; clears the flag on the others. Returns 204."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Card",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/cards/{{card_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "cards",
+                "{{card_id}}"
+              ]
+            },
+            "description": "Removes a card. If it was the default, another is promoted. Returns 204."
+          },
+          "response": []
+        },
+        {
+          "name": "Wallet Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/transactions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "transactions"
+              ]
+            },
+            "description": "[{ id, ref_code, type, amount, description, date, status }] — type ∈ payment|refund|topup|reward; amount signed; status ∈ completed|pending|failed."
+          },
+          "response": []
+        },
+        {
+          "name": "List Favorites",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/favorites",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "favorites"
+              ]
+            },
+            "description": "The user's favourited units (supported types, approved & available)."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Favorite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/favorites/{{unit_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "favorites",
+                "{{unit_id}}"
+              ]
+            },
+            "description": "Idempotent add under the (user, unit) unique index. Returns 204."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Favorite",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/favorites/{{unit_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "favorites",
+                "{{unit_id}}"
+              ]
+            },
+            "description": "Removes the unit from favourites. Returns 204."
+          },
+          "response": []
         }
       ]
     },
@@ -2380,6 +2604,10 @@
     {
       "key": "new_phone",
       "value": "0512345679"
+    },
+    {
+      "key": "card_id",
+      "value": ""
     }
   ]
 }
