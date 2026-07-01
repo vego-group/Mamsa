@@ -1,4 +1,5 @@
-import { defineConfig } from 'vite'
+/// <reference types="vitest/config" />
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
@@ -8,6 +9,13 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
+  },
+  test: {
+    // jsdom gives us localStorage + window for the http/auth layer under test.
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.{test,spec}.{js,mjs}'],
+    restoreMocks: true,
   },
   server: {
     host: true, // listen on all interfaces so tunnels (ngrok) can reach it
