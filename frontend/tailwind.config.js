@@ -51,6 +51,33 @@ export default {
         'inverse-on-surface':  '#e7f4ea',
         'inverse-primary':     '#a7d1af',
         'on-primary-fixed-variant': '#294e35',
+
+        /* ── ywsel brand — Navy + Amber dark theme (additive, no collisions) ── */
+        ink: {
+          950: '#0A0F1E', // app canvas
+          900: '#111729', // card / sidebar surface
+          850: '#161D33', // hover / raised
+          800: '#1E2740', // popover / active row
+          700: '#2A3450', // hairline border / divider
+        },
+        brand: {
+          DEFAULT: '#F5A623', // logo amber — primary accent
+          300:     '#FBC56B', // light text on dark
+          400:     '#F8B13E', // hover
+          600:     '#DC8E12', // pressed
+          700:     '#B0710C', // border on amber fills
+        },
+        'on-brand': '#1A1206', // navy-black text/icons on amber
+        navy:        '#1B2A57', // logo navy (for light-on-navy badges, charts)
+        fg: {
+          DEFAULT: '#EAEEF7', // primary text
+          muted:   '#9AA6C0', // secondary text
+          subtle:  '#6A769A', // captions / placeholders / disabled
+        },
+        ok:     '#34D399', // delivered / positive
+        info:   '#5B9DF9', // in-transit / neutral
+        warn:   '#FBBF24', // pending / attention
+        danger: '#F2546A', // failed / cancelled / error
       },
       fontFamily: {
         arabic:        ['IBM Plex Sans Arabic', 'sans-serif'],
@@ -89,6 +116,10 @@ export default {
       },
       boxShadow: {
         card: '0px 4px 12px rgba(31, 42, 36, 0.08)',
+        // dark-tuned: depth from surfaces, low-blur shadows for popovers only
+        'ink-pop':  '0 8px 28px rgba(0, 0, 0, 0.5)',
+        'ink-card': '0 1px 2px rgba(0, 0, 0, 0.4)',
+        'brand-glow': '0 0 0 1px rgba(245,166,35,0.35), 0 6px 24px rgba(245,166,35,0.12)',
       },
     },
   },

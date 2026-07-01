@@ -23,7 +23,8 @@ class PartnerRegisterRequest extends FormRequest
             'name'        => ['required', 'string', 'max:100'],
             'phone'       => ['required', 'string', 'min:8', 'max:20'],
             'code'        => ['required', 'digits_between:4,8'],
-            'email'       => ['nullable', 'email', 'max:150'],
+            // Required for partners — it is the address verified per FR-005.
+            'email'       => ['required', 'email', 'max:150'],
             // National ID only for individuals, CR number only for companies.
             'national_id' => ['required_if:type,individual', 'nullable', 'string', 'max:20'],
             'cr_number'   => ['required_if:type,company', 'nullable', 'string', 'max:20'],

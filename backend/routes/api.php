@@ -1,15 +1,21 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Auth\AdminAuthController;
+use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
 use App\Http\Controllers\Api\V1\Auth\PartnerAuthController;
 use App\Http\Controllers\Api\V1\BookingController;
+use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OfferController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReviewController;
+use App\Http\Controllers\Api\V1\TestimonialController;
 use App\Http\Controllers\Api\V1\UnitController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\User\CardController;
+use App\Http\Controllers\Api\V1\User\FavoriteController;
+use App\Http\Controllers\Api\V1\User\TransactionController;
 use App\Http\Controllers\Api\V1\Partner;
 use App\Http\Controllers\Api\V1\Admin;
 use Illuminate\Support\Facades\Route;
@@ -47,10 +53,16 @@ Route::prefix('v1')->group(function () {
         Route::get('cities', [UnitController::class, 'cities'])->name('cities');
         Route::get('budgets', [UnitController::class, 'budgets'])->name('budgets');
         Route::get('{unit}', [UnitController::class, 'show'])->name('show');
+        Route::get('{unit}/reviews', [UnitController::class, 'reviews'])->name('reviews');
         Route::post('{unit}/availability', [UnitController::class, 'checkAvailability'])->name('availability');
     });
 
     Route::get('offers', [OfferController::class, 'index'])->name('api.offers.index');
+    Route::get('testimonials', [TestimonialController::class, 'index'])->name('api.testimonials.index');
+
+    // §9 — public contact form
+    Route::post('contact', [ContactController::class, 'store'])
+        ->middleware('throttle:5,1')->name('api.contact.store');
 
     /* ===================== AUTHENTICATED ===================== */
     Route::middleware('auth:sanctum')->group(function () {
@@ -60,6 +72,12 @@ Route::prefix('v1')->group(function () {
             Route::get('me', [OtpAuthController::class, 'me'])->name('me');
             Route::post('complete-profile', [OtpAuthController::class, 'completeProfile'])->name('complete-profile');
             Route::post('logout', [OtpAuthController::class, 'logout'])->name('logout');
+
+            // FR-005 / FR-006 — partner email verification
+            Route::post('email/request-otp', [EmailVerificationController::class, 'send'])
+                ->middleware('throttle:5,1')->name('email.request');
+            Route::post('email/verify', [EmailVerificationController::class, 'verify'])
+                ->middleware('throttle:10,1')->name('email.verify');
         });
 
         /* User (guest role) */
@@ -67,6 +85,27 @@ Route::prefix('v1')->group(function () {
             Route::get('profile', [UserController::class, 'profile'])->name('profile');
             Route::put('profile', [UserController::class, 'updateProfile'])->name('profile.update');
             Route::get('bookings', [UserController::class, 'bookings'])->name('bookings');
+
+            // §7.2 / §7.3 — account management
+            Route::post('change-phone', [UserController::class, 'changePhone'])
+                ->middleware('throttle:5,1')->name('change-phone');
+            Route::post('change-phone/verify', [UserController::class, 'verifyChangePhone'])
+                ->middleware('throttle:10,1')->name('change-phone.verify');
+            Route::delete('account', [UserController::class, 'deleteAccount'])->name('account.delete');
+
+            // Saved cards (#4) — metadata only, tokenised via Moyasar.
+            Route::get('cards', [CardController::class, 'index'])->name('cards.index');
+            Route::post('cards', [CardController::class, 'store'])->name('cards.store');
+            Route::delete('cards/{card}', [CardController::class, 'destroy'])->name('cards.destroy');
+            Route::post('cards/{card}/default', [CardController::class, 'setDefault'])->name('cards.default');
+
+            // Wallet transactions (#4) — read-only ledger.
+            Route::get('transactions', [TransactionController::class, 'index'])->name('transactions.index');
+
+            // Favourites sync (#7).
+            Route::get('favorites', [FavoriteController::class, 'index'])->name('favorites.index');
+            Route::post('favorites/{unit}', [FavoriteController::class, 'store'])->name('favorites.store');
+            Route::delete('favorites/{unit}', [FavoriteController::class, 'destroy'])->name('favorites.destroy');
         });
 
         /* Bookings */
@@ -77,8 +116,8 @@ Route::prefix('v1')->group(function () {
             Route::post('{booking}/cancel', [BookingController::class, 'cancel'])->name('cancel');
         });
 
-        /* Payments */
-        Route::prefix('payments')->name('api.payments.')->group(function () {
+        /* Payments — throttled to blunt card-testing / abuse of the charge path */
+        Route::prefix('payments')->name('api.payments.')->middleware('throttle:20,1')->group(function () {
             Route::post('initiate', [PaymentController::class, 'initiate'])->name('initiate');
             Route::post('pay', [PaymentController::class, 'pay'])->name('pay');
             Route::post('verify', [PaymentController::class, 'verify'])->name('verify');

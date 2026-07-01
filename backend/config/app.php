@@ -57,6 +57,9 @@ return [
     // Decoupled SPA base URL — used for links in notifications/emails.
     'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost')),
 
+    // Partner dashboard URL (backend gaps #10) — partner login + approval-email link.
+    'dashboard_url' => env('DASHBOARD_URL'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

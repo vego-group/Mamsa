@@ -13,7 +13,10 @@ class DatabaseSeeder extends Seeder
             CancellationPolicySeeder::class,   // before units so they can reference a policy
             DevUsersSeeder::class,
             SampleUnitsSeeder::class,
+            ReviewsSeeder::class,              // ratings → powers the التقييم filter
             OffersSeeder::class,
+            TestimonialsSeeder::class,
+            DemoAccountSeeder::class,          // cards + wallet + favourites + upcoming stay
         ]);
     }
 }

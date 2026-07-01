@@ -4,12 +4,19 @@ namespace App\Services;
 
 use App\Services\Sms\SmsProvider;
 use App\Support\PhoneNumber;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 
 class OtpService
 {
     public function __construct(private SmsProvider $sms) {}
+
+    /** Cache store holding OTP codes — configurable so non-Redis envs work. */
+    private function cache(): CacheRepository
+    {
+        return Cache::store(config('otp.store'));
+    }
 
     public function request(string $rawPhone, string $purpose = 'login', ?string $ip = null): string
     {
@@ -29,9 +36,11 @@ class OtpService
             }
         }
 
+        $this->enforceDailyCaps($phone, $ip);
+
         $code = $this->generateCode();
 
-        Cache::store('redis')->put(
+        $this->cache()->put(
             $this->key($phone, $purpose),
             ['code' => $code, 'attempts' => 0, 'sent_at' => now()->timestamp, 'ip' => $ip],
             $ttl
@@ -66,7 +75,7 @@ class OtpService
         $maxAttempts = (int) config('otp.max_attempts', 3);
 
         if ($otp['attempts'] >= $maxAttempts) {
-            Cache::store('redis')->forget($key);
+            $this->cache()->forget($key);
             throw ValidationException::withMessages([
                 'code' => ['تم تجاوز الحد الأقصى للمحاولات. يرجى طلب رمز جديد.'],
             ]);
@@ -75,7 +84,7 @@ class OtpService
         // Persist incremented attempt count before checking the code,
         // so brute-force attempts are counted even if the request is aborted.
         $otp['attempts']++;
-        Cache::store('redis')->put($key, $otp, (int) config('otp.exp_minutes', 5) * 60);
+        $this->cache()->put($key, $otp, (int) config('otp.exp_minutes', 5) * 60);
 
         if (! hash_equals((string) $otp['code'], trim($code))) {
             $remaining = $maxAttempts - $otp['attempts'];
@@ -84,17 +93,51 @@ class OtpService
             ]);
         }
 
-        Cache::store('redis')->forget($key);
+        $this->cache()->forget($key);
     }
 
     private function get(string $phone, string $purpose): ?array
     {
-        return Cache::store('redis')->get($this->key($phone, $purpose));
+        return $this->cache()->get($this->key($phone, $purpose));
     }
 
     private function key(string $phone, string $purpose): string
     {
         return "otp:{$purpose}:{$phone}";
+    }
+
+    /**
+     * Cap OTP sends per phone and per IP per calendar day to blunt SMS-pumping
+     * fraud. Counters auto-expire at midnight. A breach throws before any SMS
+     * is sent (and before the cooldown counter is touched).
+     */
+    private function enforceDailyCaps(string $phone, ?string $ip): void
+    {
+        $day = now()->format('Ymd');
+
+        $checks = [
+            ['otp:cap:phone:'.$phone.':'.$day, (int) config('otp.max_per_phone_per_day', 10)],
+            ['otp:cap:ip:'.($ip ?? 'unknown').':'.$day, (int) config('otp.max_per_ip_per_day', 30)],
+        ];
+
+        foreach ($checks as [$cacheKey, $max]) {
+            if ($max <= 0) {
+                continue; // 0 = disabled
+            }
+
+            if ((int) $this->cache()->get($cacheKey, 0) >= $max) {
+                throw ValidationException::withMessages([
+                    'phone' => ['تم تجاوز الحد المسموح من المحاولات اليوم. حاول غداً.'],
+                ]);
+            }
+        }
+
+        // Increment only after both limits pass, so a blocked request is not counted.
+        foreach ($checks as [$cacheKey, $max]) {
+            if ($max > 0) {
+                $this->cache()->put($cacheKey, (int) $this->cache()->get($cacheKey, 0) + 1, now()->endOfDay());
+            }
+        }
     }
 
     private function generateCode(): string

@@ -3,6 +3,8 @@
 .env
 .env.backup
 .env.production
+.env.testing
+.env.staging
 .phpactor.json
 .phpunit.result.cache
 /.codex
@@ -25,3 +27,9 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# SQLite databases (local data — never commit)
+*.sqlite
+*.sqlite3
+/database/*.sqlite
+/mamsa
