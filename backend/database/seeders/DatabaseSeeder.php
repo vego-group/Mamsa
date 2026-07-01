@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             ReviewsSeeder::class,              // ratings → powers the التقييم filter
             OffersSeeder::class,
             TestimonialsSeeder::class,
+            DemoAccountSeeder::class,          // cards + wallet + favourites + upcoming stay
         ]);
     }
 }

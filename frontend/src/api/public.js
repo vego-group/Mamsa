@@ -6,6 +6,12 @@ import http from './http'
  */
 export const publicApi = {
   listUnits: (params = {}) => http.get('/units', { params }),
+  popularUnits: (params = {}) => http.get('/units/popular', { params }),
+  categories: () => http.get('/units/categories'),
+  cities: () => http.get('/units/cities'),
+  budgets: () => http.get('/units/budgets'),
+  offers: () => http.get('/offers'),
+  testimonials: () => http.get('/testimonials'),
   getUnit: (id) => http.get(`/units/${id}`),
   checkAvailability: (id, start_date, end_date) =>
     http.post(`/units/${id}/availability`, { start_date, end_date }),

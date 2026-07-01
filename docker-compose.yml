@@ -1,7 +1,7 @@
 services:
 
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: mamsa_mysql
     restart: unless-stopped
     environment:
@@ -66,6 +66,14 @@ services:
       - backend_storage:/var/www/html/storage
     networks:
       - mamsa_net
+    # Probe php-fpm's TCP socket so dependents only start once it accepts
+    # connections (the entrypoint runs migrations before booting fpm).
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
 
   # Queue worker — processes SMS/notification/payment jobs off the Redis queue.
   worker:
@@ -114,8 +122,10 @@ services:
     ports:
       - "${PORT:-80}:80"
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     networks:

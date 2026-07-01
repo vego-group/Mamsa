@@ -9,6 +9,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Unit extends Model
 {
+    /**
+     * The only unit types the platform supports (backend gaps #3).
+     * Every public endpoint is constrained to these, and partner
+     * create/update validation enforces the same set.
+     */
+    public const SUPPORTED_TYPES = ['apartment', 'studio', 'villa'];
+
     protected $fillable = [
         'user_id',
         'unit_name',

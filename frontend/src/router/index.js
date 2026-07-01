@@ -10,6 +10,24 @@ const router = createRouter({
       // Public — browsable by guests and authenticated users alike
     },
     {
+      path: '/preview/dashboard',
+      name: 'ops-preview',
+      component: () => import('@/views/DeliveryDashboard.vue'),
+      // Design preview of the ywsel ops dashboard — no auth, review only.
+    },
+    {
+      path: '/explore',
+      name: 'explore',
+      component: () => import('@/views/ExploreView.vue'),
+      // Public — catalogue / discover landing
+    },
+    {
+      path: '/search',
+      name: 'search',
+      component: () => import('@/views/SearchView.vue'),
+      // Public — filtered search results
+    },
+    {
       path: '/units/:id',
       name: 'unit-detail',
       component: () => import('@/views/UnitDetailView.vue'),
@@ -19,6 +37,12 @@ const router = createRouter({
       path: '/bookings/:id/payment',
       name: 'payment',
       component: () => import('@/views/PaymentView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/bookings/:id',
+      name: 'booking-detail',
+      component: () => import('@/views/user/UserBookingDetailView.vue'),
       meta: { requiresAuth: true },
     },
     {

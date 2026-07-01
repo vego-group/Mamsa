@@ -9,8 +9,13 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
 /**
- * Seeds approved, available sample units (owned by the seeded partners)
- * so the public landing page has browsable content out of the box.
+ * Seeds approved, available sample units (owned by the seeded partners) so the
+ * public landing page has browsable content out of the box.
+ *
+ * Business rules honoured (backend gaps):
+ *   #1 — every unit carries real lat/lng so the location map renders.
+ *   #2 — every unit ships with images (first is the main).
+ *   #3 — only supported types are seeded: apartment | studio | villa.
  */
 class SampleUnitsSeeder extends Seeder
 {
@@ -28,8 +33,9 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $individual,
                 'unit_name' => 'شقة مودرن بإطلالة على الواجهة',
                 'unit_type' => 'apartment',
-                'price' => 450, 'capacity' => 4, 'bedrooms' => 2,
+                'price' => 450, 'capacity' => 4, 'bedrooms' => 2, 'bathrooms' => 2, 'area' => 120,
                 'city' => 'الرياض', 'district' => 'حي الملقا',
+                'lat' => 24.7743, 'lng' => 46.6086,
                 'description' => 'شقة عصرية مفروشة بالكامل في قلب حي الملقا، قريبة من المطاعم والمقاهي، مثالية للعائلات الصغيرة ورجال الأعمال.',
                 'features' => ['واي فاي', 'مكيف', 'مطبخ', 'موقف سيارات', 'شاشة ذكية'],
                 'images' => [
@@ -41,8 +47,9 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'فيلا فاخرة مع مسبح خاص',
                 'unit_type' => 'villa',
-                'price' => 2400, 'capacity' => 10, 'bedrooms' => 5,
+                'price' => 2400, 'capacity' => 10, 'bedrooms' => 5, 'bathrooms' => 5, 'area' => 450,
                 'city' => 'الرياض', 'district' => 'حي حطين',
+                'lat' => 24.7580, 'lng' => 46.6250,
                 'description' => 'فيلا واسعة بتصميم راقٍ، مسبح خاص وحديقة، مناسبة للمناسبات والتجمعات العائلية الكبيرة.',
                 'features' => ['مسبح', 'واي فاي', 'حديقة', 'شواء', 'موقف سيارات', 'مكيف'],
                 'images' => [
@@ -54,8 +61,9 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $individual,
                 'unit_name' => 'استوديو أنيق قرب الكورنيش',
                 'unit_type' => 'studio',
-                'price' => 320, 'capacity' => 2, 'bedrooms' => 1,
+                'price' => 320, 'capacity' => 2, 'bedrooms' => 1, 'bathrooms' => 1, 'area' => 45,
                 'city' => 'جدة', 'district' => 'حي الشاطئ',
+                'lat' => 21.6000, 'lng' => 39.1050,
                 'description' => 'استوديو مريح على بعد دقائق من الكورنيش، مثالي للأزواج والرحلات القصيرة.',
                 'features' => ['واي فاي', 'مكيف', 'مطبخ', 'مصعد'],
                 'images' => [
@@ -67,8 +75,9 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'شقة عائلية واسعة',
                 'unit_type' => 'apartment',
-                'price' => 680, 'capacity' => 6, 'bedrooms' => 3,
+                'price' => 680, 'capacity' => 6, 'bedrooms' => 3, 'bathrooms' => 3, 'area' => 160,
                 'city' => 'مكة المكرمة', 'district' => 'العزيزية',
+                'lat' => 21.4100, 'lng' => 39.8300,
                 'description' => 'شقة رحبة قريبة من الحرم، تتسع لعائلة كبيرة مع جميع وسائل الراحة.',
                 'features' => ['واي فاي', 'مكيف', 'مطبخ', 'غسالة', 'مصعد'],
                 'images' => [
@@ -78,11 +87,12 @@ class SampleUnitsSeeder extends Seeder
             ],
             [
                 'owner' => $individual,
-                'unit_name' => 'شاليه هادئ بإطلالة صحراوية',
+                'unit_name' => 'فيلا هادئة بإطلالة على الدرعية',
                 'unit_type' => 'villa',
-                'price' => 1500, 'capacity' => 8, 'bedrooms' => 4,
+                'price' => 1500, 'capacity' => 8, 'bedrooms' => 4, 'bathrooms' => 4, 'area' => 380,
                 'city' => 'الرياض', 'district' => 'الدرعية',
-                'description' => 'شاليه بتصميم تراثي عصري، أجواء هادئة بعيدة عن صخب المدينة مع جلسات خارجية.',
+                'lat' => 24.7370, 'lng' => 46.5750,
+                'description' => 'فيلا بتصميم تراثي عصري، أجواء هادئة بعيدة عن صخب المدينة مع جلسات خارجية.',
                 'features' => ['مسبح', 'شواء', 'حديقة', 'واي فاي', 'موقف سيارات'],
                 'images' => [
                     'https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=900',
@@ -93,8 +103,9 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'شقة بإطلالة بحرية مباشرة',
                 'unit_type' => 'apartment',
-                'price' => 900, 'capacity' => 4, 'bedrooms' => 2,
+                'price' => 900, 'capacity' => 4, 'bedrooms' => 2, 'bathrooms' => 2, 'area' => 140,
                 'city' => 'الدمام', 'district' => 'الكورنيش',
+                'lat' => 26.4360, 'lng' => 50.1030,
                 'description' => 'شقة راقية بإطلالة بانورامية على البحر، تشطيبات فاخرة وموقع متميز.',
                 'features' => ['واي فاي', 'مكيف', 'مطبخ', 'شاشة ذكية', 'مصعد'],
                 'images' => [
@@ -103,76 +114,33 @@ class SampleUnitsSeeder extends Seeder
                 ],
             ],
 
-            // ── Chalets (شاليهات) ──────────────────────────────────────
+            // ── More studios so the "استديو" category has depth ──────────
             [
                 'owner' => $individual,
-                'unit_name' => 'شاليه راقٍ مع مسبح وجلسات خارجية',
-                'unit_type' => 'chalet',
-                'price' => 1200, 'capacity' => 8, 'bedrooms' => 3,
-                'city' => 'الطائف', 'district' => 'حي الشفا',
-                'description' => 'شاليه عصري بمسبح خاص وجلسات خارجية مظللة، أجواء عائلية هادئة وإطلالة على المرتفعات.',
-                'features' => ['مسبح', 'شواء', 'واي فاي', 'موقف سيارات', 'مكيف', 'حديقة'],
+                'unit_name' => 'استوديو عصري في العليا',
+                'unit_type' => 'studio',
+                'price' => 380, 'capacity' => 2, 'bedrooms' => 1, 'bathrooms' => 1, 'area' => 50,
+                'city' => 'الرياض', 'district' => 'حي العليا',
+                'lat' => 24.6900, 'lng' => 46.6850,
+                'description' => 'استوديو أنيق في قلب العليا، قريب من مراكز الأعمال والمطاعم، مثالي للإقامات القصيرة.',
+                'features' => ['واي فاي', 'مكيف', 'مطبخ', 'مصعد', 'موقف سيارات'],
                 'images' => [
-                    'https://images.unsplash.com/photo-1542718610-a1d656d1884c?w=900',
-                    'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=900',
+                    'https://images.unsplash.com/photo-1540518614846-7eded433c457?w=900',
+                    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=900',
                 ],
             ],
             [
                 'owner' => $company,
-                'unit_name' => 'شاليه عائلي بمسبح مدفأ',
-                'unit_type' => 'chalet',
-                'price' => 950, 'capacity' => 6, 'bedrooms' => 2,
+                'unit_name' => 'شقة أنيقة قرب أبها',
+                'unit_type' => 'apartment',
+                'price' => 520, 'capacity' => 5, 'bedrooms' => 2, 'bathrooms' => 2, 'area' => 130,
                 'city' => 'أبها', 'district' => 'حي الموظفين',
-                'description' => 'شاليه مريح بمسبح مدفأ ومرافق متكاملة، مثالي للعطلات القصيرة في أجواء الجنوب الباردة.',
-                'features' => ['مسبح', 'مكيف', 'واي فاي', 'مطبخ', 'موقف سيارات'],
+                'lat' => 18.2160, 'lng' => 42.5050,
+                'description' => 'شقة مريحة بأجواء الجنوب الباردة، قريبة من المتنزهات والمطلات السياحية.',
+                'features' => ['واي فاي', 'مكيف', 'مطبخ', 'موقف سيارات'],
                 'images' => [
                     'https://images.unsplash.com/photo-1449844908441-8829872d2607?w=900',
                     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=900',
-                ],
-            ],
-
-            // ── Rest houses (استراحات) ─────────────────────────────────
-            [
-                'owner' => $individual,
-                'unit_name' => 'استراحة واسعة بمسبح وملعب',
-                'unit_type' => 'rest',
-                'price' => 800, 'capacity' => 20, 'bedrooms' => 2,
-                'city' => 'الرياض', 'district' => 'حي العمارية',
-                'description' => 'استراحة كبيرة بمسبح وملعب كرة قدم ومجالس واسعة، تتسع للتجمعات والمناسبات.',
-                'features' => ['مسبح', 'ملعب', 'شواء', 'واي فاي', 'موقف سيارات', 'مكيف'],
-                'images' => [
-                    'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900',
-                    'https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=900',
-                ],
-            ],
-
-            // ── Resorts (منتجعات) ──────────────────────────────────────
-            [
-                'owner' => $company,
-                'unit_name' => 'منتجع صحي بإطلالة جبلية',
-                'unit_type' => 'resort',
-                'price' => 1800, 'capacity' => 4, 'bedrooms' => 1,
-                'city' => 'أبها', 'district' => 'السودة',
-                'description' => 'منتجع صحي هادئ بإطلالة بانورامية على الجبال، يوفر تجربة استجمام راقية وخدمات سبا.',
-                'features' => ['مسبح', 'سبا', 'واي فاي', 'مطعم', 'مكيف', 'موقف سيارات'],
-                'images' => [
-                    'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=900',
-                    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=900',
-                ],
-            ],
-
-            // ── Camps (مخيمات) ─────────────────────────────────────────
-            [
-                'owner' => $individual,
-                'unit_name' => 'مخيم صحراوي فاخر',
-                'unit_type' => 'camp',
-                'price' => 600, 'capacity' => 12, 'bedrooms' => 1,
-                'city' => 'الرياض', 'district' => 'الثمامة',
-                'description' => 'مخيم صحراوي بخيام مكيّفة وجلسات نار ومرافق حديثة، تجربة برّية أصيلة قرب المدينة.',
-                'features' => ['مكيف', 'شواء', 'واي فاي', 'موقف سيارات', 'جلسة نار'],
-                'images' => [
-                    'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=900',
-                    'https://images.unsplash.com/photo-1537905569824-f89f14cceb68?w=900',
                 ],
             ],
 
@@ -181,8 +149,9 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'فيلا فاخرة مع إطلالة على البحر',
                 'unit_type' => 'villa',
-                'price' => 3500, 'capacity' => 12, 'bedrooms' => 6,
+                'price' => 3500, 'capacity' => 12, 'bedrooms' => 6, 'bathrooms' => 7, 'area' => 650,
                 'city' => 'جدة', 'district' => 'حي الشاطئ',
+                'lat' => 21.5900, 'lng' => 39.1000,
                 'description' => 'فيلا فخمة على الواجهة البحرية بمسبح لا متناهٍ وشاطئ خاص، تشطيبات راقية وخدمة كاملة للمناسبات المميزة.',
                 'features' => ['مسبح', 'شاطئ خاص', 'واي فاي', 'حديقة', 'شواء', 'موقف سيارات', 'مكيف'],
                 'images' => [
@@ -191,24 +160,12 @@ class SampleUnitsSeeder extends Seeder
                 ],
             ],
             [
-                'owner' => $company,
-                'unit_name' => 'منتجع خاص بمسابح وسبا',
-                'unit_type' => 'resort',
-                'price' => 4200, 'capacity' => 16, 'bedrooms' => 8,
-                'city' => 'أبها', 'district' => 'السودة',
-                'description' => 'منتجع متكامل بمسابح متعددة وسبا ومطعم خاص، إطلالات جبلية ساحرة وخصوصية تامة للنزلاء.',
-                'features' => ['مسبح', 'سبا', 'مطعم', 'واي فاي', 'موقف سيارات', 'مكيف', 'حديقة'],
-                'images' => [
-                    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=900',
-                    'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=900',
-                ],
-            ],
-            [
                 'owner' => $individual,
                 'unit_name' => 'قصر ريفي للمناسبات الكبرى',
                 'unit_type' => 'villa',
                 'price' => 4800, 'capacity' => 30, 'bedrooms' => 10,
                 'city' => 'الرياض', 'district' => 'الدرعية',
+                'lat' => 24.7320, 'lng' => 46.5810,
                 'description' => 'قصر ريفي واسع بقاعات احتفالات ومجالس فخمة وحدائق غنّاء، مثالي للأعراس والمناسبات الكبيرة.',
                 'features' => ['مسبح', 'قاعة مناسبات', 'حديقة', 'شواء', 'واي فاي', 'موقف سيارات', 'مكيف'],
                 'images' => [
@@ -233,6 +190,8 @@ class SampleUnitsSeeder extends Seeder
                     'bedrooms'            => $data['bedrooms'],
                     'city'                => $data['city'],
                     'district'            => $data['district'],
+                    'lat'                 => $data['lat'],
+                    'lng'                 => $data['lng'],
                     'description'         => $data['description'],
                     'approval_status'     => 'approved',
                     'status'              => 'available',
@@ -242,6 +201,11 @@ class SampleUnitsSeeder extends Seeder
                     'calendar_token'      => Str::random(60),
                 ]
             );
+
+            // Backfill coordinates on rows seeded before lat/lng existed (#1).
+            if ($unit->lat === null || $unit->lng === null) {
+                $unit->update(['lat' => $data['lat'], 'lng' => $data['lng']]);
+            }
 
             // Only attach features/images for freshly created units.
             if (! $unit->wasRecentlyCreated) {

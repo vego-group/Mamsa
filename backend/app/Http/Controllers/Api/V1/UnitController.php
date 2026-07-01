@@ -18,12 +18,19 @@ class UnitController extends Controller
      * Order matches the design (first card = top-right in the RTL grid).
      */
     private const CATEGORIES = [
-        ['key' => 'villa',     'label' => 'فلل',      'icon' => 'villa',     'types' => ['villa']],
-        ['key' => 'rest',      'label' => 'استراحات', 'icon' => 'cottage',   'types' => ['rest']],
-        ['key' => 'chalet',    'label' => 'شاليهات',  'icon' => 'house',     'types' => ['chalet']],
-        ['key' => 'resort',    'label' => 'منتجعات',  'icon' => 'pool',      'types' => ['resort']],
-        ['key' => 'apartment', 'label' => 'شقق',      'icon' => 'apartment', 'types' => ['apartment', 'studio']],
-        ['key' => 'camp',      'label' => 'مخيمات',   'icon' => 'camping',   'types' => ['camp']],
+        ['key' => 'apartment', 'label' => 'شقق',    'icon' => 'apartment', 'types' => ['apartment']],
+        ['key' => 'studio',    'label' => 'استديو', 'icon' => 'studio',    'types' => ['studio']],
+        ['key' => 'villa',     'label' => 'فلل',    'icon' => 'villa',     'types' => ['villa']],
+    ];
+
+    /**
+     * Fallback category artwork (اكتشف وجهتك) used when no unit of that type has
+     * an image yet. A live unit's main image takes precedence — see categories().
+     */
+    private const CATEGORY_IMAGES = [
+        'apartment' => 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=900&q=70',
+        'studio'    => 'https://images.unsplash.com/photo-1554995207-c18c203602cb?auto=format&fit=crop&w=900&q=70',
+        'villa'     => 'https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=900&q=70',
     ];
 
     /**
@@ -40,6 +47,7 @@ class UnitController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = Unit::with(['images', 'features'])
+            ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available');
 
@@ -107,6 +115,7 @@ class UnitController extends Controller
         $limit = min((int) $request->input('limit', 8), 12);
 
         $units = Unit::with(['images', 'features'])
+            ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available')
             ->withCount(['bookings' => fn ($q) => $q->where('status', 'confirmed')])
@@ -124,18 +133,25 @@ class UnitController extends Controller
     public function categories(): JsonResponse
     {
         $counts = Unit::query()
+            ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available')
             ->selectRaw('unit_type, COUNT(*) as total')
             ->groupBy('unit_type')
             ->pluck('total', 'unit_type');
 
-        $data = array_map(static function (array $cat) use ($counts) {
+        // One representative main image per type (falls back to curated artwork).
+        $typeImages = $this->representativeImages();
+
+        $data = array_map(function (array $cat) use ($counts, $typeImages) {
+            $type = $cat['types'][0];
+
             return [
-                'key'   => $cat['key'],
-                'label' => $cat['label'],
-                'icon'  => $cat['icon'],
-                'count' => collect($cat['types'])->sum(fn ($t) => (int) ($counts[$t] ?? 0)),
+                'key'       => $cat['key'],
+                'label'     => $cat['label'],
+                'icon'      => $cat['icon'],
+                'count'     => collect($cat['types'])->sum(fn ($t) => (int) ($counts[$t] ?? 0)),
+                'image_url' => $typeImages[$type] ?? (self::CATEGORY_IMAGES[$type] ?? null),
             ];
         }, self::CATEGORIES);
 
@@ -148,6 +164,7 @@ class UnitController extends Controller
     public function cities(): JsonResponse
     {
         $cities = Unit::query()
+            ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available')
             ->whereNotNull('city')
@@ -168,6 +185,7 @@ class UnitController extends Controller
     {
         $data = array_map(function (array $bucket) {
             $query = Unit::query()
+                ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
                 ->where('approval_status', 'approved')
                 ->where('status', 'available');
 
@@ -190,9 +208,39 @@ class UnitController extends Controller
         return response()->json(['data' => $data]);
     }
 
+    /**
+     * One representative main-image URL per supported type, drawn from live
+     * inventory. Keyed by unit_type; missing types fall back in categories().
+     *
+     * @return array<string, string>
+     */
+    private function representativeImages(): array
+    {
+        $units = Unit::query()
+            ->whereIn('unit_type', Unit::SUPPORTED_TYPES)
+            ->where('approval_status', 'approved')
+            ->where('status', 'available')
+            ->whereHas('mainImage')
+            ->with('mainImage')
+            ->latest('id')
+            ->get(['id', 'unit_type']);
+
+        $map = [];
+        foreach ($units as $unit) {
+            $type = $unit->unit_type;
+            if (! isset($map[$type]) && ($img = $unit->mainImage->first())) {
+                $map[$type] = $img->url;
+            }
+        }
+
+        return $map;
+    }
+
     public function show(Unit $unit): UnitResource|JsonResponse
     {
-        if ($unit->approval_status !== 'approved' || $unit->status !== 'available') {
+        if (! in_array($unit->unit_type, Unit::SUPPORTED_TYPES, true)
+            || $unit->approval_status !== 'approved'
+            || $unit->status !== 'available') {
             return response()->json(['message' => 'الوحدة غير متاحة'], 404);
         }
 

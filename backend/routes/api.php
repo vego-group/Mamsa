@@ -13,6 +13,9 @@ use App\Http\Controllers\Api\V1\ReviewController;
 use App\Http\Controllers\Api\V1\TestimonialController;
 use App\Http\Controllers\Api\V1\UnitController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\User\CardController;
+use App\Http\Controllers\Api\V1\User\FavoriteController;
+use App\Http\Controllers\Api\V1\User\TransactionController;
 use App\Http\Controllers\Api\V1\Partner;
 use App\Http\Controllers\Api\V1\Admin;
 use Illuminate\Support\Facades\Route;
@@ -89,6 +92,20 @@ Route::prefix('v1')->group(function () {
             Route::post('change-phone/verify', [UserController::class, 'verifyChangePhone'])
                 ->middleware('throttle:10,1')->name('change-phone.verify');
             Route::delete('account', [UserController::class, 'deleteAccount'])->name('account.delete');
+
+            // Saved cards (#4) — metadata only, tokenised via Moyasar.
+            Route::get('cards', [CardController::class, 'index'])->name('cards.index');
+            Route::post('cards', [CardController::class, 'store'])->name('cards.store');
+            Route::delete('cards/{card}', [CardController::class, 'destroy'])->name('cards.destroy');
+            Route::post('cards/{card}/default', [CardController::class, 'setDefault'])->name('cards.default');
+
+            // Wallet transactions (#4) — read-only ledger.
+            Route::get('transactions', [TransactionController::class, 'index'])->name('transactions.index');
+
+            // Favourites sync (#7).
+            Route::get('favorites', [FavoriteController::class, 'index'])->name('favorites.index');
+            Route::post('favorites/{unit}', [FavoriteController::class, 'store'])->name('favorites.store');
+            Route::delete('favorites/{unit}', [FavoriteController::class, 'destroy'])->name('favorites.destroy');
         });
 
         /* Bookings */
