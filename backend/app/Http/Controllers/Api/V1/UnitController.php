@@ -23,15 +23,8 @@ class UnitController extends Controller
         ['key' => 'villa',     'label' => 'فلل',    'icon' => 'villa',     'types' => ['villa']],
     ];
 
-    /**
-     * Fallback category artwork (اكتشف وجهتك) used when no unit of that type has
-     * an image yet. A live unit's main image takes precedence — see categories().
-     */
-    private const CATEGORY_IMAGES = [
-        'apartment' => 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=900&q=70',
-        'studio'    => 'https://images.unsplash.com/photo-1554995207-c18c203602cb?auto=format&fit=crop&w=900&q=70',
-        'villa'     => 'https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=900&q=70',
-    ];
+    // Category artwork (اكتشف وجهتك) falls back to the bundled default image when
+    // no unit of that type has one — resolved at runtime in categories().
 
     /**
      * Budget ranges (حسب الميزانية) in SAR/night. `min`/`max` null = open-ended.
@@ -151,7 +144,7 @@ class UnitController extends Controller
                 'label'     => $cat['label'],
                 'icon'      => $cat['icon'],
                 'count'     => collect($cat['types'])->sum(fn ($t) => (int) ($counts[$t] ?? 0)),
-                'image_url' => $typeImages[$type] ?? (self::CATEGORY_IMAGES[$type] ?? null),
+                'image_url' => $typeImages[$type] ?? \App\Support\Media::defaultImageUrl(),
             ];
         }, self::CATEGORIES);
 

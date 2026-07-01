@@ -34,11 +34,18 @@ class UnitResource extends JsonResource
                 $this->rejection_reason
             ),
             'images'              => $this->whenLoaded('images', fn () =>
-                $this->images->map(fn ($img) => [
-                    'id'      => $img->id,
-                    'url'     => $img->url,
-                    'is_main' => $img->is_main,
-                ])
+                $this->images->isNotEmpty()
+                    ? $this->images->map(fn ($img) => [
+                        'id'      => $img->id,
+                        'url'     => $img->url,
+                        'is_main' => $img->is_main,
+                    ])
+                    // Never hand the frontend an empty gallery — fall back to the default.
+                    : [[
+                        'id'      => 0,
+                        'url'     => \App\Support\Media::defaultImageUrl(),
+                        'is_main' => true,
+                    ]]
             ),
             'features'            => $this->whenLoaded('features', fn () =>
                 $this->features->pluck('name')

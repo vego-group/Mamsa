@@ -60,6 +60,11 @@ return [
     // Partner dashboard URL (backend gaps #10) — partner login + approval-email link.
     'dashboard_url' => env('DASHBOARD_URL'),
 
+    // Default/placeholder image (relative to the public storage disk). Shipped in
+    // storage/app/public and served via `asset('storage/'.<path>)`; used as the
+    // universal fallback for any listing/offer/category image that is missing.
+    'default_image_path' => env('DEFAULT_IMAGE_PATH', 'defaults/unit-default.avif'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

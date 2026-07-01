@@ -163,7 +163,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $individual,
                 'unit_name' => 'قصر ريفي للمناسبات الكبرى',
                 'unit_type' => 'villa',
-                'price' => 4800, 'capacity' => 30, 'bedrooms' => 10,
+                'price' => 4800, 'capacity' => 30, 'bedrooms' => 10, 'bathrooms' => 12, 'area' => 1200,
                 'city' => 'الرياض', 'district' => 'الدرعية',
                 'lat' => 24.7320, 'lng' => 46.5810,
                 'description' => 'قصر ريفي واسع بقاعات احتفالات ومجالس فخمة وحدائق غنّاء، مثالي للأعراس والمناسبات الكبيرة.',
@@ -188,6 +188,8 @@ class SampleUnitsSeeder extends Seeder
                     'price'               => $data['price'],
                     'capacity'            => $data['capacity'],
                     'bedrooms'            => $data['bedrooms'],
+                    'bathrooms'           => $data['bathrooms'],
+                    'area'                => $data['area'],
                     'city'                => $data['city'],
                     'district'            => $data['district'],
                     'lat'                 => $data['lat'],
@@ -217,10 +219,13 @@ class SampleUnitsSeeder extends Seeder
                 ->map(fn ($name) => Feature::firstOrCreate(['name' => $name])->id);
             $unit->features()->sync($featureIds);
 
-            // Images (first is main)
-            foreach ($data['images'] as $i => $url) {
-                $unit->images()->create(['path' => $url, 'is_main' => $i === 0]);
-            }
+            // Ship every unit with the bundled default image. (The per-unit
+            // `images` URLs above are retained as documentation for when real
+            // photos replace the placeholder — see DefaultMediaSeeder.)
+            $unit->images()->create([
+                'path'    => \App\Support\Media::defaultImagePath(),
+                'is_main' => true,
+            ]);
         }
     }
 }
