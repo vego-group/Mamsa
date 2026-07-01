@@ -17,6 +17,16 @@ export const partnerApi = {
   deleteUnit: (id) => http.delete(`/partner/units/${id}`),
   submitUnit: (id) => http.post(`/partner/units/${id}/submit`),
 
+  // Unit gallery (multipart). Content-Type is unset so the browser adds the
+  // multipart boundary; the default JSON header would break the upload.
+  uploadUnitImages: (id, files) => {
+    const fd = new FormData()
+    for (const f of files) fd.append('images[]', f)
+    return http.post(`/partner/units/${id}/images`, fd, { headers: { 'Content-Type': undefined } })
+  },
+  deleteUnitImage: (id, imageId) => http.delete(`/partner/units/${id}/images/${imageId}`),
+  setMainImage: (id, imageId) => http.post(`/partner/units/${id}/images/${imageId}/main`),
+
   // Bookings
   listBookings: (page = 1) => http.get('/partner/bookings', { params: { page } }),
 

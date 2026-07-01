@@ -10,6 +10,7 @@ import http from './http'
 import { publicApi, bookingApi, paymentApi } from './public'
 import { userApi } from './user'
 import { authApi } from './auth'
+import { partnerApi } from './partner'
 
 beforeEach(() => {
   http.get.mockClear()
@@ -124,5 +125,27 @@ describe('authApi — auth endpoints', () => {
 
     authApi.refresh('r1')
     expect(http.post).toHaveBeenCalledWith('/auth/refresh', { refresh_token: 'r1' })
+  })
+})
+
+describe('partnerApi — unit gallery', () => {
+  it('uploads images as multipart with the JSON content-type disabled', () => {
+    const files = [new File(['x'], 'a.png', { type: 'image/png' })]
+    partnerApi.uploadUnitImages(5, files)
+
+    const [url, body, config] = http.post.mock.calls.at(-1)
+    expect(url).toBe('/partner/units/5/images')
+    expect(body).toBeInstanceOf(FormData)
+    expect(body.getAll('images[]')).toHaveLength(1)
+    // Unset so the browser adds the multipart boundary itself.
+    expect(config.headers['Content-Type']).toBeUndefined()
+  })
+
+  it('maps delete + set-main to their routes', () => {
+    partnerApi.deleteUnitImage(5, 9)
+    expect(http.delete).toHaveBeenCalledWith('/partner/units/5/images/9')
+
+    partnerApi.setMainImage(5, 9)
+    expect(http.post).toHaveBeenCalledWith('/partner/units/5/images/9/main')
   })
 })

@@ -141,6 +141,11 @@ Route::prefix('v1')->group(function () {
                 Route::put('{unit}', [Partner\UnitController::class, 'update'])->name('update');
                 Route::delete('{unit}', [Partner\UnitController::class, 'destroy'])->name('destroy');
                 Route::post('{unit}/submit', [Partner\UnitController::class, 'submit'])->name('submit');
+
+                // Unit gallery (multipart uploads to the public disk).
+                Route::post('{unit}/images', [Partner\UnitImageController::class, 'store'])->name('images.store');
+                Route::delete('{unit}/images/{image}', [Partner\UnitImageController::class, 'destroy'])->name('images.destroy');
+                Route::post('{unit}/images/{image}/main', [Partner\UnitImageController::class, 'setMain'])->name('images.main');
             });
 
             Route::get('bookings', [Partner\BookingController::class, 'index'])->name('bookings.index');

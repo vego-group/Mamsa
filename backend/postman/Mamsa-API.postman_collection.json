@@ -1934,6 +1934,116 @@
                 }
               },
               "response": []
+            },
+            {
+              "name": "Upload Unit Images",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/partner/units/{{unit_id}}/images",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "partner",
+                    "units",
+                    "{{unit_id}}",
+                    "images"
+                  ]
+                },
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "images[]",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "images[]",
+                      "type": "file",
+                      "src": [],
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Multipart upload (1–10 files). mimes: jpg,png,webp,avif; max 5MB each. First photo on an empty gallery becomes main. Stored on the public disk under units/{id}/…"
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const d = (j && j.data) ? j.data : j;",
+                      "if (Array.isArray(d) && d[0] && d[0].id != null) pm.collectionVariables.set('image_id', d[0].id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Set Main Image",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/partner/units/{{unit_id}}/images/{{image_id}}/main",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "partner",
+                    "units",
+                    "{{unit_id}}",
+                    "images",
+                    "{{image_id}}",
+                    "main"
+                  ]
+                },
+                "description": "Marks this image the main one; clears the flag on the rest."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Unit Image",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/partner/units/{{unit_id}}/images/{{image_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "partner",
+                    "units",
+                    "{{unit_id}}",
+                    "images",
+                    "{{image_id}}"
+                  ]
+                },
+                "description": "Removes the photo + its file. If it was main, another is promoted."
+              },
+              "response": []
             }
           ]
         },
@@ -2607,6 +2717,10 @@
     },
     {
       "key": "card_id",
+      "value": ""
+    },
+    {
+      "key": "image_id",
       "value": ""
     }
   ]

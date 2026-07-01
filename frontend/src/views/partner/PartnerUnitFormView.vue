@@ -123,6 +123,40 @@
         </div>
       </section>
 
+      <!-- Images (edit only — uploads need a saved unit id) -->
+      <section v-if="isEdit" class="bg-white rounded-2xl border border-outline-variant shadow-sm p-6">
+        <h2 class="font-title-sm text-title-sm text-primary mb-5 pb-3 border-b border-outline-variant">صور الوحدة</h2>
+
+        <div v-if="images.length" class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+          <div
+            v-for="img in images"
+            :key="img.id"
+            class="relative group aspect-[4/3] rounded-xl overflow-hidden border border-outline-variant bg-surface-container-low"
+          >
+            <img :src="img.url" alt="" class="w-full h-full object-cover" loading="lazy" />
+            <span v-if="img.is_main" class="absolute top-2 right-2 bg-primary text-on-primary text-[11px] font-bold px-2 py-0.5 rounded-md">رئيسية</span>
+            <div class="absolute inset-x-0 bottom-0 flex opacity-0 group-hover:opacity-100 transition-opacity bg-black/50">
+              <button v-if="!img.is_main" type="button" class="flex-1 py-1.5 text-white text-body-sm hover:bg-primary/80" @click="makeMain(img.id)">تعيين كرئيسية</button>
+              <button type="button" class="flex-1 py-1.5 text-white text-body-sm hover:bg-error/80" @click="removeImage(img.id)">حذف</button>
+            </div>
+          </div>
+        </div>
+        <p v-else class="text-body-sm text-on-surface-variant mb-4">لا توجد صور بعد. يمكنك إضافة حتى 10 صور (jpg, png, webp, avif — حتى 5 ميجابايت للصورة).</p>
+
+        <label class="inline-flex items-center gap-2 px-4 py-2.5 border border-dashed border-outline-variant rounded-xl cursor-pointer hover:bg-surface-container-low transition-colors text-body-sm font-bold text-on-surface" :class="{ 'opacity-50 pointer-events-none': uploading }">
+          <span v-if="uploading" class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+          <span v-else class="material-symbols-outlined text-[18px]">add_photo_alternate</span>
+          {{ uploading ? 'جارٍ الرفع...' : 'إضافة صور' }}
+          <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple class="hidden" :disabled="uploading" @change="onFilesSelected" />
+        </label>
+        <p v-if="imgError" class="err">{{ imgError }}</p>
+      </section>
+
+      <!-- New unit: images come after the draft is saved -->
+      <section v-else class="bg-surface-container-low rounded-2xl border border-dashed border-outline-variant p-6 text-center text-body-sm text-on-surface-variant">
+        احفظ الوحدة كمسودة أولاً، ثم عُد لتعديلها لإضافة الصور.
+      </section>
+
       <!-- Actions -->
       <div class="flex flex-col sm:flex-row gap-3">
         <button type="submit" class="flex-1 py-3 bg-primary text-on-primary rounded-xl font-bold hover:bg-primary-container transition-colors flex items-center justify-center gap-2 disabled:opacity-50" :disabled="saving">
@@ -161,6 +195,12 @@ const loading = ref(false)
 const saving = ref(false)
 const errors = ref({})
 const toast = ref(null)
+
+// Unit gallery
+const images = ref([])
+const uploading = ref(false)
+const imgError = ref('')
+const fileInput = ref(null)
 
 const availableFeatures = ['واي فاي', 'مسبح', 'موقف سيارات', 'مطبخ', 'مكيف', 'غسالة', 'شاشة ذكية', 'مصعد', 'حديقة', 'شواء']
 
@@ -209,11 +249,51 @@ async function loadUnit() {
       cancellation_policy: u.cancellation_policy || 'no_cancel',
       features: Array.isArray(u.features) ? [...u.features] : [],
     }
+    // Drop the synthesized default placeholder (id 0) — show real photos only.
+    images.value = Array.isArray(u.images) ? u.images.filter((i) => i.id !== 0) : []
   } catch (e) {
     showToast('تعذّر تحميل بيانات الوحدة', 'error')
     router.replace({ name: 'partner-units' })
   } finally {
     loading.value = false
+  }
+}
+
+async function onFilesSelected(e) {
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
+  imgError.value = ''
+  uploading.value = true
+  try {
+    const { data } = await partnerApi.uploadUnitImages(route.params.id, files)
+    images.value = data.data ?? []
+    showToast('تم رفع الصور')
+  } catch (err) {
+    imgError.value =
+      err.response?.data?.message ||
+      err.response?.data?.errors?.['images.0']?.[0] ||
+      'تعذّر رفع الصور'
+  } finally {
+    uploading.value = false
+    if (fileInput.value) fileInput.value.value = '' // allow re-selecting the same file
+  }
+}
+
+async function removeImage(id) {
+  try {
+    const { data } = await partnerApi.deleteUnitImage(route.params.id, id)
+    images.value = data.data ?? []
+  } catch {
+    showToast('تعذّر حذف الصورة', 'error')
+  }
+}
+
+async function makeMain(id) {
+  try {
+    const { data } = await partnerApi.setMainImage(route.params.id, id)
+    images.value = data.data ?? []
+  } catch {
+    showToast('تعذّر تعيين الصورة الرئيسية', 'error')
   }
 }
 
