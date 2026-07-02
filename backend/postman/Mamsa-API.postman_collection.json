@@ -53,9 +53,23 @@
             },
             "auth": {
               "type": "noauth"
-            }
+            },
+            "description": "Non-production returns `debug_otp` in the response and this request auto-captures it into {{otp_code}} (so Verify OTP just works). When OTP_FIXED_CODE is set (e.g. staging), every OTP is that fixed value — **111222**. Production sends a real SMS and omits debug_otp."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = (j && j.data) ? j.data : j;",
+                  "if (d && d.debug_otp) pm.collectionVariables.set('otp_code', d.debug_otp);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Verify OTP (login)",
@@ -93,7 +107,7 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Captures access_token + refresh_token into collection variables on success."
+            "description": "Captures access_token + refresh_token into collection variables on success. Code = {{otp_code}} (auto-filled by Request OTP from debug_otp). With OTP_FIXED_CODE set in non-production it's the fixed value — **111222**."
           },
           "response": [],
           "event": [
@@ -2673,7 +2687,7 @@
     },
     {
       "key": "otp_code",
-      "value": "1234"
+      "value": "111222"
     },
     {
       "key": "admin_email",
