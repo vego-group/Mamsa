@@ -43,7 +43,7 @@ baked at **build time**, so choose the target per build:
 |---|---|---|
 | Local dev | `npm run dev` | empty → Vite proxies `/api` to `localhost:8080` |
 | Staging | `npm run build:staging` | `https://staging.mamsaa.com/api/v1` (see `.env.staging`) |
-| Production | `VITE_API_BASE_URL=https://api.mamsaa.com/api/v1 npm run build` | `https://api.mamsaa.com/api/v1` |
+| Production | `npm run build` | `https://api.mamsaa.com/api/v1` (from `.env.production`) |
 
 `dist/` ships `index.html`, `assets/`, `public/decor/*` and `.htaccess`
 (SPA history fallback + force-HTTPS, from `public/.htaccess`).
@@ -66,6 +66,44 @@ curl -sI https://testvue.mamsaa.com/                  # 200
 curl -sI https://testvue.mamsaa.com/decor/hero.jpg    # 200 image/jpeg
 curl -sI https://testvue.mamsaa.com/units             # 200 (SPA deep-link via .htaccess)
 ```
+
+## Production — git-based init & pull (build on the server)
+
+Mirrors the API's `app_core` clone/pull flow. Requires **Node ≥ 20** on the box
+(hPanel → Advanced → Node.js, or a preinstalled node binary — check `node -v`).
+The repo is cloned once into a **build dir** next to the docroot; each release is
+`git pull` + `npm run build`, then the built `dist/` is copied into `public_html`.
+`.env.production` bakes the prod API automatically, so no env flags are needed.
+
+### First-time init
+
+```bash
+cd ~/domains/<prod-subdomain>            # e.g. app.mamsaa.com
+git clone git@github.com:mohamedashrafdeve-arch/mamsaa-vue.git app_src
+cd app_src
+node -v                                  # confirm >= 20
+npm ci
+npm run build                            # → dist/ (targets api.mamsaa.com via .env.production)
+
+# publish the build into the docroot (trailing dot copies .htaccess + hidden files)
+rm -rf ../public_html/* ../public_html/.htaccess 2>/dev/null
+cp -r dist/. ../public_html/
+```
+
+### Pull / redeploy (every release)
+
+```bash
+cd ~/domains/<prod-subdomain>/app_src
+git pull origin main
+npm ci                                   # only if package-lock changed; else skip
+npm run build
+rm -rf ../public_html/* ../public_html/.htaccess 2>/dev/null
+cp -r dist/. ../public_html/
+```
+
+> **No Node on the box?** Don't build on the server — build **locally/CI** and
+> upload `dist/` (the rsync/File-Manager flow above). Building Vite on a
+> memory-limited shared host can OOM; the upload path is the reliable default.
 
 ## CORS
 

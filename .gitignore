@@ -31,8 +31,9 @@ frontend/dist/
 frontend/.env
 frontend/.env.*
 !frontend/.env.example
-# Tracked: contains only the public staging API URL (no secrets).
+# Tracked: contains only public API URLs (no secrets).
 !frontend/.env.staging
+!frontend/.env.production
 
 # ── Docker dev override (local-only) ─────────────────────────
 docker-compose.override.yml
