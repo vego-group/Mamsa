@@ -97,7 +97,7 @@
           class="relative h-64 rounded-2xl overflow-hidden group text-right"
           @click="selectBudget(b)"
         >
-          <img :src="budgetImage(b.key)" :alt="b.label" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+          <img :src="b.image_url" :alt="b.label" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
           <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
           <div class="absolute bottom-0 inset-x-0 p-5 text-white">
             <p class="font-title-sm text-title-sm mb-0.5">{{ b.label }}</p>
@@ -248,24 +248,8 @@ const categories = [
   { value: 'rest',      label: 'إستراحات' },
 ]
 
-const CATEGORY_IMAGES = {
-  villa:     'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=70',
-  rest:      'https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&w=800&q=70',
-  chalet:    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=70',
-  resort:    'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=70',
-  apartment: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=70',
-  camp:      'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=800&q=70',
-}
-
-const BUDGET_IMAGES = {
-  '2000_3000': 'https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=700&q=70',
-  '1000_2000': 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=700&q=70',
-  '500_1000':  'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=700&q=70',
-  'under_500': 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=700&q=70',
-}
-function budgetImage(key) {
-  return BUDGET_IMAGES[key] || BUDGET_IMAGES.under_500
-}
+// Category + budget imagery comes from the API (image_url) — the same bundled
+// default asset served from storage; no external/hardcoded images.
 
 function mainImage(unit) {
   const imgs = unit.images || []
@@ -296,7 +280,7 @@ async function loadCategories() {
     const { data } = await publicApi.categories()
     destinations.value = (data.data ?? data ?? []).map((c) => ({
       ...c,
-      img: CATEGORY_IMAGES[c.key] || CATEGORY_IMAGES.apartment,
+      img: c.image_url, // bundled default served from storage (API-provided)
     }))
   } catch (e) {
     destinations.value = []
