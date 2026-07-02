@@ -54,7 +54,113 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Non-production returns `debug_otp` in the response and this request auto-captures it into {{otp_code}} (so Verify OTP just works). When OTP_FIXED_CODE is set (e.g. staging), every OTP is that fixed value — **111222**. Production sends a real SMS and omits debug_otp."
+            "description": "Without `intent` this is the legacy unified passwordless flow (verify-otp will create the user row if missing). Send `intent: \"login\" | \"register\"` to get an early 422 with a machine-readable `code` instead (see the two intent variants below).\n\nNon-production returns `debug_otp` in the response and this request auto-captures it into {{otp_code}} (so Verify OTP just works). When OTP_FIXED_CODE is set (e.g. staging), every OTP is that fixed value — **111222**. Production sends a real SMS and omits debug_otp."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = (j && j.data) ? j.data : j;",
+                  "if (d && d.debug_otp) pm.collectionVariables.set('otp_code', d.debug_otp);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request OTP (intent: login)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/request-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "request-otp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"intent\": \"login\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Explicit **login**: if the phone is NOT registered (no user row, or profile never completed — blank name), responds `422` with:\n\n```json\n{ \"success\": false, \"message\": \"هذا الرقم غير مسجّل\", \"code\": \"PHONE_NOT_REGISTERED\" }\n```\n\n…before any SMS is sent or user row created. Registered phone → normal 200 + OTP."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = (j && j.data) ? j.data : j;",
+                  "if (d && d.debug_otp) pm.collectionVariables.set('otp_code', d.debug_otp);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request OTP (intent: register)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/request-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "request-otp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"intent\": \"register\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Explicit **register**: if the phone is ALREADY registered (profile completed), responds `422` with:\n\n```json\n{ \"success\": false, \"message\": \"هذا الرقم مسجّل بالفعل، يرجى تسجيل الدخول\", \"code\": \"PHONE_ALREADY_REGISTERED\" }\n```\n\nA row with a blank name (abandoned sign-in) counts as unregistered, so it can finish registering → normal 200 + OTP."
           },
           "response": [],
           "event": [
@@ -160,7 +266,8 @@
             },
             "auth": {
               "type": "noauth"
-            }
+            },
+            "description": "Also accepts the same optional `intent: \"login\" | \"register\"` guard as Request OTP (422 + PHONE_NOT_REGISTERED / PHONE_ALREADY_REGISTERED). Throttled 3/min."
           },
           "response": []
         },
