@@ -2,3 +2,7 @@
 !.gitignore
 !defaults/
 !defaults/**
+!categories/
+!categories/**
+!budgets/
+!budgets/**

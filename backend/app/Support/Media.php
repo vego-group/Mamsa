@@ -24,4 +24,16 @@ class Media
     {
         return asset('storage/' . self::defaultImagePath());
     }
+
+    /**
+     * URL for a specific self-hosted asset on the public disk, falling back to
+     * the bundled default when the file is missing. Used for the curated
+     * per-category / per-budget artwork (categories/*.jpg, budgets/*.jpg).
+     */
+    public static function imageUrlOrDefault(string $path): string
+    {
+        return \Illuminate\Support\Facades\Storage::disk('public')->exists($path)
+            ? asset('storage/' . $path)
+            : self::defaultImageUrl();
+    }
 }

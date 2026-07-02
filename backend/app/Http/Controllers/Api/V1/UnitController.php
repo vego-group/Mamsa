@@ -133,18 +133,14 @@ class UnitController extends Controller
             ->groupBy('unit_type')
             ->pluck('total', 'unit_type');
 
-        // One representative main image per type (falls back to curated artwork).
-        $typeImages = $this->representativeImages();
-
-        $data = array_map(function (array $cat) use ($counts, $typeImages) {
-            $type = $cat['types'][0];
-
+        $data = array_map(function (array $cat) use ($counts) {
             return [
                 'key'       => $cat['key'],
                 'label'     => $cat['label'],
                 'icon'      => $cat['icon'],
                 'count'     => collect($cat['types'])->sum(fn ($t) => (int) ($counts[$t] ?? 0)),
-                'image_url' => $typeImages[$type] ?? \App\Support\Media::defaultImageUrl(),
+                // Curated, self-hosted artwork per category (falls back to default).
+                'image_url' => \App\Support\Media::imageUrlOrDefault("categories/{$cat['key']}.jpg"),
             ];
         }, self::CATEGORIES);
 
@@ -189,53 +185,18 @@ class UnitController extends Controller
                 $query->where('price', '<=', $bucket['max']);
             }
 
-            // Representative image = cheapest available unit's main image in the
-            // bucket; falls back to the bundled default (same asset as elsewhere).
-            $image = (clone $query)
-                ->whereHas('mainImage')
-                ->with('mainImage')
-                ->orderBy('price')
-                ->first()?->mainImage->first()?->url;
-
             return [
                 'key'       => $bucket['key'],
                 'label'     => $bucket['label'],
                 'min'       => $bucket['min'],
                 'max'       => $bucket['max'],
                 'count'     => $query->count(),
-                'image_url' => $image ?? \App\Support\Media::defaultImageUrl(),
+                // Curated, self-hosted artwork per budget bucket (falls back to default).
+                'image_url' => \App\Support\Media::imageUrlOrDefault("budgets/{$bucket['key']}.jpg"),
             ];
         }, self::BUDGET_BUCKETS);
 
         return response()->json(['data' => $data]);
-    }
-
-    /**
-     * One representative main-image URL per supported type, drawn from live
-     * inventory. Keyed by unit_type; missing types fall back in categories().
-     *
-     * @return array<string, string>
-     */
-    private function representativeImages(): array
-    {
-        $units = Unit::query()
-            ->whereIn('unit_type', Unit::SUPPORTED_TYPES)
-            ->where('approval_status', 'approved')
-            ->where('status', 'available')
-            ->whereHas('mainImage')
-            ->with('mainImage')
-            ->latest('id')
-            ->get(['id', 'unit_type']);
-
-        $map = [];
-        foreach ($units as $unit) {
-            $type = $unit->unit_type;
-            if (! isset($map[$type]) && ($img = $unit->mainImage->first())) {
-                $map[$type] = $img->url;
-            }
-        }
-
-        return $map;
     }
 
     public function show(Unit $unit): UnitResource|JsonResponse
