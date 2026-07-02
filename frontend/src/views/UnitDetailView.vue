@@ -153,7 +153,7 @@
                 ></iframe>
                 <img
                   v-else
-                  src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1600&q=70"
+                  src="/decor/location.jpg"
                   alt="خريطة الموقع"
                   class="w-full h-full object-cover"
                   loading="lazy"

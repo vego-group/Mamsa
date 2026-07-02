@@ -6,7 +6,7 @@
     <section class="relative">
       <div class="absolute inset-0 bg-primary">
         <img
-          src="https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=1600&q=80"
+          src="/decor/hero-explore.jpg"
           alt=""
           class="w-full h-full object-cover opacity-40"
           loading="eager"
@@ -157,7 +157,7 @@
         <!-- Map (right, wide) -->
         <div class="lg:col-span-2 relative rounded-2xl overflow-hidden border border-outline-variant min-h-[380px] order-1">
           <img
-            src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1600&q=70"
+            src="/decor/location.jpg"
             alt="خريطة الوحدات"
             class="absolute inset-0 w-full h-full object-cover"
             loading="lazy"

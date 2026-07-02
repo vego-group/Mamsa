@@ -7,7 +7,7 @@
       <!-- Background -->
       <div class="absolute inset-0 bg-primary">
         <img
-          src="https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=1600&q=80"
+          src="/decor/hero.jpg"
           alt=""
           class="w-full h-full object-cover opacity-40"
           loading="eager"
@@ -260,7 +260,7 @@
 
       <div class="relative rounded-2xl overflow-hidden border border-outline-variant min-h-[320px]">
         <img
-          src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1600&q=70"
+          src="/decor/location.jpg"
           alt="خريطة"
           class="absolute inset-0 w-full h-full object-cover"
           loading="lazy"
