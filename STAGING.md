@@ -17,6 +17,10 @@ Toolchain reminders (same as [`backend/DEPLOY.md`](backend/DEPLOY.md)): SSH port
 `public_html` (copy `public/` in, don't rely on symlinks); dirs `755`, files
 `644`, `storage`/`bootstrap/cache` `775` — never `777`.
 
+Deploy sources (subtree splits of the monorepo):
+- **API** → `backend-api` (`vego-group/mamsaa-backend-api`) — see [`backend/DEPLOY.md`](backend/DEPLOY.md).
+- **SPA** → `frontend-vue` (`mohamedashrafdeve-arch/mamsaa-vue`) — build + upload flow in [`frontend/DEPLOY.md`](frontend/DEPLOY.md).
+
 ---
 
 ## 0. Create the two subdomains (hPanel)
