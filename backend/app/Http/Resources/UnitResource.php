@@ -33,20 +33,28 @@ class UnitResource extends JsonResource
                 in_array($this->approval_status, ['rejected']),
                 $this->rejection_reason
             ),
-            'images'              => $this->whenLoaded('images', fn () =>
-                $this->images->isNotEmpty()
-                    ? $this->images->map(fn ($img) => [
+            'images'              => $this->whenLoaded('images', function () {
+                // Real photos only — ignore the generic default placeholder rows.
+                $real = $this->images->filter(
+                    fn ($img) => filled($img->path) && $img->path !== \App\Support\Media::defaultImagePath()
+                );
+
+                if ($real->isNotEmpty()) {
+                    return $real->values()->map(fn ($img) => [
                         'id'      => $img->id,
                         'url'     => $img->url,
-                        'is_main' => $img->is_main,
-                    ])
-                    // Never hand the frontend an empty gallery — fall back to the default.
-                    : [[
-                        'id'      => 0,
-                        'url'     => \App\Support\Media::defaultImageUrl(),
-                        'is_main' => true,
-                    ]]
-            ),
+                        'is_main' => (bool) $img->is_main,
+                    ]);
+                }
+
+                // No real photo yet → curated per-type placeholder (villa/studio/
+                // apartment), so cards look distinct instead of one flat default.
+                return [[
+                    'id'      => 0,
+                    'url'     => \App\Support\Media::imageUrlOrDefault("categories/{$this->unit_type}.jpg"),
+                    'is_main' => true,
+                ]];
+            }),
             'features'            => $this->whenLoaded('features', fn () =>
                 $this->features->pluck('name')
             ),

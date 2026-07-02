@@ -36,6 +36,10 @@ class UnitImageController extends Controller
             'images.*.max'    => 'حجم الصورة يجب ألا يتجاوز 5 ميجابايت.',
         ]);
 
+        // A generic-default placeholder row isn't a real photo — drop it (DB only,
+        // the bundled file is shared) so the first real upload becomes main.
+        $unit->images()->where('path', \App\Support\Media::defaultImagePath())->delete();
+
         $files    = $request->file('images');
         $existing = $unit->images()->count();
 
