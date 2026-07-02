@@ -5,6 +5,9 @@
 .env.production
 .env.testing
 .env.staging
+# Catch dot-less env dumps (e.g. env.prod) — may hold real secrets.
+env.*
+env.prod
 .phpactor.json
 .phpunit.result.cache
 /.codex
