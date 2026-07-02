@@ -3,6 +3,11 @@
 return [
     'length'         => (int) env('OTP_LENGTH', 6),
     'exp_minutes'    => (int) env('OTP_EXP_MINUTES', 5),
+
+    // Fixed OTP for NON-PRODUCTION testing (e.g. 111222). When set and APP_ENV
+    // is not "production", every OTP becomes this value — so debug_otp / the SMS
+    // log always shows it. Ignored entirely in production (codes stay random).
+    'fixed_code'     => env('OTP_FIXED_CODE'),
     'resend_seconds' => (int) env('OTP_RESEND_SECONDS', 60),
     'max_attempts'   => (int) env('OTP_MAX_ATTEMPTS', 3),
 
