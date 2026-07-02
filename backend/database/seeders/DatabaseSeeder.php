@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             TestimonialsSeeder::class,
             DefaultMediaSeeder::class,         // point all images at the bundled default asset
             DemoAccountSeeder::class,          // cards + wallet + favourites + upcoming stay
+            NotificationsSeeder::class,        // in-app bell content for admins + partners
         ]);
     }
 }
