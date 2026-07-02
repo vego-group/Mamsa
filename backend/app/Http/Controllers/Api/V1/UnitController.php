@@ -189,12 +189,21 @@ class UnitController extends Controller
                 $query->where('price', '<=', $bucket['max']);
             }
 
+            // Representative image = cheapest available unit's main image in the
+            // bucket; falls back to the bundled default (same asset as elsewhere).
+            $image = (clone $query)
+                ->whereHas('mainImage')
+                ->with('mainImage')
+                ->orderBy('price')
+                ->first()?->mainImage->first()?->url;
+
             return [
-                'key'   => $bucket['key'],
-                'label' => $bucket['label'],
-                'min'   => $bucket['min'],
-                'max'   => $bucket['max'],
-                'count' => $query->count(),
+                'key'       => $bucket['key'],
+                'label'     => $bucket['label'],
+                'min'       => $bucket['min'],
+                'max'       => $bucket['max'],
+                'count'     => $query->count(),
+                'image_url' => $image ?? \App\Support\Media::defaultImageUrl(),
             ];
         }, self::BUDGET_BUCKETS);
 
