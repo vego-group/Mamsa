@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -13,7 +15,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, HasRoles, Notifiable;
+    use HasApiTokens, HasFactory, HasRoles, Notifiable, Prunable;
 
     protected $fillable = [
         'name',
@@ -84,6 +86,30 @@ class User extends Authenticatable
     public function favoriteUnits(): BelongsToMany
     {
         return $this->belongsToMany(Unit::class, 'favorites')->withTimestamps();
+    }
+
+    /* ===================== Pruning ===================== */
+
+    /**
+     * Abandoned passwordless sign-ins (backend gaps #A): rows created by
+     * verify-otp whose profile was never completed. 24h grace lets the user
+     * finish registering; the bookings guard keeps any paying customer safe.
+     */
+    public function prunable(): Builder
+    {
+        return static::whereNull('name')
+            ->where('created_at', '<', now()->subDay())
+            ->whereDoesntHave('bookings');
+    }
+
+    /**
+     * Polymorphic rows have no FK cascade (unlike refresh_tokens, favorites,
+     * saved_cards, wallet_transactions) — clean them up explicitly.
+     */
+    protected function pruning(): void
+    {
+        $this->tokens()->delete();  // sanctum personal_access_tokens
+        $this->roles()->detach();   // spatie model_has_roles
     }
 
     /* ===================== Helpers ===================== */

@@ -9,6 +9,7 @@ use App\Services\OtpService;
 use App\Services\RefreshTokenService;
 use App\Support\PhoneNumber;
 use App\Traits\ApiResponse;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -25,8 +26,11 @@ class OtpAuthController extends Controller
     public function requestOtp(Request $request): JsonResponse
     {
         $request->validate([
-            'phone' => ['required', 'string', 'min:8', 'max:20'],
+            'phone'  => ['required', 'string', 'min:8', 'max:20'],
+            'intent' => ['nullable', 'in:login,register'],
         ]);
+
+        $this->guardIntent($request->phone, $request->input('intent'));
 
         $code = $this->otp->request($request->phone, 'login', $request->ip());
 
@@ -43,8 +47,11 @@ class OtpAuthController extends Controller
     public function resendOtp(Request $request): JsonResponse
     {
         $request->validate([
-            'phone' => ['required', 'string', 'min:8', 'max:20'],
+            'phone'  => ['required', 'string', 'min:8', 'max:20'],
+            'intent' => ['nullable', 'in:login,register'],
         ]);
+
+        $this->guardIntent($request->phone, $request->input('intent'));
 
         $code = $this->otp->request($request->phone, 'login', $request->ip());
 
@@ -132,6 +139,41 @@ class OtpAuthController extends Controller
         $token->delete();
 
         return $this->success(null, 'تم تسجيل الخروج');
+    }
+
+    /**
+     * Explicit login/register separation (backend gaps #A). Fails fast — before
+     * any SMS is sent or user row created — with a machine-readable `code` the
+     * frontend can branch on. A row whose profile was never completed (blank
+     * name) counts as unregistered, so an abandoned sign-in can still register.
+     * Omitting `intent` keeps the legacy unified passwordless behaviour.
+     */
+    private function guardIntent(string $rawPhone, ?string $intent): void
+    {
+        if ($intent === null) {
+            return;
+        }
+
+        $registered = User::where('phone', PhoneNumber::toE164Ksa($rawPhone))
+            ->whereNotNull('name')
+            ->exists();
+
+        if ($intent === 'login' && ! $registered) {
+            $this->failIntent('هذا الرقم غير مسجّل', 'PHONE_NOT_REGISTERED');
+        }
+
+        if ($intent === 'register' && $registered) {
+            $this->failIntent('هذا الرقم مسجّل بالفعل، يرجى تسجيل الدخول', 'PHONE_ALREADY_REGISTERED');
+        }
+    }
+
+    private function failIntent(string $message, string $code): never
+    {
+        throw new HttpResponseException(response()->json([
+            'success' => false,
+            'message' => $message,
+            'code'    => $code,
+        ], 422));
     }
 
     /**
