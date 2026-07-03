@@ -139,8 +139,8 @@ class UnitController extends Controller
                 'label'     => $cat['label'],
                 'icon'      => $cat['icon'],
                 'count'     => collect($cat['types'])->sum(fn ($t) => (int) ($counts[$t] ?? 0)),
-                // Curated, self-hosted artwork per category (falls back to default).
-                'image_url' => \App\Support\Media::imageUrlOrDefault("categories/{$cat['key']}.jpg"),
+                // Single bundled default image for every category.
+                'image_url' => \App\Support\Media::defaultImageUrl(),
             ];
         }, self::CATEGORIES);
 
@@ -191,8 +191,8 @@ class UnitController extends Controller
                 'min'       => $bucket['min'],
                 'max'       => $bucket['max'],
                 'count'     => $query->count(),
-                // Curated, self-hosted artwork per budget bucket (falls back to default).
-                'image_url' => \App\Support\Media::imageUrlOrDefault("budgets/{$bucket['key']}.jpg"),
+                // Single bundled default image for every budget bucket.
+                'image_url' => \App\Support\Media::defaultImageUrl(),
             ];
         }, self::BUDGET_BUCKETS);
 

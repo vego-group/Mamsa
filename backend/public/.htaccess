@@ -1,3 +1,10 @@
+# Correct MIME types for modern image formats (shared hosting often serves
+# .avif as text/plain, which stops browsers rendering it — e.g. /storage/defaults/*.avif).
+<IfModule mod_mime.c>
+    AddType image/avif .avif
+    AddType image/webp .webp
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

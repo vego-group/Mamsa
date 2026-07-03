@@ -47,11 +47,10 @@ class UnitResource extends JsonResource
                     ]);
                 }
 
-                // No real photo yet → curated per-type placeholder (villa/studio/
-                // apartment), so cards look distinct instead of one flat default.
+                // No real photo yet → the single bundled default image.
                 return [[
                     'id'      => 0,
-                    'url'     => \App\Support\Media::imageUrlOrDefault("categories/{$this->unit_type}.jpg"),
+                    'url'     => \App\Support\Media::defaultImageUrl(),
                     'is_main' => true,
                 ]];
             }),
