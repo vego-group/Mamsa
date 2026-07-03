@@ -15,6 +15,8 @@ export const publicApi = {
   getUnit: (id) => http.get(`/units/${id}`),
   checkAvailability: (id, start_date, end_date) =>
     http.post(`/units/${id}/availability`, { start_date, end_date }),
+  // Public contact form — throttled 5/min server-side.
+  contact: (payload) => http.post('/contact', payload),
 }
 
 export const bookingApi = {

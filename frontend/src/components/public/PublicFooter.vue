@@ -17,7 +17,7 @@
         <div>
           <h3 class="font-title-sm text-title-sm text-primary mb-4">الدعم والمساعدة</h3>
           <ul class="space-y-2.5 text-body-sm text-on-surface-variant">
-            <li><a href="#" class="hover:text-primary transition-colors">تواصل معنا</a></li>
+            <li><RouterLink :to="{ name: 'contact' }" class="hover:text-primary transition-colors">تواصل معنا</RouterLink></li>
             <li><a href="#" class="hover:text-primary transition-colors">الأسئلة الشائعة</a></li>
           </ul>
         </div>

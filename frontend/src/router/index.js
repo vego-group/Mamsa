@@ -28,6 +28,12 @@ const router = createRouter({
       // Public — filtered search results
     },
     {
+      path: '/contact',
+      name: 'contact',
+      component: () => import('@/views/ContactView.vue'),
+      // Public — contact/support form (POST /contact)
+    },
+    {
       path: '/units/:id',
       name: 'unit-detail',
       component: () => import('@/views/UnitDetailView.vue'),
