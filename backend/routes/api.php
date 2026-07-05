@@ -64,6 +64,16 @@ Route::prefix('v1')->group(function () {
     Route::post('contact', [ContactController::class, 'store'])
         ->middleware('throttle:5,1')->name('api.contact.store');
 
+    /* ===================== PAYMENT CALLBACKS (public — Moyasar never sends auth) ===================== */
+    // Registered BEFORE the auth group so GET /payments/callback can never be
+    // swallowed by the authenticated GET /payments/{payment} route.
+    // Server-to-server webhook — authenticated by the Moyasar `secret_token`.
+    Route::post('payments/callback', [PaymentController::class, 'callback'])
+        ->name('api.payments.callback');
+    // Browser return leg after 3-DS — verifies then 302s onto the frontend page.
+    Route::get('payments/callback', [PaymentController::class, 'callbackRedirect'])
+        ->name('api.payments.callback.redirect');
+
     /* ===================== AUTHENTICATED ===================== */
     Route::middleware('auth:sanctum')->group(function () {
 
@@ -122,7 +132,7 @@ Route::prefix('v1')->group(function () {
             Route::post('pay', [PaymentController::class, 'pay'])->name('pay');
             Route::post('verify', [PaymentController::class, 'verify'])->name('verify');
             Route::post('apple-pay/validate-merchant', [PaymentController::class, 'applePayValidateMerchant'])->name('apple-pay.validate');
-            Route::get('{payment}', [PaymentController::class, 'show'])->name('show');
+            Route::get('{payment}', [PaymentController::class, 'show'])->whereNumber('payment')->name('show');
         });
 
         /* Reviews */
@@ -169,6 +179,13 @@ Route::prefix('v1')->group(function () {
                 Route::delete('{user}', [Admin\UserController::class, 'destroy'])->name('destroy');
             });
 
+            // Partner applications review (approve/reject + result email)
+            Route::prefix('partners')->name('partners.')->group(function () {
+                Route::get('/', [Admin\PartnerController::class, 'index'])->name('index');
+                Route::post('{user}/approve', [Admin\PartnerController::class, 'approve'])->name('approve');
+                Route::post('{user}/reject', [Admin\PartnerController::class, 'reject'])->name('reject');
+            });
+
             Route::prefix('requests')->name('requests.')->group(function () {
                 Route::get('/', [Admin\RequestController::class, 'index'])->name('index');
                 Route::get('{unit}', [Admin\RequestController::class, 'show'])->name('show');
@@ -188,8 +205,4 @@ Route::prefix('v1')->group(function () {
             });
         });
     });
-
-    /* ===================== PAYMENT WEBHOOK (no auth) ===================== */
-    Route::post('payments/callback', [PaymentController::class, 'callback'])
-        ->name('api.payments.callback');
 });

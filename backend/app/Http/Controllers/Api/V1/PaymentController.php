@@ -16,6 +16,7 @@ use App\Services\CancellationPolicyService;
 use App\Services\MoyasarService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 
@@ -61,8 +62,12 @@ class PaymentController extends Controller
             'currency'        => config('moyasar.currency', 'SAR'),
             'description'     => 'حجز وحدة #'.$booking->id.' - '.$booking->unit->unit_name,
             'publishable_key' => $this->moyasar->getPublishableKey(),
-            'callback_url'    => url('/api/v1/payments/callback'),
-            'test_mode'       => $this->isTestMode(),
+            // Browser destination after 3-DS — must be a frontend page, never the
+            // API. The page calls POST /payments/verify to confirm server-side.
+            'callback_url'    => $this->frontendCallbackUrl(),
+            // "test" = simulated charge OR real charge against Moyasar test keys.
+            'test_mode'       => $this->isTestMode()
+                || str_starts_with((string) $this->moyasar->getPublishableKey(), 'pk_test'),
         ]);
     }
 
@@ -92,7 +97,7 @@ class PaymentController extends Controller
         $params = [
             'amount_halalas' => (int) round($payment->amount * 100),
             'description'    => 'حجز وحدة #'.$payment->booking_id,
-            'callback_url'   => url('/api/v1/payments/callback'),
+            'callback_url'   => $this->frontendCallbackUrl(),
             'metadata'       => ['payment_id' => $payment->id, 'booking_id' => $payment->booking_id],
         ];
 
@@ -222,6 +227,47 @@ class PaymentController extends Controller
         return $this->success(['ok' => true, 'status' => $verified ? 'paid' : 'failed']);
     }
 
+    /**
+     * Browser return leg after 3-DS (GET). Safety net for payments created with
+     * an API callback_url: confirm server-side best-effort, then always 302 the
+     * user onto the frontend callback page — never show raw JSON to a human.
+     */
+    public function callbackRedirect(Request $request): RedirectResponse
+    {
+        $moyasarId = (string) $request->query('id', '');
+
+        try {
+            if ($moyasarId !== '') {
+                $payment = Payment::where('moyasar_id', $moyasarId)->with('booking')->first();
+
+                // Same idempotency rule as callback(): a settled payment is final.
+                if ($payment && $payment->payment_status !== 'paid') {
+                    $verified = $this->moyasar->verifyCallback($moyasarId, (float) $payment->amount);
+
+                    $payment->update([
+                        'payment_status'   => $verified ? 'paid' : 'failed',
+                        'paid_at'          => $verified ? now() : null,
+                        'moyasar_response' => $request->query(),
+                    ]);
+
+                    if ($verified) {
+                        $this->confirmBooking($payment->booking);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // The user's card may already be charged — verification failures must
+            // never strand them here; the webhook + frontend verify will settle it.
+            report($e);
+        }
+
+        return redirect()->away($this->frontendCallbackUrl().'?'.http_build_query([
+            'id'      => $moyasarId,
+            'status'  => (string) $request->query('status', ''),
+            'message' => (string) $request->query('message', ''),
+        ]));
+    }
+
     public function applePayValidateMerchant(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -296,6 +342,12 @@ class PaymentController extends Controller
         } catch (\Throwable $e) {
             report($e);
         }
+    }
+
+    /** Frontend page that receives Moyasar's post-3DS query params (id/status/message). */
+    private function frontendCallbackUrl(): string
+    {
+        return rtrim((string) config('app.frontend_url'), '/').'/payment/callback';
     }
 
     /**
