@@ -7,7 +7,7 @@ return [
     'fgc' => [
         'username'    => env('FGC_SMS_USERNAME'),
         'password'    => env('FGC_SMS_PASSWORD'),
-        'sender_name' => env('FGC_SMS_SENDER', env('SMS_SENDER_ID', 'Mamsa')),
+        'sender_name' => env('FGC_SMS_SENDER', env('SMS_SENDER_ID', 'Ethabah')),
     ],
 
     'taqnyat' => [
