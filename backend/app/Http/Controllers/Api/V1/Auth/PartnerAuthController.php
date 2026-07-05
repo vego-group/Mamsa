@@ -61,7 +61,7 @@ class PartnerAuthController extends Controller
             // Partner roles are exclusive of the base User role.
             $user->syncRoles($role);
 
-            $user->partnerDetail()->updateOrCreate(
+            $detail = $user->partnerDetail()->updateOrCreate(
                 ['user_id' => $user->id],
                 [
                     'type'        => $data['type'],
@@ -69,6 +69,15 @@ class PartnerAuthController extends Controller
                     'cr_number'   => $data['type'] === 'company' ? $data['cr_number'] : null,
                 ],
             );
+
+            // A rejected applicant who re-submits goes back into the review queue.
+            if ($detail->status === \App\Models\PartnerDetail::STATUS_REJECTED) {
+                $detail->update([
+                    'status'           => \App\Models\PartnerDetail::STATUS_PENDING,
+                    'rejection_reason' => null,
+                    'reviewed_at'      => null,
+                ]);
+            }
 
             return $user;
         });

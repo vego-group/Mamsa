@@ -26,6 +26,8 @@ class UserResource extends JsonResource
             ),
             'is_admin'         => $this->isAdmin(),
             'is_partner'       => $this->isPartner(),
+            // Partner application review state (pending/approved/rejected).
+            'partner_status'   => $this->when($this->isPartner(), fn () => $this->partnerDetail?->status),
             'profile_complete' => ! blank($this->name),
         ];
     }
