@@ -46,14 +46,26 @@ class OtpService
             $ttl
         );
 
-        $expMinutes = config('otp.exp_minutes', 5);
-        $this->sms->send(
-            $phone,
-            "رمز الدخول: {$code} صالح لمدة {$expMinutes} دقائق. لا تشاركه مع أحد.",
-            config('sms.sender_id')
-        );
+        $this->sms->send($phone, $this->smsText($code, $purpose), config('sms.sender_id'));
 
         return $code;
+    }
+
+    /**
+     * CST-compliant OTP text: must state the purpose of the message and the
+     * platform name alongside the code (per the Taqnyat-approved templates,
+     * e.g. "رمز التحقق:XXXX لدخول منصة taqnyat.sa").
+     */
+    private function smsText(string $code, string $purpose): string
+    {
+        $expMinutes = (int) config('otp.exp_minutes', 5);
+
+        $reason = match ($purpose) {
+            'change-phone' => 'لتغيير رقم الجوال في منصة ممسى',
+            default        => 'لدخول منصة ممسى',
+        };
+
+        return "رمز التحقق: {$code} {$reason}. صالح لمدة {$expMinutes} دقائق، لا تشاركه مع أحد.";
     }
 
     /**
