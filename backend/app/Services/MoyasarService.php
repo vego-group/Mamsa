@@ -27,16 +27,21 @@ class MoyasarService
      */
     public function chargeWithToken(string $token, array $params): array
     {
+        // 3DS is forced on token charges: these are customer-initiated payments
+        // and the saved token alone must never be enough to move money.
+        $source = ['type' => 'token', 'token' => $token, '3ds' => true];
+
+        if (! empty($params['cvc'])) {
+            $source['cvc'] = $params['cvc'];
+        }
+
         $response = Http::withBasicAuth($this->secretKey, '')
             ->post("{$this->baseUrl}/payments", [
                 'amount'       => $params['amount_halalas'],
                 'currency'     => config('moyasar.currency', 'SAR'),
                 'description'  => $params['description'],
                 'callback_url' => $params['callback_url'],
-                'source'       => [
-                    'type'  => 'token',
-                    'token' => $token,
-                ],
+                'source'       => $source,
                 'metadata' => $params['metadata'] ?? [],
             ]);
 

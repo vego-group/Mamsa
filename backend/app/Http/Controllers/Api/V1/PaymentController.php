@@ -9,6 +9,7 @@ use App\Http\Requests\Payment\InitiatePaymentRequest;
 use App\Http\Requests\Payment\PayPaymentRequest;
 use App\Models\Booking;
 use App\Models\Payment;
+use App\Models\SavedCard;
 use App\Models\User;
 use App\Notifications\BookingConfirmed;
 use App\Notifications\NewBooking;
@@ -97,12 +98,26 @@ class PaymentController extends Controller
         $params = [
             'amount_halalas' => (int) round($payment->amount * 100),
             'description'    => 'حجز وحدة #'.$payment->booking_id,
-            'callback_url'   => $this->frontendCallbackUrl(),
+            // pid lets the frontend callback page verify after the 3-DS redirect.
+            'callback_url'   => $this->frontendCallbackUrl().'?pid='.$payment->id,
             'metadata'       => ['payment_id' => $payment->id, 'booking_id' => $payment->booking_id],
         ];
 
         if (! empty($data['apple_pay_token'])) {
             $response = $this->moyasar->chargeWithApplePay($data['apple_pay_token'], $params);
+        } elseif (! empty($data['saved_card_id'])) {
+            // Quick pay — the token belongs to the caller or the charge is refused.
+            $card = SavedCard::where('id', $data['saved_card_id'])
+                ->where('user_id', auth()->id())
+                ->whereNotNull('moyasar_token')
+                ->first();
+
+            if (! $card) {
+                return $this->error('البطاقة المحفوظة غير صالحة للدفع', 422);
+            }
+
+            $params['cvc'] = $data['cvc'] ?? null;
+            $response      = $this->moyasar->chargeWithToken($card->moyasar_token, $params);
         } elseif (! empty($data['token'])) {
             $response = $this->moyasar->chargeWithToken($data['token'], $params);
         } else {
@@ -170,6 +185,9 @@ class PaymentController extends Controller
 
         if ($paid) {
             $this->confirmBooking($payment->booking);
+            // The hosted form only returns a token when the user ticked
+            // "save card" — its presence is the user's consent to store it.
+            $this->saveCardFromRemote($remote);
         }
 
         return $this->success([
@@ -339,6 +357,51 @@ class PaymentController extends Controller
 
             // FR-034 / FR-100: SMS booking confirmation to the guest.
             $booking->user?->notify(new BookingConfirmed($booking));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * Persist a reusable card token returned by a paid Moyasar payment
+     * (hosted form with the "save card" box ticked). Best-effort: a card-save
+     * failure must never affect the payment result.
+     */
+    private function saveCardFromRemote(array $remote): void
+    {
+        try {
+            $token = $remote['source']['token'] ?? null;
+            if (! $token) {
+                return;
+            }
+
+            // Moyasar reports the scheme as `company`; map to our enum and
+            // skip anything we don't support rather than fail.
+            $brand = match ($remote['source']['company'] ?? '') {
+                'visa'   => 'visa',
+                'master' => 'mastercard',
+                'mada'   => 'mada',
+                default  => null,
+            };
+
+            // Masked PAN looks like "XXXX-XXXX-XXXX-1234" — keep the last 4.
+            $last4 = substr(preg_replace('/\D/', '', (string) ($remote['source']['number'] ?? '')), -4);
+
+            if (! $brand || strlen($last4) !== 4) {
+                return;
+            }
+
+            $user = auth()->user();
+
+            // One row per physical card: re-saving the same card refreshes its token.
+            $card = SavedCard::updateOrCreate(
+                ['user_id' => $user->id, 'brand' => $brand, 'last4' => $last4],
+                ['moyasar_token' => $token],
+            );
+
+            if (! $user->savedCards()->where('is_default', true)->exists()) {
+                $card->update(['is_default' => true]);
+            }
         } catch (\Throwable $e) {
             report($e);
         }

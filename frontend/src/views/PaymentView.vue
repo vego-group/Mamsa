@@ -55,6 +55,54 @@
 
           <!-- LIVE MODE: Moyasar hosted form -->
           <template v-else>
+            <!-- QUICK PAY: previously saved (tokenised) cards -->
+            <div v-if="savedCards.length" class="bg-white rounded-2xl border border-outline-variant p-6">
+              <h2 class="font-title-sm text-title-sm text-primary mb-4">الدفع السريع ببطاقة محفوظة</h2>
+
+              <div class="space-y-2">
+                <label
+                  v-for="card in savedCards"
+                  :key="card.id"
+                  class="flex items-center gap-3 border rounded-xl px-4 py-3 cursor-pointer transition-colors"
+                  :class="selectedCardId === card.id ? 'border-primary bg-surface-container' : 'border-outline-variant hover:border-primary/40'"
+                >
+                  <input v-model="selectedCardId" type="radio" :value="card.id" class="accent-primary" />
+                  <span class="material-symbols-outlined text-on-surface-variant">credit_card</span>
+                  <span class="font-data" dir="ltr">•••• {{ card.last4 }}</span>
+                  <span class="text-body-sm text-on-surface-variant uppercase">{{ card.brand }}</span>
+                  <span v-if="card.is_default" class="mr-auto text-[11px] text-primary font-bold">الافتراضية</span>
+                </label>
+              </div>
+
+              <div v-if="selectedCardId" class="mt-4 flex items-center gap-3">
+                <input
+                  v-model="cvc"
+                  dir="ltr"
+                  inputmode="numeric"
+                  maxlength="4"
+                  placeholder="CVC"
+                  autocomplete="cc-csc"
+                  class="w-24 border border-outline-variant rounded-xl px-3 py-3 text-center font-data focus:border-primary outline-none"
+                />
+                <button
+                  class="flex-1 py-3 bg-primary text-on-primary rounded-xl font-bold hover:bg-primary-container transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  :disabled="paying || cvc.length < 3"
+                  @click="payWithSavedCard"
+                >
+                  <span v-if="paying" class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                  <span v-else class="material-symbols-outlined text-[18px]">bolt</span>
+                  ادفع {{ formatMoney(info.amount) }} ر.س
+                </button>
+              </div>
+              <p v-if="errorMsg" class="text-error text-body-sm text-center mt-3">{{ errorMsg }}</p>
+
+              <div class="flex items-center gap-3 mt-5 text-on-surface-variant text-body-sm">
+                <span class="flex-1 border-t border-outline-variant"></span>
+                أو ادفع ببطاقة أخرى
+                <span class="flex-1 border-t border-outline-variant"></span>
+              </div>
+            </div>
+
             <div class="bg-white rounded-2xl border border-outline-variant p-6">
               <h2 class="font-title-sm text-title-sm text-primary mb-4">بيانات الدفع</h2>
               <!-- Moyasar renders its secure form inside this element -->
@@ -104,6 +152,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import PublicHeader from '@/components/public/PublicHeader.vue'
 import { paymentApi } from '@/api/public'
+import { userApi } from '@/api/user'
 
 const MOYASAR_VERSION = '1.14.0'
 
@@ -118,6 +167,47 @@ const paid = ref(false)
 const info = ref(null)
 const errorMsg = ref('')
 const formError = ref('')
+
+// ── Quick pay (saved cards) ───────────────────────────────────────
+const savedCards = ref([])
+const selectedCardId = ref(null)
+const cvc = ref('')
+
+async function loadSavedCards() {
+  try {
+    const { data } = await userApi.cards()
+    // Only tokenised cards can be charged server-side.
+    savedCards.value = (data.data ?? data).filter((c) => c.chargeable)
+    selectedCardId.value = savedCards.value.find((c) => c.is_default)?.id ?? null
+  } catch {
+    savedCards.value = [] // quick pay is a bonus — never block the form
+  }
+}
+
+async function payWithSavedCard() {
+  errorMsg.value = ''
+  paying.value = true
+  try {
+    const { data } = await paymentApi.pay({
+      payment_id: info.value.payment_id,
+      saved_card_id: selectedCardId.value,
+      cvc: cvc.value,
+    })
+    const result = data.data ?? data
+    if (result.status === 'paid') {
+      paid.value = true
+    } else if (result.transaction_url) {
+      // 3-D Secure challenge → Moyasar redirects back to /payment/callback?pid=…
+      window.location.href = result.transaction_url
+    } else {
+      errorMsg.value = result.message || 'تعذّر إتمام الدفع'
+      paying.value = false
+    }
+  } catch (e) {
+    errorMsg.value = e.response?.data?.message || 'تعذّر إتمام الدفع'
+    paying.value = false
+  }
+}
 
 function formatMoney(v) {
   return new Intl.NumberFormat('en-US').format(Number(v) || 0)
@@ -156,6 +246,9 @@ function initMoyasarForm() {
     description: info.value.description,
     publishable_api_key: info.value.publishable_key,
     callback_url: callbackUrl,
+    // Shows a "save card" checkbox; when ticked, Moyasar returns a reusable
+    // token with the payment and verify() persists it for quick pay.
+    save_card: true,
     // Apple Pay only renders on Safari/Apple devices over HTTPS with a
     // domain verified in the Moyasar dashboard. Moyasar handles merchant
     // validation internally for the hosted form.
@@ -198,8 +291,9 @@ onMounted(async () => {
   }
   loading.value = false
 
-  // Live mode → mount the secure Moyasar form
+  // Live mode → offer saved cards + mount the secure Moyasar form
   if (info.value && !info.value.test_mode) {
+    loadSavedCards() // fire-and-forget; form mounts regardless
     try {
       await loadMoyasarAssets()
       // Wait a tick so the .mysr-form element is in the DOM

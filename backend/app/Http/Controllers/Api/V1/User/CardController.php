@@ -95,6 +95,8 @@ class CardController extends Controller
             'exp_month'  => $card->exp_month,
             'exp_year'   => $card->exp_year,
             'is_default' => $card->is_default,
+            // Only cards with a gateway token can be charged (quick pay).
+            'chargeable' => $card->moyasar_token !== null,
         ];
     }
 }
