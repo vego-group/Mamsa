@@ -7,3 +7,6 @@ dist/
 # local build artifacts
 testvue-dist.tar.gz
 *.tar.gz
+
+# Apple Pay domain-association files are environment-specific — never commit.
+public/.well-known/apple-developer-merchantid-domain-association*

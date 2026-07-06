@@ -6,7 +6,9 @@
   RewriteBase /
 
   # Force HTTPS (Hostinger terminates TLS at the edge).
+  # Apple Pay domain validation must reach /.well-known/* without redirects.
   RewriteCond %{HTTPS} !=on
+  RewriteCond %{REQUEST_URI} !^/\.well-known/
   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
   # Serve existing files/dirs as-is.
