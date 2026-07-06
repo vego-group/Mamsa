@@ -61,7 +61,8 @@
               <div class="mysr-form"></div>
               <p v-if="formError" class="text-error text-body-sm text-center mt-3">{{ formError }}</p>
             </div>
-            <p class="text-center text-body-sm text-on-surface-variant">
+            <!-- Test-card hint: only when the API handed us Moyasar TEST keys -->
+            <p v-if="isTestKey" class="text-center text-body-sm text-on-surface-variant">
               بطاقة تجريبية: <span class="font-data" dir="ltr">4111 1111 1111 1111</span> — أي تاريخ مستقبلي و CVC
             </p>
             <p class="text-center text-[12px] text-on-surface-variant flex items-center justify-center gap-1">
@@ -99,7 +100,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import PublicHeader from '@/components/public/PublicHeader.vue'
 import { paymentApi } from '@/api/public'
@@ -110,6 +111,8 @@ const route = useRoute()
 const bookingId = route.params.id
 
 const loading = ref(true)
+// True only for Moyasar TEST keys — gates the test-card hint away from real customers.
+const isTestKey = computed(() => (info.value?.publishable_key ?? '').startsWith('pk_test'))
 const paying = ref(false)
 const paid = ref(false)
 const info = ref(null)
