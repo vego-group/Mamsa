@@ -213,6 +213,7 @@ import PublicHeader from '@/components/public/PublicHeader.vue'
 import PublicFooter from '@/components/public/PublicFooter.vue'
 import UnitRailCard from '@/components/public/UnitRailCard.vue'
 import { publicApi } from '@/api/public'
+import { useFavorites } from '@/composables/useFavorites'
 
 const router = useRouter()
 
@@ -221,7 +222,8 @@ const popular = ref([])
 const popularLoading = ref(true)
 const budgets = ref([])
 const cities = ref([])
-const favorites = ref(new Set())
+// Shared, API-backed favorites (persisted for logged-in users).
+const { favoriteIds: favorites, load: loadFavorites, toggle: toggleFav } = useFavorites()
 
 // مختارات لك — chip-filtered curated rail.
 const picks = ref([])
@@ -259,9 +261,8 @@ function formatMoney(v) {
   return new Intl.NumberFormat('en-US').format(Number(v) || 0)
 }
 function toggleFavorite(id) {
-  const next = new Set(favorites.value)
-  next.has(id) ? next.delete(id) : next.add(id)
-  favorites.value = next
+  // Guests are sent to login — hearts only persist for authenticated users.
+  if (!toggleFav(id)) router.push({ name: 'login' })
 }
 
 // Catalogue cards lead to the filtered search-results page.
@@ -344,6 +345,7 @@ async function loadMapList() {
 }
 
 onMounted(() => {
+  loadFavorites()
   loadCategories()
   loadPopular()
   loadBudgets()

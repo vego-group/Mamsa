@@ -21,7 +21,9 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 
 const tabs = [
-  { name: 'account',         icon: 'calendar_today', label: 'حجوزاتي' },
-  { name: 'account-profile', icon: 'person',         label: 'الملف الشخصي' },
+  { name: 'account',           icon: 'calendar_today',         label: 'حجوزاتي' },
+  { name: 'account-favorites', icon: 'favorite',               label: 'المفضلة' },
+  { name: 'account-wallet',    icon: 'account_balance_wallet', label: 'المحفظة' },
+  { name: 'account-profile',   icon: 'person',                 label: 'الملف الشخصي' },
 ]
 </script>

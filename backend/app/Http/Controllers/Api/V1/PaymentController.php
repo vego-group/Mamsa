@@ -366,7 +366,23 @@ class PaymentController extends Controller
             'cancellation_snapshot' => $this->cancellationPolicy->snapshotForBooking($booking),
         ]);
 
-        $booking->loadMissing('unit.owner', 'user');
+        $booking->loadMissing('unit.owner', 'user', 'payment');
+
+        // Wallet ledger (سجل المعاملات): one signed entry per paid booking.
+        // Inside the idempotency guard above, so duplicates are impossible.
+        try {
+            $booking->user?->walletTransactions()->create([
+                'ref_code'    => 'PAY-'.now()->format('Y').'-'.str_pad((string) $booking->id, 6, '0', STR_PAD_LEFT),
+                'type'        => \App\Models\WalletTransaction::TYPE_PAYMENT,
+                'amount'      => -1 * (float) $booking->total_amount,
+                'description' => 'دفع حجز — '.($booking->unit?->unit_name ?? 'وحدة #'.$booking->unit_id),
+                'status'      => 'completed',
+                'booking_id'  => $booking->id,
+                'occurred_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e); // ledger is informational — never block a paid booking
+        }
 
         // Best-effort: a mail/SMS failure must never break a paid booking.
         try {

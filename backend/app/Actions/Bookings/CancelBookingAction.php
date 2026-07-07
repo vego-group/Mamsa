@@ -140,6 +140,21 @@ class CancelBookingAction
 
         $payment->increment('refunded_amount', $quote->refundAmount);
 
+        // Wallet ledger (سجل المعاملات): refunds show as positive entries.
+        try {
+            $booking->user?->walletTransactions()->create([
+                'ref_code'    => 'REF-'.now()->format('Y').'-'.str_pad((string) $refund->id, 6, '0', STR_PAD_LEFT),
+                'type'        => \App\Models\WalletTransaction::TYPE_REFUND,
+                'amount'      => (float) $quote->refundAmount,
+                'description' => 'استرداد من حجز — '.($booking->unit?->unit_name ?? 'وحدة #'.$booking->unit_id),
+                'status'      => 'completed',
+                'booking_id'  => $booking->id,
+                'occurred_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e); // informational — never block a cancellation
+        }
+
         AuditLog::record($refund, 'refund.executed', null, [
             'type'    => $refund->type,
             'amount'  => $quote->refundAmount,

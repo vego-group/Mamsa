@@ -14,4 +14,10 @@ export const userApi = {
   cards: () => http.get('/user/cards'),
   deleteCard: (id) => http.delete(`/user/cards/${id}`),
   setDefaultCard: (id) => http.post(`/user/cards/${id}/default`),
+  // Favorites — toggle endpoints are idempotent server-side.
+  favorites: () => http.get('/user/favorites'),
+  addFavorite: (unitId) => http.post(`/user/favorites/${unitId}`),
+  removeFavorite: (unitId) => http.delete(`/user/favorites/${unitId}`),
+  // Wallet — read-only transaction ledger.
+  transactions: () => http.get('/user/transactions'),
 }

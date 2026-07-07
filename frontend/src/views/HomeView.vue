@@ -531,6 +531,7 @@ import PublicHeader from '@/components/public/PublicHeader.vue'
 import PublicFooter from '@/components/public/PublicFooter.vue'
 import UnitRailCard from '@/components/public/UnitRailCard.vue'
 import { publicApi } from '@/api/public'
+import { useFavorites } from '@/composables/useFavorites'
 
 const router = useRouter()
 
@@ -540,7 +541,8 @@ const listingSection = ref(null)
 
 const popular = ref([])
 const popularLoading = ref(true)
-const favorites = ref(new Set())
+// Shared, API-backed favorites (persisted for logged-in users).
+const { favoriteIds: favorites, load: loadFavorites, toggle: toggleFav } = useFavorites()
 
 // مختارات لك — curated rail filtered by category chip.
 const picks = ref([])
@@ -743,9 +745,8 @@ function badge(unit) {
 }
 
 function toggleFavorite(id) {
-  const next = new Set(favorites.value)
-  next.has(id) ? next.delete(id) : next.add(id)
-  favorites.value = next
+  // Guests are sent to login — hearts only persist for authenticated users.
+  if (!toggleFav(id)) router.push({ name: 'login' })
 }
 
 async function scrollToListing() {
@@ -796,6 +797,7 @@ function resetAndScroll() {
 }
 
 onMounted(() => {
+  loadFavorites()
   load()
   loadPopular()
   loadPicks()

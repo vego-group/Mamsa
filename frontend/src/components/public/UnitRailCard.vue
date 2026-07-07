@@ -1,7 +1,8 @@
 <template>
   <RouterLink
     :to="{ name: 'unit-detail', params: { id: unit.id } }"
-    class="w-[260px] shrink-0 snap-start bg-white rounded-2xl border border-outline-variant overflow-hidden hover:shadow-card transition-all group"
+    class="bg-white rounded-2xl border border-outline-variant overflow-hidden hover:shadow-card transition-all group"
+    :class="fluid ? 'w-full' : 'w-[260px] shrink-0 snap-start'"
   >
     <div class="relative h-40 bg-surface-container overflow-hidden">
       <img
@@ -57,6 +58,8 @@ const props = defineProps({
   unit: { type: Object, required: true },
   favorited: { type: Boolean, default: false },
   badge: { type: Object, default: null }, // optional { label, class }
+  // Fill the parent cell (grid layouts) instead of the fixed rail width.
+  fluid: { type: Boolean, default: false },
 })
 defineEmits(['favorite'])
 

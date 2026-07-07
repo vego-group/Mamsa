@@ -70,6 +70,18 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/account/favorites',
+      name: 'account-favorites',
+      component: () => import('@/views/user/UserFavoritesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/account/wallet',
+      name: 'account-wallet',
+      component: () => import('@/views/user/UserWalletView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/auth/LoginView.vue'),
