@@ -15,3 +15,7 @@ Schedule::command('bookings:complete')->dailyAt('00:30')->withoutOverlapping();
 // Purge abandoned passwordless sign-ups (User::prunable — blank profile,
 // >24h old, no bookings). Rides the same system cron as above.
 Schedule::command('model:prune')->dailyAt('01:00')->withoutOverlapping();
+
+// Anti double-booking: mirror external platform calendars (Booking, Airbnb…)
+// into unit blocked dates. 15 min = the industry-standard iCal sync window.
+Schedule::command('calendar:sync')->everyFifteenMinutes()->withoutOverlapping();

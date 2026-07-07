@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Auth\AdminAuthController;
+use App\Http\Controllers\Api\V1\CalendarController;
 use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
 use App\Http\Controllers\Api\V1\Auth\PartnerAuthController;
@@ -63,6 +64,11 @@ Route::prefix('v1')->group(function () {
     // §9 — public contact form
     Route::post('contact', [ContactController::class, 'store'])
         ->middleware('throttle:5,1')->name('api.contact.store');
+
+    // iCal availability export — the unguessable calendar_token is the credential.
+    Route::get('calendar/{token}.ics', [CalendarController::class, 'export'])
+        ->where('token', '[A-Za-z0-9]{40,80}')
+        ->middleware('throttle:60,1')->name('api.calendar.export');
 
     /* ===================== PAYMENT CALLBACKS (public — Moyasar never sends auth) ===================== */
     // Registered BEFORE the auth group so GET /payments/callback can never be
@@ -151,6 +157,12 @@ Route::prefix('v1')->group(function () {
                 Route::put('{unit}', [Partner\UnitController::class, 'update'])->name('update');
                 Route::delete('{unit}', [Partner\UnitController::class, 'destroy'])->name('destroy');
                 Route::post('{unit}/submit', [Partner\UnitController::class, 'submit'])->name('submit');
+
+                // Availability calendar (anti double-booking): manual closures + iCal sync.
+                Route::get('{unit}/calendar', [Partner\CalendarController::class, 'show'])->name('calendar.show');
+                Route::put('{unit}/calendar', [Partner\CalendarController::class, 'update'])->name('calendar.update');
+                Route::post('{unit}/blocked-dates', [Partner\CalendarController::class, 'storeBlock'])->name('blocked.store');
+                Route::delete('{unit}/blocked-dates/{block}', [Partner\CalendarController::class, 'destroyBlock'])->name('blocked.destroy');
 
                 // Unit gallery (multipart uploads to the public disk).
                 Route::post('{unit}/images', [Partner\UnitImageController::class, 'store'])->name('images.store');

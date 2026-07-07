@@ -27,6 +27,12 @@ export const partnerApi = {
   deleteUnitImage: (id, imageId) => http.delete(`/partner/units/${id}/images/${imageId}`),
   setMainImage: (id, imageId) => http.post(`/partner/units/${id}/images/${imageId}/main`),
 
+  // Availability calendar (anti double-booking): manual closures + iCal sync.
+  getCalendar: (id) => http.get(`/partner/units/${id}/calendar`),
+  saveCalendarSettings: (id, ical_import_url) => http.put(`/partner/units/${id}/calendar`, { ical_import_url }),
+  addBlockedDates: (id, payload) => http.post(`/partner/units/${id}/blocked-dates`, payload),
+  removeBlockedDates: (id, blockId) => http.delete(`/partner/units/${id}/blocked-dates/${blockId}`),
+
   // Bookings
   listBookings: (page = 1) => http.get('/partner/bookings', { params: { page } }),
 

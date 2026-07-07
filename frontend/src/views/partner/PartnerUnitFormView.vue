@@ -157,6 +157,9 @@
         احفظ الوحدة كمسودة أولاً، ثم عُد لتعديلها لإضافة الصور.
       </section>
 
+      <!-- Availability calendar (edit only — needs a saved unit id) -->
+      <UnitCalendarSection v-if="isEdit" :unit-id="route.params.id" />
+
       <!-- Actions -->
       <div class="flex flex-col sm:flex-row gap-3">
         <button type="submit" class="flex-1 py-3 bg-primary text-on-primary rounded-xl font-bold hover:bg-primary-container transition-colors flex items-center justify-center gap-2 disabled:opacity-50" :disabled="saving">
@@ -186,6 +189,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PartnerLayout from '@/layouts/PartnerLayout.vue'
 import { partnerApi } from '@/api/partner'
+import UnitCalendarSection from '@/components/partner/UnitCalendarSection.vue'
 
 const route = useRoute()
 const router = useRouter()

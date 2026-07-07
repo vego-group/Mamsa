@@ -231,7 +231,12 @@ class UnitController extends Controller
             })
             ->exists();
 
-        return response()->json(['available' => ! $conflict]);
+        // Partner manual closures + external (iCal) bookings count as unavailable.
+        $blocked = $conflict ? false : $unit->blockedDates()
+            ->overlapping($request->start_date, $request->end_date)
+            ->exists();
+
+        return response()->json(['available' => ! $conflict && ! $blocked]);
     }
 
     /**

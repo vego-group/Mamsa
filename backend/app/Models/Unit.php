@@ -42,6 +42,7 @@ class Unit extends Model
         'checkin_time',
         'checkout_time',
         'calendar_token',
+        'ical_import_url',
     ];
 
     protected $casts = [
@@ -75,6 +76,11 @@ class Unit extends Model
     public function features(): BelongsToMany
     {
         return $this->belongsToMany(Feature::class, 'unit_features');
+    }
+
+    public function blockedDates(): HasMany
+    {
+        return $this->hasMany(UnitBlockedDate::class);
     }
 
     public function bookings(): HasMany

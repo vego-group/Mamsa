@@ -94,6 +94,15 @@ class BookingController extends Controller
             return response()->json(['message' => 'الوحدة محجوزة في هذه الفترة'], 422);
         }
 
+        // Blocked dates: partner manual closures + external (iCal) bookings.
+        $blocked = $unit->blockedDates()
+            ->overlapping($data['start_date'], $data['end_date'])
+            ->exists();
+
+        if ($blocked) {
+            return response()->json(['message' => 'الوحدة غير متاحة في هذه الفترة'], 422);
+        }
+
         $nights  = now()->parse($data['start_date'])->diffInDays($data['end_date']);
         $pricing = $this->priceBreakdown((float) $unit->price, $nights);
 
