@@ -43,7 +43,7 @@ class PaymentController extends Controller
         $booking = Booking::where('id', $data['booking_id'])
             ->where('user_id', auth()->id())
             ->where('status', 'pending')
-            ->with('unit')
+            ->with('unit.images')
             ->firstOrFail();
 
         $payment = Payment::firstOrCreate(
@@ -55,11 +55,35 @@ class PaymentController extends Controller
             ],
         );
 
+        $unit      = $booking->unit;
+        $mainImage = $unit->images->firstWhere('is_main', true) ?? $unit->images->first();
+
         return $this->success([
             'payment_id'      => $payment->id,
             'booking_id'      => $booking->id,
             'amount'          => (float) $booking->total_amount,
             'amount_halalas'  => (int) round($booking->total_amount * 100),
+            // Order summary for the payment sidebar — the fee lines are the ones
+            // frozen onto the booking at creation, never recomputed here.
+            'booking'         => [
+                'start_date'   => $booking->start_date?->toDateString(),
+                'end_date'     => $booking->end_date?->toDateString(),
+                'nights'       => $booking->start_date && $booking->end_date
+                    ? $booking->start_date->diffInDays($booking->end_date)
+                    : null,
+                'guests'       => $booking->guests,
+                'nightly_rate' => (float) $booking->nightly_rate,
+                'subtotal'     => (float) $booking->subtotal,
+                'service_fee'  => (float) $booking->service_fee,
+                'cleaning_fee' => (float) $booking->cleaning_fee,
+                'taxes'        => (float) $booking->taxes,
+                'unit'         => [
+                    'name'      => $unit->unit_name,
+                    'city'      => $unit->city,
+                    'district'  => $unit->district,
+                    'image_url' => $mainImage?->url,
+                ],
+            ],
             'currency'        => config('moyasar.currency', 'SAR'),
             'description'     => 'حجز وحدة #'.$booking->id.' - '.$booking->unit->unit_name,
             'publishable_key' => $this->moyasar->getPublishableKey(),

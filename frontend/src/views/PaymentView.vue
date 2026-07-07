@@ -124,9 +124,66 @@
         <div class="lg:col-span-2">
           <div class="bg-white rounded-2xl border border-outline-variant p-6 sticky top-20">
             <h2 class="font-title-sm text-title-sm text-primary mb-4">ملخص الطلب</h2>
-            <p class="text-body-md font-semibold text-on-surface pb-4 border-b border-outline-variant">{{ info.description }}</p>
+
+            <!-- Unit -->
+            <div v-if="booking?.unit" class="flex items-center gap-3 pb-4 border-b border-outline-variant">
+              <img
+                v-if="booking.unit.image_url"
+                :src="booking.unit.image_url"
+                :alt="booking.unit.name"
+                class="w-16 h-16 rounded-xl object-cover shrink-0"
+                loading="lazy"
+              />
+              <div class="text-right min-w-0">
+                <p class="text-body-md font-semibold text-on-surface truncate">{{ booking.unit.name }}</p>
+                <p class="text-body-sm text-on-surface-variant flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[15px]">location_on</span>
+                  {{ booking.unit.city }}{{ booking.unit.district ? ` - ${booking.unit.district}` : '' }}
+                </p>
+              </div>
+            </div>
+            <p v-else class="text-body-md font-semibold text-on-surface pb-4 border-b border-outline-variant">{{ info.description }}</p>
+
+            <!-- Trip (رحلتك) -->
+            <div v-if="booking" class="py-4 border-b border-outline-variant space-y-2 text-body-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-on-surface-variant flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px]">calendar_month</span>
+                  التواريخ
+                </span>
+                <span class="text-on-surface font-semibold">{{ formatDate(booking.start_date) }} — {{ formatDate(booking.end_date) }}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-on-surface-variant flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px]">group</span>
+                  الضيوف
+                </span>
+                <span class="text-on-surface font-semibold">{{ booking.guests }} {{ booking.guests > 2 ? 'ضيوف' : 'ضيف' }}</span>
+              </div>
+            </div>
+
+            <!-- Price breakdown (تفاصيل السعر) — frozen fee lines from the booking -->
+            <div v-if="booking" class="py-4 border-b border-outline-variant space-y-2 text-body-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-on-surface-variant">{{ formatMoney(booking.nightly_rate) }} ر.س × {{ booking.nights }} {{ booking.nights > 2 ? 'ليالٍ' : 'ليلة' }}</span>
+                <span class="text-on-surface font-numeric-data">{{ formatMoney(booking.subtotal) }} ر.س</span>
+              </div>
+              <div v-if="booking.service_fee" class="flex items-center justify-between">
+                <span class="text-on-surface-variant">رسوم الخدمة</span>
+                <span class="text-on-surface font-numeric-data">{{ formatMoney(booking.service_fee) }} ر.س</span>
+              </div>
+              <div v-if="booking.cleaning_fee" class="flex items-center justify-between">
+                <span class="text-on-surface-variant">رسوم التنظيف</span>
+                <span class="text-on-surface font-numeric-data">{{ formatMoney(booking.cleaning_fee) }} ر.س</span>
+              </div>
+              <div v-if="booking.taxes" class="flex items-center justify-between">
+                <span class="text-on-surface-variant">الضرائب</span>
+                <span class="text-on-surface font-numeric-data">{{ formatMoney(booking.taxes) }} ر.س</span>
+              </div>
+            </div>
+
             <div class="flex justify-between items-center py-4">
-              <span class="font-bold text-on-surface">الإجمالي</span>
+              <span class="font-bold text-on-surface">المجموع الكلي</span>
               <span class="font-numeric-data text-[24px] text-primary font-bold">{{ formatMoney(info.amount) }} <span class="text-body-sm">ر.س</span></span>
             </div>
             <div class="flex items-center justify-center gap-1.5 text-on-surface-variant">
@@ -211,6 +268,15 @@ async function payWithSavedCard() {
 
 function formatMoney(v) {
   return new Intl.NumberFormat('en-US').format(Number(v) || 0)
+}
+
+// Order summary block from the initiate response (absent on older cached payloads).
+const booking = computed(() => info.value?.booking ?? null)
+
+// Hijri date, matching how dates render across the bookings pages.
+function formatDate(iso) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('ar-SA', { day: 'numeric', month: 'long' })
 }
 
 // ── Dynamic Moyasar.js loader ─────────────────────────────────────
