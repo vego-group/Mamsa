@@ -31,7 +31,7 @@
               <span class="material-symbols-outlined text-[18px]">call</span>
             </li>
             <li class="flex items-center gap-2 justify-end">
-              <span dir="ltr">info@bookedin.sa</span>
+              <span dir="ltr">info@mamsaa.com</span>
               <span class="material-symbols-outlined text-[18px]">mail</span>
             </li>
           </ul>

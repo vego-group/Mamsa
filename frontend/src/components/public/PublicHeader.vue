@@ -8,7 +8,6 @@
         </div>
         <div class="leading-tight">
           <span class="block font-display-lg text-[20px] text-primary">ممسى</span>
-          <span class="block text-[10px] tracking-[0.2em] text-on-surface-variant">BOOKED IN</span>
         </div>
       </RouterLink>
 

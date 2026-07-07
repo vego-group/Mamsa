@@ -6,13 +6,14 @@
     <section class="relative">
       <!-- Background -->
       <div class="absolute inset-0 bg-primary">
+        <!-- Design intent: the photo reads clearly; depth comes from a bottom-heavy scrim, not a flat tint -->
         <img
           src="/decor/hero.jpg"
           alt=""
-          class="w-full h-full object-cover opacity-40"
+          class="w-full h-full object-cover opacity-75"
           loading="eager"
         />
-        <div class="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/70 to-primary/50"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/45 to-black/45"></div>
       </div>
 
       <div class="relative max-w-6xl mx-auto px-4 pt-16 pb-8 sm:pt-20">
@@ -44,27 +45,39 @@
               </div>
             </div>
 
-            <!-- Check-in -->
+            <!-- Check-in — shows an Arabic placeholder until focused, then swaps to a native date picker -->
             <div class="md:col-span-3">
               <label class="block text-[11px] font-bold text-on-surface-variant mb-1.5">تاريخ الوصول</label>
-              <input
-                v-model="filters.checkin"
-                type="date"
-                class="w-full h-12 px-3 rounded-xl bg-surface-container-low border border-transparent text-on-surface text-body-sm focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition"
-                dir="ltr"
-              />
+              <div class="relative">
+                <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px] pointer-events-none">calendar_month</span>
+                <input
+                  v-model="filters.checkin"
+                  :type="dateFocus.checkin || filters.checkin ? 'date' : 'text'"
+                  placeholder="أضف تاريخ"
+                  :dir="dateFocus.checkin || filters.checkin ? 'ltr' : 'rtl'"
+                  class="w-full h-12 pr-10 pl-3 rounded-xl bg-surface-container-low border border-transparent text-on-surface text-body-sm focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition"
+                  @focus="openDatePicker('checkin', $event)"
+                  @blur="dateFocus.checkin = false"
+                />
+              </div>
             </div>
 
             <!-- Check-out -->
             <div class="md:col-span-3">
               <label class="block text-[11px] font-bold text-on-surface-variant mb-1.5">تاريخ المغادرة</label>
-              <input
-                v-model="filters.checkout"
-                type="date"
-                :min="filters.checkin || undefined"
-                class="w-full h-12 px-3 rounded-xl bg-surface-container-low border border-transparent text-on-surface text-body-sm focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition"
-                dir="ltr"
-              />
+              <div class="relative">
+                <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px] pointer-events-none">calendar_month</span>
+                <input
+                  v-model="filters.checkout"
+                  :type="dateFocus.checkout || filters.checkout ? 'date' : 'text'"
+                  placeholder="أضف تاريخ"
+                  :dir="dateFocus.checkout || filters.checkout ? 'ltr' : 'rtl'"
+                  :min="filters.checkin || undefined"
+                  class="w-full h-12 pr-10 pl-3 rounded-xl bg-surface-container-low border border-transparent text-on-surface text-body-sm focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition"
+                  @focus="openDatePicker('checkout', $event)"
+                  @blur="dateFocus.checkout = false"
+                />
+              </div>
             </div>
 
             <!-- Guests -->
@@ -178,36 +191,6 @@
       </div>
     </section>
 
-    <!-- By budget -->
-    <section v-if="budgets.length" class="max-w-6xl mx-auto px-4 pt-12">
-      <div class="flex items-start justify-between gap-4 mb-6">
-        <div class="text-right">
-          <h2 class="font-headline-md text-headline-md text-primary">حسب الميزانية</h2>
-          <p class="text-body-sm text-on-surface-variant mt-1">أسعار تنافس احتياجاتك</p>
-        </div>
-        <button class="flex items-center gap-1.5 px-4 py-2 rounded-full border border-outline-variant text-body-sm font-bold text-on-surface hover:bg-surface-container transition-colors" @click="resetAndScroll">
-          عرض الكل
-          <span class="material-symbols-outlined text-[18px]">chevron_left</span>
-        </button>
-      </div>
-
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <button
-          v-for="b in budgets"
-          :key="b.key"
-          class="relative h-72 rounded-2xl overflow-hidden group text-right"
-          @click="selectBudget(b)"
-        >
-          <img :src="b.image_url" :alt="b.label" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-          <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
-          <div class="absolute bottom-0 inset-x-0 p-5 text-white">
-            <p class="font-title-sm text-title-sm mb-0.5">{{ b.label }}</p>
-            <p class="text-[12px] text-white/80 font-numeric-data">{{ formatMoney(b.count) }} وحدة متاحة</p>
-          </div>
-        </button>
-      </div>
-    </section>
-
     <!-- Most requested -->
     <section v-if="popularLoading || popular.length" class="max-w-6xl mx-auto px-4 pt-12">
       <div class="flex items-start justify-between gap-4 mb-6">
@@ -242,6 +225,36 @@
           :favorited="favorites.has(unit.id)"
           @favorite="toggleFavorite(unit.id)"
         />
+      </div>
+    </section>
+
+    <!-- By budget -->
+    <section v-if="budgets.length" class="max-w-6xl mx-auto px-4 pt-12">
+      <div class="flex items-start justify-between gap-4 mb-6">
+        <div class="text-right">
+          <h2 class="font-headline-md text-headline-md text-primary">حسب الميزانية</h2>
+          <p class="text-body-sm text-on-surface-variant mt-1">أسعار تنافس احتياجاتك</p>
+        </div>
+        <button class="flex items-center gap-1.5 px-4 py-2 rounded-full border border-outline-variant text-body-sm font-bold text-on-surface hover:bg-surface-container transition-colors" @click="resetAndScroll">
+          عرض الكل
+          <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <button
+          v-for="b in budgets"
+          :key="b.key"
+          class="relative h-72 rounded-2xl overflow-hidden group text-right"
+          @click="selectBudget(b)"
+        >
+          <img :src="b.image_url" :alt="b.label" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+          <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
+          <div class="absolute bottom-0 inset-x-0 p-5 text-white">
+            <p class="font-title-sm text-title-sm mb-0.5">{{ b.label }}</p>
+            <p class="text-[12px] text-white/80 font-numeric-data">{{ formatMoney(b.count) }} وحدة متاحة</p>
+          </div>
+        </button>
       </div>
     </section>
 
@@ -286,6 +299,62 @@
             </button>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Picks for you (مختارات لك) — curated rail with category chips -->
+    <section class="max-w-6xl mx-auto px-4 pt-12">
+      <div class="flex items-start justify-between gap-4 mb-5">
+        <div class="text-right">
+          <h2 class="font-headline-md text-headline-md text-primary">مختارات لك</h2>
+          <p class="text-body-sm text-on-surface-variant mt-1">وحدات مختارة بعناية حسب اهتماماتك</p>
+        </div>
+        <button class="flex items-center gap-1.5 px-4 py-2 rounded-full border border-outline-variant text-body-sm font-bold text-on-surface hover:bg-surface-container transition-colors" @click="resetAndScroll">
+          عرض الكل
+          <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+        </button>
+      </div>
+
+      <!-- Category chips -->
+      <div class="flex items-center flex-wrap gap-2 mb-5">
+        <button
+          v-for="cat in categories"
+          :key="cat.value"
+          class="px-4 py-2 rounded-full text-body-sm font-bold border transition-colors"
+          :class="picksCategory === cat.value
+            ? 'bg-primary text-on-primary border-primary'
+            : 'bg-white text-on-surface-variant border-outline-variant hover:border-primary hover:text-primary'"
+          @click="setPicksCategory(cat.value)"
+        >
+          {{ cat.label }}
+        </button>
+      </div>
+
+      <!-- Loading -->
+      <div v-if="picksLoading" class="flex gap-4 overflow-hidden">
+        <div v-for="i in 4" :key="i" class="w-[260px] shrink-0 bg-white rounded-2xl border border-outline-variant overflow-hidden animate-pulse">
+          <div class="h-40 bg-surface-container"></div>
+          <div class="p-4 space-y-3">
+            <div class="h-4 bg-surface-container rounded w-3/4"></div>
+            <div class="h-3 bg-surface-container rounded w-1/2"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rail -->
+      <div v-else-if="picks.length" class="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory -mx-4 px-4">
+        <UnitRailCard
+          v-for="unit in picks"
+          :key="unit.id"
+          :unit="unit"
+          :favorited="favorites.has(unit.id)"
+          @favorite="toggleFavorite(unit.id)"
+        />
+      </div>
+
+      <!-- Empty -->
+      <div v-else class="text-center py-10 text-on-surface-variant text-body-sm">
+        لا توجد وحدات في هذه الفئة حالياً
       </div>
     </section>
 
@@ -358,62 +427,6 @@
             </div>
           </div>
         </RouterLink>
-      </div>
-    </section>
-
-    <!-- Picks for you (مختارات لك) — curated rail with category chips -->
-    <section class="max-w-6xl mx-auto px-4 pt-12">
-      <div class="flex items-start justify-between gap-4 mb-5">
-        <div class="text-right">
-          <h2 class="font-headline-md text-headline-md text-primary">مختارات لك</h2>
-          <p class="text-body-sm text-on-surface-variant mt-1">وحدات مختارة بعناية حسب اهتماماتك</p>
-        </div>
-        <button class="flex items-center gap-1.5 px-4 py-2 rounded-full border border-outline-variant text-body-sm font-bold text-on-surface hover:bg-surface-container transition-colors" @click="resetAndScroll">
-          عرض الكل
-          <span class="material-symbols-outlined text-[18px]">chevron_left</span>
-        </button>
-      </div>
-
-      <!-- Category chips -->
-      <div class="flex items-center flex-wrap gap-2 mb-5">
-        <button
-          v-for="cat in categories"
-          :key="cat.value"
-          class="px-4 py-2 rounded-full text-body-sm font-bold border transition-colors"
-          :class="picksCategory === cat.value
-            ? 'bg-primary text-on-primary border-primary'
-            : 'bg-white text-on-surface-variant border-outline-variant hover:border-primary hover:text-primary'"
-          @click="setPicksCategory(cat.value)"
-        >
-          {{ cat.label }}
-        </button>
-      </div>
-
-      <!-- Loading -->
-      <div v-if="picksLoading" class="flex gap-4 overflow-hidden">
-        <div v-for="i in 4" :key="i" class="w-[260px] shrink-0 bg-white rounded-2xl border border-outline-variant overflow-hidden animate-pulse">
-          <div class="h-40 bg-surface-container"></div>
-          <div class="p-4 space-y-3">
-            <div class="h-4 bg-surface-container rounded w-3/4"></div>
-            <div class="h-3 bg-surface-container rounded w-1/2"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Rail -->
-      <div v-else-if="picks.length" class="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory -mx-4 px-4">
-        <UnitRailCard
-          v-for="unit in picks"
-          :key="unit.id"
-          :unit="unit"
-          :favorited="favorites.has(unit.id)"
-          @favorite="toggleFavorite(unit.id)"
-        />
-      </div>
-
-      <!-- Empty -->
-      <div v-else class="text-center py-10 text-on-surface-variant text-body-sm">
-        لا توجد وحدات في هذه الفئة حالياً
       </div>
     </section>
 
@@ -582,6 +595,21 @@ const filters = reactive({
   minPrice: null,
   maxPrice: null,
 })
+
+// Date fields render as text (Arabic placeholder) until focused, then become
+// native date inputs; showPicker() opens the calendar in one tap where supported.
+const dateFocus = reactive({ checkin: false, checkout: false })
+
+function openDatePicker(field, event) {
+  dateFocus[field] = true
+  nextTick(() => {
+    try {
+      event.target.showPicker?.()
+    } catch {
+      /* non-gesture or unsupported — the native control still works */
+    }
+  })
+}
 
 function mainImage(unit) {
   const imgs = unit.images || []

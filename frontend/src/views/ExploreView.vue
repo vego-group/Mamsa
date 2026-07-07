@@ -52,11 +52,11 @@
       </div>
     </section>
 
-    <!-- Booked-in picks (اختيارات بوكد إن) -->
+    <!-- Booked-in picks (اختيارات ممسى) -->
     <section v-if="popularLoading || popular.length" class="max-w-6xl mx-auto px-4 pt-14">
       <div class="flex items-start justify-between gap-4 mb-6">
         <div class="text-right">
-          <h2 class="font-headline-md text-headline-md text-primary">اختيارات بوكد إن</h2>
+          <h2 class="font-headline-md text-headline-md text-primary">اختيارات ممسى</h2>
           <p class="text-body-sm text-on-surface-variant mt-1">وحدات راقية موصى بها من فريقنا</p>
         </div>
         <RouterLink :to="{ name: 'search' }" class="flex items-center gap-1.5 px-4 py-2 rounded-full border border-outline-variant text-body-sm font-bold text-on-surface hover:bg-surface-container transition-colors">

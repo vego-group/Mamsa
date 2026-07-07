@@ -95,7 +95,7 @@ import { publicApi } from '@/api/public'
 
 const channels = [
   { label: 'اتصل بنا', value: '+966 50 000 0000', icon: 'call' },
-  { label: 'البريد الإلكتروني', value: 'info@bookedin.sa', icon: 'mail' },
+  { label: 'البريد الإلكتروني', value: 'info@mamsaa.com', icon: 'mail' },
   { label: 'ساعات العمل', value: 'السبت – الخميس · 9ص – 6م', icon: 'schedule' },
 ]
 
