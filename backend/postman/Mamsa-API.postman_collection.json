@@ -886,6 +886,33 @@
             "description": "Public list of a unit's reviews."
           },
           "response": []
+        },
+        {
+          "name": "Unit iCal Feed (.ics)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/calendar"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/calendar/{{calendar_token}}.ics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "calendar",
+                "{{calendar_token}}.ics"
+              ]
+            },
+            "description": "Public availability export — paste this URL into Airbnb/Booking.com so they block Mamsa's confirmed bookings + manual closures.\n\nNo auth: the unguessable 40–80 char `calendar_token` **is** the credential (run *Partner → Calendar → Get Unit Calendar* first to capture it). Returns `text/calendar` VCALENDAR. Throttled 60 req/min."
+          },
+          "response": []
         }
       ]
     },
@@ -2169,6 +2196,163 @@
           ]
         },
         {
+          "name": "Calendar",
+          "description": "Availability calendar (anti double-booking): manual closures + two-way iCal sync. All owner-scoped (403 otherwise).",
+          "item": [
+            {
+              "name": "Get Unit Calendar",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/partner/units/{{unit_id}}/calendar",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "partner",
+                    "units",
+                    "{{unit_id}}",
+                    "calendar"
+                  ]
+                },
+                "description": "Settings + closures + booked ranges for one unit (owner only).\n\nResponse: `export_url` (public .ics feed for Airbnb/Booking), `ical_import_url`, `ical_synced_at`, `blocked_dates[]` (id, start_date, end_date, source: manual|ical, note), `booked[]` (read-only pending/confirmed bookings so the UI can paint them).\n\nLazily mints `calendar_token` for units created before the feature existed."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const d = (j && j.data) ? j.data : j;",
+                      "if (d && d.export_url) {",
+                      "  const m = d.export_url.match(/calendar\\/([A-Za-z0-9]+)\\.ics/);",
+                      "  if (m) pm.collectionVariables.set('calendar_token', m[1]);",
+                      "}",
+                      "if (d && d.blocked_dates && d.blocked_dates.length) pm.collectionVariables.set('block_id', d.blocked_dates[0].id);"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Save iCal Import URL",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ical_import_url\": \"https://example.com/external-calendar.ics\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/partner/units/{{unit_id}}/calendar",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "partner",
+                    "units",
+                    "{{unit_id}}",
+                    "calendar"
+                  ]
+                },
+                "description": "Save the external feed URL (Booking/Airbnb export). The backend fetches and parses the feed **before** saving — an unreadable/non-iCal URL returns **422**.\n\nOn success it runs the first sync immediately (no 15-min wait) and returns the same payload as Get Unit Calendar.\n\nSend `\"ical_import_url\": null` to disable: deletes all source=ical blocks and clears `ical_synced_at`."
+              },
+              "response": []
+            },
+            {
+              "name": "Add Blocked Dates (manual closure)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"start_date\": \"2026-08-01\",\n  \"end_date\": \"2026-08-05\",\n  \"note\": \"صيانة\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/partner/units/{{unit_id}}/blocked-dates",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "partner",
+                    "units",
+                    "{{unit_id}}",
+                    "blocked-dates"
+                  ]
+                },
+                "description": "Manual closure (maintenance, external booking…). Validation: `start_date` >= today, `end_date` strictly after `start_date`, `note` optional (max 255).\n\n**201** returns `{id, start_date, end_date, source: \"manual\", note}`. Blocked ranges are enforced in availability + booking creation."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const d = (j && j.data) ? j.data : j;",
+                      "if (d && d.id) pm.collectionVariables.set('block_id', d.id);"
+                    ]
+                  }
+                }
+              ],
+              "response": []
+            },
+            {
+              "name": "Remove Blocked Dates",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/partner/units/{{unit_id}}/blocked-dates/{{block_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "partner",
+                    "units",
+                    "{{unit_id}}",
+                    "blocked-dates",
+                    "{{block_id}}"
+                  ]
+                },
+                "description": "Delete a **manual** closure → **204**.\n\nsource=ical rows return **422** — they mirror the external feed and would be resurrected on the next sync; remove them on the source platform instead."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
           "name": "Notifications",
           "item": [
             {
@@ -2842,6 +3026,14 @@
     },
     {
       "key": "image_id",
+      "value": ""
+    },
+    {
+      "key": "calendar_token",
+      "value": ""
+    },
+    {
+      "key": "block_id",
       "value": ""
     }
   ]
