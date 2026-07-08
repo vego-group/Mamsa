@@ -19,3 +19,7 @@ Schedule::command('model:prune')->dailyAt('01:00')->withoutOverlapping();
 // Anti double-booking: mirror external platform calendars (Booking, Airbnb…)
 // into unit blocked dates. 15 min = the industry-standard iCal sync window.
 Schedule::command('calendar:sync')->everyFifteenMinutes()->withoutOverlapping();
+
+// Release dates held by abandoned checkouts: unpaid pending bookings expire
+// after 60 min (the frontend reuses a pending booking within that window).
+Schedule::command('bookings:expire-pending')->everyFifteenMinutes()->withoutOverlapping();
