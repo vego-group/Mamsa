@@ -46,6 +46,19 @@
         </p>
       </div>
 
+      <!-- Visual availability calendar -->
+      <div class="mb-6">
+        <label class="block text-body-sm font-bold text-on-surface mb-2">تقويم التوافر</label>
+        <p class="text-[12px] text-on-surface-variant mb-2">اضغط على يومي البداية والنهاية لتحديد فترة وإغلاقها، أو اضغط على يوم مغلق يدوياً لإعادة فتحه.</p>
+        <AvailabilityCalendar
+          ref="calGrid"
+          :blocked-dates="calendar.blocked_dates"
+          :booked="calendar.booked"
+          @select="onGridSelect"
+          @remove-block="onGridRemove"
+        />
+      </div>
+
       <!-- Manual block form -->
       <div class="mb-4">
         <label class="block text-body-sm font-bold text-on-surface mb-2">إغلاق تواريخ يدوياً</label>
@@ -82,6 +95,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { partnerApi } from '@/api/partner'
+import AvailabilityCalendar from '@/components/partner/AvailabilityCalendar.vue'
 
 const props = defineProps({
   unitId: { type: [Number, String], required: true },
@@ -100,6 +114,22 @@ const today = new Date().toISOString().slice(0, 10)
 const block = reactive({ start_date: '', end_date: '', note: '' })
 const addingBlock = ref(false)
 const blockError = ref('')
+const calGrid = ref(null)
+
+// Grid range picked → prefill the form; the "إغلاق" button stays the confirm step.
+function onGridSelect({ start_date, end_date }) {
+  block.start_date = start_date
+  block.end_date = end_date
+  blockError.value = ''
+}
+
+// Manual-blocked day tapped on the grid → reopen after an explicit confirm.
+async function onGridRemove(b) {
+  const label = `${formatDate(b.start_date)} ← ${formatDate(b.end_date)}`
+  if (!window.confirm(`إعادة فتح التواريخ ${label}؟`)) return
+  await removeBlock({ id: b.id })
+  calGrid.value?.clearSelection()
+}
 
 // Blocks + read-only booked ranges, merged and sorted for one list.
 const ranges = computed(() => {
@@ -162,6 +192,7 @@ async function addBlock() {
   try {
     await partnerApi.addBlockedDates(props.unitId, { ...block, note: block.note || null })
     block.start_date = block.end_date = block.note = ''
+    calGrid.value?.clearSelection()
     await load()
   } catch (e) {
     blockError.value = e.response?.data?.message || 'تعذّر إغلاق التواريخ'
