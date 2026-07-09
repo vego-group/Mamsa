@@ -90,9 +90,10 @@ class PaymentController extends Controller
             // Browser destination after 3-DS — must be a frontend page, never the
             // API. The page calls POST /payments/verify to confirm server-side.
             'callback_url'    => $this->frontendCallbackUrl(),
-            // "test" = simulated charge OR real charge against Moyasar test keys.
-            'test_mode'       => $this->isTestMode()
-                || str_starts_with((string) $this->moyasar->getPublishableKey(), 'pk_test'),
+            // Simulate only when no keys are configured. With pk_test/sk_test the
+            // real Moyasar form renders and charges hit Moyasar's test gateway;
+            // the frontend shows the test-card hint based on the key prefix.
+            'test_mode'       => $this->isTestMode(),
         ]);
     }
 
