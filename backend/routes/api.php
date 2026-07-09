@@ -112,6 +112,8 @@ Route::prefix('v1')->group(function () {
             // Saved cards (#4) — metadata only, tokenised via Moyasar.
             Route::get('cards', [CardController::class, 'index'])->name('cards.index');
             Route::post('cards', [CardController::class, 'store'])->name('cards.store');
+            // Manual save: client tokenises at Moyasar, sends the token id here.
+            Route::post('cards/from-token', [CardController::class, 'storeFromToken'])->name('cards.from-token');
             Route::delete('cards/{card}', [CardController::class, 'destroy'])->name('cards.destroy');
             Route::post('cards/{card}/default', [CardController::class, 'setDefault'])->name('cards.default');
 
@@ -134,6 +136,7 @@ Route::prefix('v1')->group(function () {
 
         /* Payments — throttled to blunt card-testing / abuse of the charge path */
         Route::prefix('payments')->name('api.payments.')->middleware('throttle:20,1')->group(function () {
+            Route::get('config', [PaymentController::class, 'config'])->name('config');
             Route::post('initiate', [PaymentController::class, 'initiate'])->name('initiate');
             Route::post('pay', [PaymentController::class, 'pay'])->name('pay');
             Route::post('verify', [PaymentController::class, 'verify'])->name('verify');

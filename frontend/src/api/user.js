@@ -12,6 +12,9 @@ export const userApi = {
   submitReview: (payload) => http.post('/reviews', payload),
   // Saved cards — metadata only; gateway tokens never leave the backend.
   cards: () => http.get('/user/cards'),
+  // Manual save: pass { token } (Moyasar token id) in live mode, or the card
+  // metadata { brand, last4, exp_month, exp_year } in simulate mode (no keys).
+  saveCardFromToken: (payload) => http.post('/user/cards/from-token', payload),
   deleteCard: (id) => http.delete(`/user/cards/${id}`),
   setDefaultCard: (id) => http.post(`/user/cards/${id}/default`),
   // Favorites — toggle endpoints are idempotent server-side.

@@ -95,8 +95,85 @@
             </li>
           </ul>
 
-          <!-- Cards are tokenised by Moyasar during checkout — there is no manual add form. -->
-          <p class="mt-5 pt-4 border-t border-outline-variant text-[12px] text-on-surface-variant leading-relaxed flex items-start gap-1.5">
+          <!-- Manual add: tokenised client-side at Moyasar, only the token id reaches our API. -->
+          <div class="mt-5 pt-4 border-t border-outline-variant">
+            <button
+              v-if="!showAddForm"
+              class="w-full py-2.5 border border-primary text-primary rounded-xl font-bold text-body-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
+              @click="showAddForm = true"
+            >
+              <span class="material-symbols-outlined text-[18px]">add_card</span>
+              إضافة بطاقة
+            </button>
+
+            <form v-else class="space-y-3" @submit.prevent="addCard">
+              <input
+                v-model.trim="newCard.name"
+                type="text"
+                placeholder="الاسم على البطاقة"
+                autocomplete="cc-name"
+                required
+                class="w-full border border-outline-variant rounded-xl px-3 py-2.5 text-body-sm focus:border-primary outline-none"
+              />
+              <input
+                v-model="newCard.number"
+                dir="ltr"
+                inputmode="numeric"
+                placeholder="رقم البطاقة"
+                autocomplete="cc-number"
+                maxlength="19"
+                required
+                class="w-full border border-outline-variant rounded-xl px-3 py-2.5 text-center font-data focus:border-primary outline-none"
+              />
+              <div class="flex gap-2" dir="ltr">
+                <input
+                  v-model="newCard.month"
+                  inputmode="numeric"
+                  placeholder="MM"
+                  autocomplete="cc-exp-month"
+                  maxlength="2"
+                  required
+                  class="w-1/4 border border-outline-variant rounded-xl px-2 py-2.5 text-center font-data focus:border-primary outline-none"
+                />
+                <input
+                  v-model="newCard.year"
+                  inputmode="numeric"
+                  placeholder="YYYY"
+                  autocomplete="cc-exp-year"
+                  maxlength="4"
+                  required
+                  class="w-1/3 border border-outline-variant rounded-xl px-2 py-2.5 text-center font-data focus:border-primary outline-none"
+                />
+                <input
+                  v-model="newCard.cvc"
+                  inputmode="numeric"
+                  placeholder="CVC"
+                  autocomplete="cc-csc"
+                  maxlength="4"
+                  required
+                  class="flex-1 border border-outline-variant rounded-xl px-2 py-2.5 text-center font-data focus:border-primary outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                :disabled="savingCard"
+                class="w-full py-2.5 bg-primary text-on-primary rounded-xl font-bold text-body-sm hover:bg-primary-container transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <span v-if="savingCard" class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                <span v-else class="material-symbols-outlined text-[18px]">lock</span>
+                حفظ البطاقة
+              </button>
+              <button type="button" class="w-full text-[12px] text-on-surface-variant hover:underline" @click="cancelAddCard">إلغاء</button>
+
+              <p v-if="cardError" class="text-error text-[12px] text-center">{{ cardError }}</p>
+              <p v-if="gatewayConfig?.test_mode || isTestKey" class="text-[11px] text-amber-700 text-center">
+                وضع التجربة — بطاقة تجريبية: <span class="font-data" dir="ltr">4111 1111 1111 1111</span>
+              </p>
+            </form>
+          </div>
+
+          <p class="mt-4 text-[12px] text-on-surface-variant leading-relaxed flex items-start gap-1.5">
             <span class="material-symbols-outlined text-[16px] shrink-0">info</span>
             تُحفظ بطاقتك تلقائياً عند إتمام أي عملية دفع مع تفعيل خيار «حفظ البطاقة».
           </p>
@@ -109,15 +186,24 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import PublicHeader from '@/components/public/PublicHeader.vue'
 import PublicFooter from '@/components/public/PublicFooter.vue'
 import AccountNav from '@/components/user/AccountNav.vue'
 import { userApi } from '@/api/user'
+import { paymentApi } from '@/api/public'
 
 const loading = ref(true)
 const transactions = ref([])
 const cards = ref([])
+
+// ── Manual add-card (tokenised at Moyasar; PAN never reaches our API) ──
+const showAddForm = ref(false)
+const savingCard = ref(false)
+const cardError = ref('')
+const gatewayConfig = ref(null)
+const newCard = ref({ name: '', number: '', month: '', year: '', cvc: '' })
+const isTestKey = computed(() => (gatewayConfig.value?.publishable_key ?? '').startsWith('pk_test'))
 
 const typeLabels = {
   payment: 'دفع حجز',
@@ -144,6 +230,73 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+function cancelAddCard() {
+  showAddForm.value = false
+  cardError.value = ''
+  newCard.value = { name: '', number: '', month: '', year: '', cvc: '' }
+}
+
+// Detect the brand locally only for simulate mode; live mode trusts Moyasar.
+function detectBrand(number) {
+  if (/^4/.test(number)) return 'visa'
+  if (/^5[1-5]/.test(number) || /^2[2-7]/.test(number)) return 'mastercard'
+  return 'mada'
+}
+
+async function addCard() {
+  cardError.value = ''
+  savingCard.value = true
+  try {
+    const digits = newCard.value.number.replace(/\D/g, '')
+    let payload
+
+    if (gatewayConfig.value?.test_mode) {
+      // No gateway keys — backend stores metadata with a fake token.
+      payload = {
+        brand: detectBrand(digits),
+        last4: digits.slice(-4),
+        exp_month: Number(newCard.value.month),
+        exp_year: Number(newCard.value.year),
+      }
+    } else {
+      // Tokenise client-side with the publishable key: the PAN goes straight
+      // to Moyasar, only the returned token id is sent to our backend.
+      const res = await fetch('https://api.moyasar.com/v1/tokens', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Basic ' + btoa(`${gatewayConfig.value.publishable_key}:`),
+        },
+        body: JSON.stringify({
+          name: newCard.value.name,
+          number: digits,
+          cvc: newCard.value.cvc,
+          month: newCard.value.month,
+          year: newCard.value.year,
+          // Required by Moyasar: where the optional 3-DS card verification
+          // returns. Charges 3-DS anyway, so we don't force it at save time.
+          callback_url: `${window.location.origin}/account/wallet`,
+        }),
+      })
+      const tok = await res.json()
+      if (!res.ok || !tok.id) {
+        cardError.value = tok.message || 'بيانات البطاقة غير صحيحة'
+        return
+      }
+      payload = { token: tok.id }
+    }
+
+    await userApi.saveCardFromToken(payload)
+    const { data } = await userApi.cards()
+    cards.value = data.data ?? data ?? []
+    cancelAddCard()
+  } catch (e) {
+    cardError.value = e.response?.data?.message || 'تعذّر حفظ البطاقة'
+  } finally {
+    savingCard.value = false
+  }
+}
+
 async function makeDefault(card) {
   await userApi.setDefaultCard(card.id)
   cards.value = cards.value.map((c) => ({ ...c, is_default: c.id === card.id }))
@@ -161,9 +314,14 @@ async function removeCard(card) {
 }
 
 onMounted(async () => {
-  const [tx, cd] = await Promise.allSettled([userApi.transactions(), userApi.cards()])
+  const [tx, cd, cfg] = await Promise.allSettled([
+    userApi.transactions(),
+    userApi.cards(),
+    paymentApi.config(),
+  ])
   transactions.value = tx.status === 'fulfilled' ? (tx.value.data.data ?? tx.value.data ?? []) : []
   cards.value = cd.status === 'fulfilled' ? (cd.value.data.data ?? cd.value.data ?? []) : []
+  gatewayConfig.value = cfg.status === 'fulfilled' ? (cfg.value.data.data ?? cfg.value.data ?? null) : null
   loading.value = false
 })
 </script>

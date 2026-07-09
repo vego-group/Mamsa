@@ -31,6 +31,19 @@ class PaymentController extends Controller
     ) {}
 
     /**
+     * Gateway config for pages that tokenise cards outside checkout (e.g. the
+     * wallet's "add card" form). Same flags initiate() returns, minus a booking.
+     */
+    public function config(): JsonResponse
+    {
+        return $this->success([
+            'publishable_key' => $this->moyasar->getPublishableKey(),
+            'test_mode'       => $this->isTestMode(),
+            'currency'        => config('moyasar.currency', 'SAR'),
+        ]);
+    }
+
+    /**
      * Step 1 — create (or fetch) the pending payment for a booking and hand the
      * frontend everything it needs to render the Moyasar form.
      */

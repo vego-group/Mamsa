@@ -158,6 +158,31 @@ class MoyasarService
     }
 
     /**
+     * Fetch a reusable card token created client-side (publishable key) so the
+     * backend can validate it and read the card metadata before saving.
+     * Returns null when Moyasar doesn't know the token (invalid/expired).
+     */
+    public function fetchToken(string $tokenId): ?array
+    {
+        $response = Http::withBasicAuth($this->secretKey, '')
+            ->get("{$this->baseUrl}/tokens/{$tokenId}");
+
+        if ($response->status() === 404) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            Log::error('Moyasar token fetch failed', [
+                'status' => $response->status(),
+                'body'   => $response->json(),
+            ]);
+            throw new \RuntimeException('تعذر التحقق من البطاقة، حاول مرة أخرى');
+        }
+
+        return $response->json();
+    }
+
+    /**
      * Verify payment callback by re-fetching from Moyasar (no shared secret in basic-auth model).
      */
     public function verifyCallback(string $moyasarId, float $expectedAmountSar): bool

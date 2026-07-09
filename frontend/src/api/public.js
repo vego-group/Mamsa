@@ -25,6 +25,9 @@ export const bookingApi = {
 }
 
 export const paymentApi = {
+  // Gateway flags (publishable_key, test_mode) for pages that tokenise cards
+  // outside checkout, e.g. the wallet's add-card form.
+  config: () => http.get('/payments/config'),
   initiate: (booking_id, payment_method) =>
     http.post('/payments/initiate', { booking_id, payment_method }),
   pay: (payload) => http.post('/payments/pay', payload),
