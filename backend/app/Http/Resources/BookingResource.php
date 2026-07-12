@@ -38,6 +38,17 @@ class BookingResource extends JsonResource
             ],
             'status'       => $this->status,
             'status_label' => $this->statusLabel(),
+            // FR-036 — the cancellation policy frozen at payment time. Refund
+            // math reads ONLY this snapshot, so any UI (cancel dialog, policy
+            // card) must render from it too — never from the unit's live
+            // policy. Null until the booking is paid (no snapshot exists yet);
+            // in that window the unit's current policy is what will be frozen.
+            'policy_snapshot' => $this->when((bool) $this->cancellation_snapshot, fn () => [
+                'template'   => $this->cancellation_snapshot['policy_key'] ?? null,
+                'name'       => $this->cancellation_snapshot['policy_name'] ?? null,
+                'checkin_at' => $this->cancellation_snapshot['checkin_at'] ?? null,
+                'tiers'      => $this->cancellation_snapshot['tiers'] ?? [],
+            ], null),
             'notes'        => $this->notes,
             'cancelled_at' => $this->cancelled_at?->toISOString(),
             // Cancellation card data (الحجز ملغي): only present once cancelled.
