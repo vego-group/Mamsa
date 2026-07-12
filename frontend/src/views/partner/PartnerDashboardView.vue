@@ -98,14 +98,14 @@ const loading = ref(true)
 const stats = ref({
   units: { total: 0, pending: 0, approved: 0 },
   bookings: { total: 0, confirmed: 0 },
-  revenue: { total: 0, currency: 'SAR' },
+  revenue: { total: 0, gross: 0, commission: 0, net: 0, currency: 'SAR' },
 })
 
 const kpis = computed(() => [
   { label: 'إجمالي الوحدات', value: stats.value.units.total,    icon: 'apartment',      iconBg: 'bg-blue-50',    iconColor: 'text-blue-600' },
   { label: 'وحدات معتمدة',   value: stats.value.units.approved, icon: 'check_circle',   iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
   { label: 'إجمالي الحجوزات',value: stats.value.bookings.total, icon: 'calendar_today', iconBg: 'bg-purple-50',  iconColor: 'text-purple-600' },
-  { label: 'الإيرادات',      value: formatMoney(stats.value.revenue.total), sub: 'ر.س', icon: 'payments', iconBg: 'bg-amber-50', iconColor: 'text-amber-600' },
+  { label: 'صافي الأرباح',   value: formatMoney(stats.value.revenue.net), sub: `ر.س — بعد عمولة ممسى (${formatMoney(stats.value.revenue.commission)} ر.س)`, icon: 'payments', iconBg: 'bg-amber-50', iconColor: 'text-amber-600' },
 ])
 
 const unitStatusRows = computed(() => {

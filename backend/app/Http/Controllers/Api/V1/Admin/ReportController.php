@@ -36,11 +36,13 @@ class ReportController extends Controller
             ->value('a');
 
         return [
-            'total_revenue'  => round((float) (clone $confirmed)->sum('total_amount'), 2),
-            'occupancy_rate' => $this->occupancyRate(),
-            'avg_nights'     => round($avgNights, 1),
-            'avg_rating'     => round((float) Review::avg('rating'), 1),
-            'reviews_count'  => Review::count(),
+            'total_revenue'    => round((float) (clone $confirmed)->sum('total_amount'), 2),
+            // Mamsa's 2% cut of partner rentals (frozen per booking).
+            'total_commission' => round((float) (clone $confirmed)->sum('commission_amount'), 2),
+            'occupancy_rate'   => $this->occupancyRate(),
+            'avg_nights'       => round($avgNights, 1),
+            'avg_rating'       => round((float) Review::avg('rating'), 1),
+            'reviews_count'    => Review::count(),
         ];
     }
 

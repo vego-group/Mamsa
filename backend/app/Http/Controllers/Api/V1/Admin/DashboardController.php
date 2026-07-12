@@ -71,17 +71,19 @@ class DashboardController extends Controller
         ];
     }
 
-    /** @return array{total: float, this_month: float, currency: string} */
+    /** @return array{total: float, this_month: float, commission: float, commission_this_month: float, currency: string} */
     private function revenue(): array
     {
         $confirmed = Booking::where('status', 'confirmed');
+        $thisMonth = (clone $confirmed)->where('created_at', '>=', now()->startOfMonth());
 
         return [
-            'total'      => round((float) (clone $confirmed)->sum('total_amount'), 2),
-            'this_month' => round((float) (clone $confirmed)
-                ->where('created_at', '>=', now()->startOfMonth())
-                ->sum('total_amount'), 2),
-            'currency'   => 'SAR',
+            'total'                 => round((float) (clone $confirmed)->sum('total_amount'), 2),
+            'this_month'            => round((float) (clone $thisMonth)->sum('total_amount'), 2),
+            // Mamsa's 2% cut of partner rentals (frozen per booking).
+            'commission'            => round((float) (clone $confirmed)->sum('commission_amount'), 2),
+            'commission_this_month' => round((float) (clone $thisMonth)->sum('commission_amount'), 2),
+            'currency'              => 'SAR',
         ];
     }
 

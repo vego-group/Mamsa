@@ -19,4 +19,9 @@ return [
 
     // Tax as a fraction of the nightly subtotal (7%).
     'tax_rate' => (float) env('BOOKING_TAX_RATE', 0.07),
+
+    // Mamsa's commission on partner rentals (2% of the nightly subtotal,
+    // never on fees or taxes). Deducted from the partner's earnings —
+    // it does not change what the guest pays.
+    'commission_rate' => (float) env('BOOKING_COMMISSION_RATE', 0.02),
 ];

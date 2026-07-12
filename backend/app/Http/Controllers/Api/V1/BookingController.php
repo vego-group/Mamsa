@@ -107,19 +107,21 @@ class BookingController extends Controller
         $pricing = $this->priceBreakdown((float) $unit->price, $nights);
 
         $booking = Booking::create([
-            'unit_id'      => $unit->id,
-            'user_id'      => auth()->id(),
-            'start_date'   => $data['start_date'],
-            'end_date'     => $data['end_date'],
-            'guests'       => $data['guests'],
-            'nightly_rate' => $pricing['nightly_rate'],
-            'subtotal'     => $pricing['subtotal'],
-            'service_fee'  => $pricing['service_fee'],
-            'cleaning_fee' => $pricing['cleaning_fee'],
-            'taxes'        => $pricing['taxes'],
-            'total_amount' => $pricing['total'],
-            'status'       => 'pending', // explicit so the in-memory model matches the DB default
-            'notes'        => $data['notes'] ?? null,
+            'unit_id'           => $unit->id,
+            'user_id'           => auth()->id(),
+            'start_date'        => $data['start_date'],
+            'end_date'          => $data['end_date'],
+            'guests'            => $data['guests'],
+            'nightly_rate'      => $pricing['nightly_rate'],
+            'subtotal'          => $pricing['subtotal'],
+            'service_fee'       => $pricing['service_fee'],
+            'cleaning_fee'      => $pricing['cleaning_fee'],
+            'taxes'             => $pricing['taxes'],
+            'commission_rate'   => $pricing['commission_rate'],
+            'commission_amount' => $pricing['commission_amount'],
+            'total_amount'      => $pricing['total'],
+            'status'            => 'pending', // explicit so the in-memory model matches the DB default
+            'notes'             => $data['notes'] ?? null,
         ]);
 
         return response()->json(new BookingResource($booking->load('unit.images')), 201);
@@ -129,7 +131,7 @@ class BookingController extends Controller
      * Itemise a booking total from the unit's nightly price (ملخص السعر).
      * Fees come from config/booking.php and are frozen onto the row by store().
      *
-     * @return array{nightly_rate: float, subtotal: float, service_fee: float, cleaning_fee: float, taxes: float, total: float}
+     * @return array{nightly_rate: float, subtotal: float, service_fee: float, cleaning_fee: float, taxes: float, commission_rate: float, commission_amount: float, total: float}
      */
     private function priceBreakdown(float $nightly, int $nights): array
     {
@@ -138,13 +140,19 @@ class BookingController extends Controller
         $cleaningFee = round((float) config('booking.cleaning_fee'), 2);
         $taxes       = round($subtotal * (float) config('booking.tax_rate'), 2);
 
+        // Mamsa's cut of the partner's rental income — deducted from the
+        // partner's payout, so it is NOT part of the guest-facing total.
+        $commissionRate = (float) config('booking.commission_rate');
+
         return [
-            'nightly_rate' => $nightly,
-            'subtotal'     => $subtotal,
-            'service_fee'  => $serviceFee,
-            'cleaning_fee' => $cleaningFee,
-            'taxes'        => $taxes,
-            'total'        => round($subtotal + $serviceFee + $cleaningFee + $taxes, 2),
+            'nightly_rate'      => $nightly,
+            'subtotal'          => $subtotal,
+            'service_fee'       => $serviceFee,
+            'cleaning_fee'      => $cleaningFee,
+            'taxes'             => $taxes,
+            'commission_rate'   => $commissionRate,
+            'commission_amount' => round($subtotal * $commissionRate, 2),
+            'total'             => round($subtotal + $serviceFee + $cleaningFee + $taxes, 2),
         ];
     }
 }

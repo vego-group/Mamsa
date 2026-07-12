@@ -38,7 +38,7 @@
           </RouterLink>
         </div>
 
-        <div v-for="stat in kpiStats" :key="stat.label" class="p-4 bg-white rounded-2xl border border-outline-variant shadow-sm flex flex-col gap-2">
+        <div v-for="stat in kpiStats" :key="stat.label" class="p-4 bg-white rounded-2xl border border-outline-variant shadow-sm flex flex-col gap-2" :class="stat.cls">
           <div class="p-2 bg-surface-container w-fit rounded-lg">
             <span class="material-symbols-outlined text-primary">{{ stat.icon }}</span>
           </div>
@@ -147,7 +147,7 @@ const data = ref({
   users: { total: 0, partners: 0, customers: 0 },
   units: { total: 0, draft: 0, pending: 0, approved: 0, rejected: 0 },
   bookings: { total: 0, pending: 0, confirmed: 0, cancelled: 0 },
-  revenue: { total: 0, this_month: 0, currency: 'SAR' },
+  revenue: { total: 0, this_month: 0, commission: 0, commission_this_month: 0, currency: 'SAR' },
   occupancy_rate: 0,
   monthly_revenue: [],
   recent_requests: [],
@@ -158,6 +158,8 @@ const kpiStats = computed(() => [
   { label: 'نسبة الإشغال',   icon: 'trending_up',  value: `${data.value.occupancy_rate}%` },
   { label: 'إجمالي المستخدمين', icon: 'group',    value: formatMoney(data.value.users.total) },
   { label: 'إيرادات الشهر',  icon: 'payments',     value: formatMoney(data.value.revenue.this_month), sub: 'ر.س' },
+  // Spans 2 columns so the grid rows stay full (CTA is 2-wide + 5 tiles).
+  { label: 'عمولة ممسى (٢٪)', icon: 'percent',     value: formatMoney(data.value.revenue.commission), sub: `ر.س — هذا الشهر ${formatMoney(data.value.revenue.commission_this_month)} ر.س`, cls: 'col-span-2' },
 ])
 
 const bookingRows = computed(() => [

@@ -118,7 +118,7 @@ import { adminApi } from '@/api/admin'
 
 const loading = ref(true)
 const data = ref({
-  kpis: { total_revenue: 0, occupancy_rate: 0, avg_nights: 0, avg_rating: 0, reviews_count: 0 },
+  kpis: { total_revenue: 0, total_commission: 0, occupancy_rate: 0, avg_nights: 0, avg_rating: 0, reviews_count: 0 },
   monthly_revenue: [],
   units_by_status: { total: 0, approved: 0, pending: 0, rejected: 0, draft: 0 },
   bookings_by_city: [],
@@ -128,7 +128,7 @@ const data = ref({
 const circumference = 2 * Math.PI * 50
 
 const kpiCards = computed(() => [
-  { label: 'إجمالي الإيرادات', value: `${formatMoney(data.value.kpis.total_revenue)} ر.س`, sub: 'حجوزات مؤكدة', icon: 'payments',      iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+  { label: 'إجمالي الإيرادات', value: `${formatMoney(data.value.kpis.total_revenue)} ر.س`, sub: `حجوزات مؤكدة — عمولة ممسى ${formatMoney(data.value.kpis.total_commission)} ر.س`, icon: 'payments',      iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
   { label: 'نسبة الإشغال',     value: `${data.value.kpis.occupancy_rate}%`, sub: 'من الوحدات المعتمدة', icon: 'trending_up', iconBg: 'bg-blue-50',    iconColor: 'text-blue-600' },
   { label: 'متوسط مدة الإقامة', value: `${data.value.kpis.avg_nights} ليلة`, sub: 'لكل حجز مؤكد', icon: 'calendar_today',          iconBg: 'bg-purple-50',  iconColor: 'text-purple-600' },
   { label: 'تقييم المنصة',     value: data.value.kpis.reviews_count > 0 ? `${data.value.kpis.avg_rating}/5` : '—', sub: `${data.value.kpis.reviews_count} تقييم`, icon: 'star', iconBg: 'bg-amber-50', iconColor: 'text-amber-600' },
