@@ -39,7 +39,7 @@ class UnitController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Unit::with(['images', 'features'])
+        $query = Unit::with(['images', 'features', 'cancellationPolicy.tiers'])
             ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available');
@@ -107,7 +107,7 @@ class UnitController extends Controller
     {
         $limit = min((int) $request->input('limit', 8), 12);
 
-        $units = Unit::with(['images', 'features'])
+        $units = Unit::with(['images', 'features', 'cancellationPolicy.tiers'])
             ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available')
@@ -207,7 +207,7 @@ class UnitController extends Controller
             return response()->json(['message' => 'الوحدة غير متاحة'], 404);
         }
 
-        $unit->load(['images', 'features', 'owner', 'reviews.user']);
+        $unit->load(['images', 'features', 'owner', 'reviews.user', 'cancellationPolicy.tiers']);
 
         return new UnitResource($unit);
     }
