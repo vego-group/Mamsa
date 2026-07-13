@@ -123,7 +123,11 @@
                 </div>
                 <div>
                   <div class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-[20px] text-primary">event_available</span><h3 class="font-bold text-on-surface text-body-md">سياسة الإلغاء</h3></div>
-                  <p class="text-body-sm text-on-surface-variant leading-relaxed">{{ cancellationText(unit.cancellation_policy) }}</p>
+                  <CancellationPolicyTiers
+                    v-if="unit.cancellation_policy_details?.tiers?.length"
+                    :policy="unit.cancellation_policy_details"
+                  />
+                  <p v-else class="text-body-sm text-on-surface-variant leading-relaxed">{{ cancellationText(unit.cancellation_policy) }}</p>
                 </div>
               </div>
             </section>
@@ -244,6 +248,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PublicHeader from '@/components/public/PublicHeader.vue'
 import PublicFooter from '@/components/public/PublicFooter.vue'
+import CancellationPolicyTiers from '@/components/public/CancellationPolicyTiers.vue'
 import { publicApi, bookingApi } from '@/api/public'
 import { useAuthStore } from '@/stores/auth'
 

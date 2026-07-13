@@ -116,7 +116,12 @@
                 </li>
                 <li class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px] text-primary">smoke_free</span>ممنوع التدخين داخل الوحدة</li>
                 <li class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px] text-primary">celebration</span>الحفلات والمناسبات تتطلب موافقة مسبقة</li>
-                <li v-if="unit?.cancellation_policy" class="flex items-center gap-2">
+                <!-- FR-036: the policy frozen at payment time, never the unit's live one. -->
+                <li v-if="booking.policy_snapshot?.tiers?.length" class="flex items-start gap-2">
+                  <span class="material-symbols-outlined text-[18px] text-primary">policy</span>
+                  <CancellationPolicyTiers :policy="booking.policy_snapshot" />
+                </li>
+                <li v-else-if="unit?.cancellation_policy" class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[18px] text-primary">policy</span>
                   سياسة الإلغاء: {{ cancellationText(unit.cancellation_policy) }}
                 </li>
@@ -242,6 +247,10 @@
             سيتم إلغاء حجز <span class="font-bold text-on-surface">{{ unit?.name }}</span>.
             قد تختلف قيمة الاسترداد حسب سياسة الإلغاء.
           </p>
+          <!-- FR-036: the frozen snapshot — matches exactly what the refund engine applies. -->
+          <div v-if="booking?.policy_snapshot?.tiers?.length" class="bg-surface-container-low rounded-xl p-3.5 mb-4">
+            <CancellationPolicyTiers :policy="booking.policy_snapshot" />
+          </div>
           <p class="text-body-sm text-on-surface mb-2">سبب الإلغاء (اختياري)</p>
           <div class="flex flex-wrap gap-2 mb-3">
             <button
@@ -312,6 +321,7 @@ import { ref, computed, onMounted, h } from 'vue'
 import { useRoute } from 'vue-router'
 import PublicHeader from '@/components/public/PublicHeader.vue'
 import PublicFooter from '@/components/public/PublicFooter.vue'
+import CancellationPolicyTiers from '@/components/public/CancellationPolicyTiers.vue'
 import { userApi } from '@/api/user'
 
 // Small presentational row for the "تفاصيل الحجز" list.

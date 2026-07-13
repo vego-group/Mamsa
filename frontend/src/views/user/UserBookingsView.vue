@@ -229,6 +229,11 @@
             قد تختلف قيمة الاسترداد حسب سياسة الإلغاء.
           </p>
 
+          <!-- FR-036: the frozen snapshot — matches exactly what the refund engine applies. -->
+          <div v-if="cancelFor.policy_snapshot?.tiers?.length" class="bg-surface-container-low rounded-xl p-3.5 mb-4">
+            <CancellationPolicyTiers :policy="cancelFor.policy_snapshot" />
+          </div>
+
           <p class="text-body-sm text-on-surface mb-2">سبب الإلغاء (اختياري)</p>
           <div class="flex flex-wrap gap-2 mb-3">
             <button
@@ -284,6 +289,7 @@
 import { ref, computed, onMounted } from 'vue'
 import PublicHeader from '@/components/public/PublicHeader.vue'
 import PublicFooter from '@/components/public/PublicFooter.vue'
+import CancellationPolicyTiers from '@/components/public/CancellationPolicyTiers.vue'
 import { userApi } from '@/api/user'
 
 const loading = ref(true)
