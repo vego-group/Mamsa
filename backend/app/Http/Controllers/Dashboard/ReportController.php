@@ -169,8 +169,10 @@ class ReportController extends DashboardController
         return '<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">'
             .'<title>تقرير ممسى</title><style>body{font-family:sans-serif;padding:24px}'
             .'h1{font-size:20px}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12px}'
+            // NB: no @page/@media-print rule — mpdf sets A4 via its format
+            // option, and an @page size rule here makes it paginate wildly.
             .'th,td{border:1px solid #ccc;padding:6px;text-align:right}th{background:#163c24;color:#fff}'
-            .'.tot{margin-top:16px;font-weight:bold}@media print{@page{size:A4}}</style></head><body>'
+            .'.tot{margin-top:16px;font-weight:bold}</style></head><body>'
             .'<h1>تقرير الأداء — ممسى</h1><p>الفترة: '.$from->toDateString().' إلى '.$to->toDateString().'</p>'
             .'<table><thead><tr><th>الكود</th><th>الوحدة</th><th>الضيف</th><th>الوصول</th><th>المغادرة</th>'
             .'<th>الإجمالي</th><th>العمولة</th><th>الصافي</th></tr></thead><tbody>'.$body.'</tbody></table>'
