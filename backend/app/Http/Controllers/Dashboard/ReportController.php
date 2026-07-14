@@ -60,11 +60,23 @@ class ReportController extends DashboardController
             return $this->csv($rows, $filename.'.csv');
         }
 
-        // pdf → print-optimized HTML the browser saves as PDF. A server-side
-        // PDF binary (dompdf, PHP 8.4) can replace this without a contract change.
-        return response($this->reportHtml($rows, $from, $to), 200, [
-            'Content-Type'        => 'text/html; charset=utf-8',
-            'Content-Disposition' => 'inline; filename="'.$filename.'.html"',
+        // pdf → server-rendered PDF via mpdf (proper Arabic shaping + RTL).
+        $tempDir = storage_path('app/mpdf');
+        \Illuminate\Support\Facades\File::ensureDirectoryExists($tempDir);
+
+        $mpdf = new \Mpdf\Mpdf([
+            'mode'             => 'utf-8',
+            'format'           => 'A4',
+            'directionality'   => 'rtl',
+            'autoScriptToLang' => true,
+            'autoLangToFont'   => true,
+            'tempDir'          => $tempDir,
+        ]);
+        $mpdf->WriteHTML($this->reportHtml($rows, $from, $to));
+
+        return response($mpdf->Output($filename.'.pdf', \Mpdf\Output\Destination::STRING_RETURN), 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'.pdf"',
         ]);
     }
 
@@ -164,6 +176,6 @@ class ReportController extends DashboardController
             .'<th>الإجمالي</th><th>العمولة</th><th>الصافي</th></tr></thead><tbody>'.$body.'</tbody></table>'
             .'<p class="tot">الإجمالي: '.number_format((float) $gross, 2).' ر.س · العمولة: '
             .number_format((float) $commission, 2).' ر.س · الصافي: '.number_format((float) $gross - $commission, 2).' ر.س</p>'
-            .'<script>window.onload=()=>window.print&&setTimeout(window.print,300)</script></body></html>';
+            .'</body></html>';
     }
 }

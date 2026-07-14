@@ -85,16 +85,13 @@ raw bytes to `uploadUrl` → reference `fileId`. Server validates **type by magi
 `unit_photo`, PDF for `license_pdf`/`company_doc`) and **size ≤ 10MB** on receipt; client MIME is
 never trusted. The signed URL is valid for 30 minutes and single-use.
 
-## 10. ⚠️ Reports export — PDF is print-HTML for now (§7.2)
+## 10. Reports export (§7.2) — done
 
-`GET /reports/summary` returns the full JSON (grossRevenue, commission, netProfit, series, perUnit) —
-**fully done**. `GET /reports/export`:
-- `format=xlsx` (or `csv`) → returns a real **CSV file download** (UTF-8 BOM, opens in Excel). Done.
-- `format=pdf` → currently returns a **print-optimized HTML** document (auto-invokes the browser print
-  dialog) rather than a server-generated PDF binary. A true server-side PDF needs the `dompdf` package,
-  which I couldn't add from my sandbox (PHP 8.3 vs the server's 8.4). **This is the one partial item.**
-  If you need a binary PDF response, say so and we'll `composer require barryvdh/laravel-dompdf` on the
-  server (PHP 8.4 supports it) and swap the renderer — no contract/response-shape change on your side.
+`GET /reports/summary` returns the full JSON (grossRevenue, commission, netProfit, series, perUnit).
+`GET /reports/export`:
+- `format=pdf` → a real **server-generated PDF** (`application/pdf` download) rendered with **mpdf**,
+  which does proper Arabic letter-shaping + RTL (dompdf can't shape Arabic, so we used mpdf instead).
+- `format=xlsx` (or `csv`) → a real **CSV file download** (UTF-8 BOM, opens in Excel).
 
 ## 11. Everything else
 
