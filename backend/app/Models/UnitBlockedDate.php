@@ -16,6 +16,7 @@ class UnitBlockedDate extends Model
         'start_date',
         'end_date',
         'source',
+        'ical_feed_id',
         'note',
         'external_uid',
     ];

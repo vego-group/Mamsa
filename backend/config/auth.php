@@ -42,6 +42,13 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Partner-dashboard: httpOnly session cookie auth — the token never
+        // appears in a response body (dashboard contract §0.1).
+        'dashboard' => [
+            'driver' => 'session',
+            'provider' => 'users',
+        ],
     ],
 
     /*

@@ -9,7 +9,14 @@ declare(strict_types=1);
  */
 return [
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => [
+        'api/*',
+        'sanctum/csrf-cookie',
+        // Partner-dashboard contract API (root-mounted, cookie-credentialed).
+        'auth/*', 'me', 'me/*', 'overview', 'units', 'units/*',
+        'bookings', 'bookings/*', 'reports/*', 'notifications',
+        'notifications/*', 'uploads/*', 'webhooks/*',
+    ],
 
     'allowed_methods' => ['*'],
 
@@ -30,5 +37,8 @@ return [
 
     'max_age' => 86400,
 
-    'supports_credentials' => false,
+    // Cookie-session partner-dashboard requires credentialed CORS. Note:
+    // browsers reject credentials with a '*' origin — keep origins explicit
+    // wherever this is true (server env sets it).
+    'supports_credentials' => (bool) env('CORS_SUPPORTS_CREDENTIALS', false),
 ];

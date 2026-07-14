@@ -28,6 +28,7 @@ class Unit extends Model
         'area',
         'city',
         'district',
+        'address',
         'lat',
         'lng',
         'description',
@@ -76,6 +77,11 @@ class Unit extends Model
     public function features(): BelongsToMany
     {
         return $this->belongsToMany(Feature::class, 'unit_features');
+    }
+
+    public function icalFeeds(): HasMany
+    {
+        return $this->hasMany(UnitIcalFeed::class);
     }
 
     public function blockedDates(): HasMany

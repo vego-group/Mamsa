@@ -6,6 +6,8 @@ namespace App\Console\Commands;
 
 use App\Models\Unit;
 use App\Models\UnitBlockedDate;
+use App\Models\UnitIcalFeed;
+use App\Services\IcalFeedSyncService;
 use App\Services\IcalService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -22,8 +24,21 @@ class SyncIcalCalendars extends Command
 
     protected $description = 'Import external iCal feeds into unit blocked dates';
 
-    public function handle(IcalService $ical): int
+    public function handle(IcalService $ical, IcalFeedSyncService $feedSync): int
     {
+        // Named dashboard feeds (contract §5.4) — per-feed status + notify.
+        $feeds = UnitIcalFeed::query()
+            ->when($this->option('unit'), fn ($q, $id) => $q->where('unit_id', $id))
+            ->with('unit.owner')
+            ->get();
+
+        foreach ($feeds as $feed) {
+            $feedSync->sync($feed)
+                ? $this->info("feed {$feed->id} ({$feed->source}): ok")
+                : $this->warn("feed {$feed->id} ({$feed->source}): failed");
+        }
+
+        // Legacy single-URL imports from the Vue partner UI (units.ical_import_url).
         $units = Unit::whereNotNull('ical_import_url')
             ->when($this->option('unit'), fn ($q, $id) => $q->where('id', $id))
             ->get();
@@ -37,9 +52,13 @@ class SyncIcalCalendars extends Command
                 // Ignore stale history — availability only matters going forward.
                 $events = array_filter($events, fn ($e) => $e['end'] >= now()->subMonth()->toDateString());
 
-                // Mirror the feed atomically: replace all ical-sourced rows.
+                // Mirror the feed atomically: replace this legacy feed's rows
+                // only (feed_id IS NULL) so named dashboard feeds are untouched.
                 DB::transaction(function () use ($unit, $events) {
-                    $unit->blockedDates()->where('source', UnitBlockedDate::SOURCE_ICAL)->delete();
+                    $unit->blockedDates()
+                        ->where('source', UnitBlockedDate::SOURCE_ICAL)
+                        ->whereNull('ical_feed_id')
+                        ->delete();
 
                     foreach ($events as $e) {
                         $unit->blockedDates()->create([

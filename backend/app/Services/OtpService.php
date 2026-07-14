@@ -79,18 +79,18 @@ class OtpService
         $otp   = $this->get($phone, $purpose);
 
         if (! $otp) {
-            throw ValidationException::withMessages([
+            throw \App\Exceptions\OtpException::withMessages([
                 'code' => ['رمز غير صحيح أو منتهي الصلاحية'],
-            ]);
+            ])->setOtpCode('OTP_EXPIRED');
         }
 
         $maxAttempts = (int) config('otp.max_attempts', 3);
 
         if ($otp['attempts'] >= $maxAttempts) {
             $this->cache()->forget($key);
-            throw ValidationException::withMessages([
+            throw \App\Exceptions\OtpException::withMessages([
                 'code' => ['تم تجاوز الحد الأقصى للمحاولات. يرجى طلب رمز جديد.'],
-            ]);
+            ])->setOtpCode('OTP_LOCKED');
         }
 
         // Persist incremented attempt count before checking the code,
@@ -100,9 +100,9 @@ class OtpService
 
         if (! hash_equals((string) $otp['code'], trim($code))) {
             $remaining = $maxAttempts - $otp['attempts'];
-            throw ValidationException::withMessages([
+            throw \App\Exceptions\OtpException::withMessages([
                 'code' => ["رمز غير صحيح. المحاولات المتبقية: {$remaining}"],
-            ]);
+            ])->setOtpCode('OTP_WRONG');
         }
 
         $this->cache()->forget($key);
