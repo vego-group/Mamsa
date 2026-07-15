@@ -32,6 +32,16 @@ class UnitBlockedDate extends Model
     }
 
     /**
+     * The feed that imported this block. Null for manual blocks and for rows
+     * from the legacy single-feed sync (units.ical_import_url), which predates
+     * ical_feed_id — callers must null-check.
+     */
+    public function icalFeed(): BelongsTo
+    {
+        return $this->belongsTo(UnitIcalFeed::class, 'ical_feed_id');
+    }
+
+    /**
      * Ranges overlapping [$start, $end). end_date follows the iCal DTEND
      * convention (checkout day, exclusive) — same as bookings.
      */

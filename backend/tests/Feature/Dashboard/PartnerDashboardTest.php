@@ -7,6 +7,7 @@ namespace Tests\Feature\Dashboard;
 use App\Models\Booking;
 use App\Models\PartnerDetail;
 use App\Models\Unit;
+use App\Models\UnitBlockedDate;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
@@ -231,6 +232,76 @@ class PartnerDashboardTest extends TestCase
             'status'        => 'stored',
             'path'          => 'dashboard/'.$kind.'/x.'.($kind === 'unit_photo' ? 'jpg' : 'pdf'),
         ]);
+    }
+
+    /* ---- calendar month grid (§5.1) ---- */
+
+    /**
+     * Regression: the grid eager-loads blockedDates.icalFeed. A month with NO
+     * blocked rows never resolves that relation (Eloquent skips eager loading
+     * on an empty result set), so an empty month passes vacuously — this test
+     * MUST keep real ical + manual rows in range to be worth anything.
+     */
+    public function test_calendar_month_resolves_ical_manual_and_booked_days(): void
+    {
+        $partner = $this->partner();
+        $unit    = $this->unit($partner);
+
+        $feed = $unit->icalFeeds()->create([
+            'source' => 'Airbnb',
+            'url'    => 'https://example.com/f.ics',
+            'status' => \App\Models\UnitIcalFeed::STATUS_SYNCED,
+        ]);
+
+        $month = now()->startOfMonth();
+        $unit->blockedDates()->create([
+            'start_date'   => $month->copy()->addDays(2)->toDateString(),
+            'end_date'     => $month->copy()->addDays(3)->toDateString(),
+            'source'       => UnitBlockedDate::SOURCE_ICAL,
+            'ical_feed_id' => $feed->id,
+        ]);
+        $unit->blockedDates()->create([
+            'start_date' => $month->copy()->addDays(5)->toDateString(),
+            'end_date'   => $month->copy()->addDays(6)->toDateString(),
+            'source'     => UnitBlockedDate::SOURCE_MANUAL,
+            'note'       => 'صيانة',
+        ]);
+
+        $res = $this->actingAs($partner, 'dashboard')
+            ->getJson('/units/u_'.$unit->id.'/calendar?month='.$month->format('Y-m'))
+            ->assertOk();
+
+        $days = collect($res->json())->keyBy('date');
+
+        $this->assertSame('external', $days[$month->copy()->addDays(2)->toDateString()]['status']);
+        $this->assertSame('Airbnb', $days[$month->copy()->addDays(2)->toDateString()]['source']);
+        $this->assertSame('blocked', $days[$month->copy()->addDays(5)->toDateString()]['status']);
+        $this->assertSame('صيانة', $days[$month->copy()->addDays(5)->toDateString()]['reason']);
+        // Checkout day is exclusive — day 3 is free again.
+        $this->assertSame('available', $days[$month->copy()->addDays(3)->toDateString()]['status']);
+        $this->assertCount((int) $month->copy()->endOfMonth()->format('j'), $res->json());
+    }
+
+    public function test_calendar_external_day_falls_back_when_feed_missing(): void
+    {
+        $partner = $this->partner();
+        $unit    = $this->unit($partner);
+        $month   = now()->startOfMonth();
+
+        // Legacy single-feed sync rows carry no ical_feed_id — must not 500.
+        $unit->blockedDates()->create([
+            'start_date' => $month->copy()->addDays(1)->toDateString(),
+            'end_date'   => $month->copy()->addDays(2)->toDateString(),
+            'source'     => UnitBlockedDate::SOURCE_ICAL,
+            'note'       => 'Booking.com',
+        ]);
+
+        $days = collect($this->actingAs($partner, 'dashboard')
+            ->getJson('/units/u_'.$unit->id.'/calendar?month='.$month->format('Y-m'))
+            ->assertOk()->json())->keyBy('date');
+
+        $this->assertSame('external', $days[$month->copy()->addDays(1)->toDateString()]['status']);
+        $this->assertSame('Booking.com', $days[$month->copy()->addDays(1)->toDateString()]['source']);
     }
 
     /* ---- host-cancel idempotency (§6.1 / §10.8) ---- */
