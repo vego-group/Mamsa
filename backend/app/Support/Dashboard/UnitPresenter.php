@@ -30,9 +30,10 @@ class UnitPresenter
             'name'                 => $unit->unit_name,
             'type'                 => $unit->unit_type,
             'status'               => $unit->approval_status,
-            'pricePerNight'        => (float) $unit->price,
-            'bedrooms'             => (int) $unit->bedrooms,
-            'capacity'             => (int) $unit->capacity,
+            // Draft fields can be null (partial body) — don't coerce to 0.
+            'pricePerNight'        => $unit->price !== null ? (float) $unit->price : null,
+            'bedrooms'             => $unit->bedrooms !== null ? (int) $unit->bedrooms : null,
+            'capacity'             => $unit->capacity !== null ? (int) $unit->capacity : null,
             'bathrooms'            => $unit->bathrooms !== null ? (int) $unit->bathrooms : null,
             'rating'               => $reviewsCount > 0 ? round((float) $avgRating, 1) : null,
             'reviewsCount'         => (int) $reviewsCount,

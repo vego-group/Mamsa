@@ -158,6 +158,20 @@ class PartnerDashboardTest extends TestCase
             ->assertJsonPath('status', 'pending');
     }
 
+    /* ---- draft creation (wizard, §4 partial body) ---- */
+
+    public function test_create_partial_draft_without_price(): void
+    {
+        $partner = $this->partner();
+
+        // §4 — drafts don't validate required fields; a partial body must save.
+        $this->actingAs($partner, 'dashboard')
+            ->postJson('/units', ['name' => 'مسودة جزئية'])
+            ->assertStatus(201)
+            ->assertJsonPath('status', 'draft')
+            ->assertJsonPath('pricePerNight', null);
+    }
+
     /* ---- photo/license attach via presign fileIds (wizard §1) ---- */
 
     public function test_attach_photos_and_cover_by_file_ids(): void
