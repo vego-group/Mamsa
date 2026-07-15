@@ -133,6 +133,8 @@ class ProfileController extends DashboardController
             default                                                               => 'pending',
         };
 
+        $cancellations = self::hostCancellations($user);
+
         return [
             'id'                       => 'p_'.$user->id,
             'name'                     => $user->name,
@@ -141,17 +143,20 @@ class ProfileController extends DashboardController
             'accountType'              => $detail?->type ?? 'individual',
             'verificationId'           => $detail?->type === 'company' ? $detail?->cr_number : $detail?->national_id,
             'accountState'             => $accountState,
-            'hostCancellationsLast12m' => self::hostCancellations($user),
-            'flagged'                  => self::hostCancellations($user) >= (int) config('dashboard.host_cancellation_flag_threshold'),
+            'hostCancellationsLast12m' => $cancellations,
+            'flagged'                  => $cancellations >= (int) config('dashboard.host_cancellation_flag_threshold'),
             'memberSince'              => $user->created_at?->toIso8601ZuluString(),
         ];
     }
 
+    /**
+     * Deliberately NOT memoized: a static cache keyed by user id outlives the
+     * request under a persistent worker and would serve a stale count. The two
+     * callers above share one local instead.
+     */
     public static function hostCancellations(User $user): int
     {
-        static $memo = [];
-
-        return $memo[$user->id] ??= Booking::whereHas('unit', fn ($q) => $q->where('user_id', $user->id))
+        return Booking::whereHas('unit', fn ($q) => $q->where('user_id', $user->id))
             ->where('cancelled_by', 'partner')
             ->where('cancelled_at', '>=', now()->subMonths(12))
             ->count();
