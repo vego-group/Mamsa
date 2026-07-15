@@ -2957,6 +2957,1389 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "11 — Partner Dashboard (contract API)",
+      "item": [
+        {
+          "name": "Auth (OTP → session cookie)",
+          "item": [
+            {
+              "name": "Request OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/auth/otp/request",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "otp",
+                    "request"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "9-digit phone starting with 5 (no leading 0). Staging uses fixed OTP 111222; the code is never returned.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"{{dashboard_phone}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Verify OTP (login)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/auth/otp/verify",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "otp",
+                    "verify"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "On success sets the httpOnly `mamsa-session` cookie — Postman's cookie jar stores it and sends it on every later dashboard request automatically. Gate errors: PARTNER_NOT_FOUND / ACCOUNT_PENDING / ACCOUNT_SUSPENDED / OTP_WRONG / OTP_EXPIRED / OTP_LOCKED.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"{{dashboard_phone}}\",\n  \"code\": \"{{otp_code}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Logout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/auth/logout",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "logout"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Invalidates the session + clears the cookie."
+              },
+              "response": []
+            }
+          ],
+          "description": "Cookie-session auth (NOT bearer). Run Verify OTP once; the cookie jar carries the session through the rest of this folder."
+        },
+        {
+          "name": "Profile & Company Docs",
+          "item": [
+            {
+              "name": "Get me",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/me",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "me"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Partner profile + accountState/hostCancellationsLast12m/flagged."
+              },
+              "response": []
+            },
+            {
+              "name": "Update me",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/me",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "me"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Only name + email are editable here.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"شريك تجريبي للوحة\",\n  \"email\": \"dashboard.partner@mamsaa.test\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Phone change — request",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/me/phone/request",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "me",
+                    "phone",
+                    "request"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Sends OTP to the NEW number.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"newPhone\": \"512345670\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Phone change — verify",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/me/phone/verify",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "me",
+                    "phone",
+                    "verify"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"newPhone\": \"512345670\",\n  \"code\": \"{{otp_code}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get company docs",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/me/company-docs",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "me",
+                    "company-docs"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Company payout docs + server-computed `complete`. N/A for individuals."
+              },
+              "response": []
+            },
+            {
+              "name": "Update company docs",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/me/company-docs",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "me",
+                    "company-docs"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "cr=10 digits, iban=SA+22 digits; file ids come from Uploads.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"cr\": \"1010101010\",\n  \"iban\": \"SA0380000000608010167519\",\n  \"authorizationLetterFileId\": \"{{file_id}}\",\n  \"vatCertificateFileId\": \"{{file_id}}\",\n  \"operatorLicenseFileId\": \"{{file_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ],
+          "description": "Contract §2 / §9.2."
+        },
+        {
+          "name": "Overview",
+          "item": [
+            {
+              "name": "Overview metrics",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/overview",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "overview"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Home cards + 12-month series. totalRevenue/thisMonthRevenue are PARTNER SHARE (after 2%). unitsCount excludes drafts."
+              },
+              "response": []
+            }
+          ],
+          "description": ""
+        },
+        {
+          "name": "Units (CRUD + lifecycle)",
+          "item": [
+            {
+              "name": "List units",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units?status=approved&q=&page=1&limit=20",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "approved"
+                    },
+                    {
+                      "key": "q",
+                      "value": ""
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Filters: status=draft|pending|approved|rejected, q (name/code). Paginated {data, meta}."
+              },
+              "response": []
+            },
+            {
+              "name": "Create draft unit",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Creates a DRAFT (partial bodies allowed). Captures the new id into {{unit_id}}. city must be an enum slug; amenities are the 8 contract keys.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"وحدة من بوستمان\",\n  \"type\": \"apartment\",\n  \"pricePerNight\": 420,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"bathrooms\": 2,\n  \"city\": \"riyadh\",\n  \"district\": \"العليا\",\n  \"description\": \"وصف تجريبي لوحدة أنشئت من Postman لأغراض الاختبار.\",\n  \"amenities\": [\n    \"wifi\",\n    \"ac\",\n    \"kitchen\"\n  ],\n  \"checkIn\": \"15:00\",\n  \"checkOut\": \"12:00\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"address\": \"حي العليا، الرياض\",\n  \"tourismLicenseNumber\": \"TL-PM-0001\",\n  \"tourismLicenseFileId\": \"{{file_id}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const id = (j && j.id) ? j.id : (j && j.data && j.data.id);",
+                      "if (id) pm.collectionVariables.set('unit_id', id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get unit",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": ""
+              },
+              "response": []
+            },
+            {
+              "name": "Update unit",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Editing an APPROVED unit auto-reverts it to pending. Blocked (409) while pending.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"pricePerNight\": 460,\n  \"description\": \"وصف محدّث للوحدة التجريبية من Postman.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Submit unit",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}/submit",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}",
+                    "submit"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "draft/rejected → pending. Full validation (Saudi-bounds lat/lng, city enum, license, ≥1 photo, company-docs gate). Returns { unit, message }."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete unit (drafts only)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Drafts only; others → 409 UNIT_NOT_DELETABLE."
+              },
+              "response": []
+            }
+          ],
+          "description": "Contract §4. IDs accept `u_1` or `1`."
+        },
+        {
+          "name": "Calendar & Availability",
+          "item": [
+            {
+              "name": "Month grid",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}/calendar?month=2026-07",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}",
+                    "calendar"
+                  ],
+                  "query": [
+                    {
+                      "key": "month",
+                      "value": "2026-07"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Bare array of days. status: available|booked|external|blocked (priority booked>external>blocked>available)."
+              },
+              "response": []
+            },
+            {
+              "name": "Block dates",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}/calendar/block",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}",
+                    "calendar",
+                    "block"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Reason optional. Any booked/external day in the list → 409 DATE_UNAVAILABLE.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"dates\": [\n    \"2026-07-08\",\n    \"2026-07-09\"\n  ],\n  \"reason\": \"صيانة\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Unblock dates",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}/calendar/unblock",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}",
+                    "calendar",
+                    "unblock"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Manually-blocked days only.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"dates\": [\n    \"2026-07-08\",\n    \"2026-07-09\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ],
+          "description": "Contract §5.1–5.3."
+        },
+        {
+          "name": "iCal Feeds & Export",
+          "item": [
+            {
+              "name": "List feeds",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}/ical",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}",
+                    "ical"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Bare array of { id, source, url, status, lastSync }."
+              },
+              "response": []
+            },
+            {
+              "name": "Add feed",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}/ical",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}",
+                    "ical"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Validates the URL fetches valid iCal before saving (else 400 INVALID_ICAL); syncs immediately. Captures {{feed_id}}.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source\": \"Airbnb\",\n  \"url\": \"https://www.airbnb.com/calendar/ical/example.ics\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const id = (j && j.id) ? j.id : (j && j.data && j.data.id);",
+                      "if (id) pm.collectionVariables.set('feed_id', id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Sync feed now",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}/ical/{{feed_id}}/sync",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}",
+                    "ical",
+                    "{{feed_id}}",
+                    "sync"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": ""
+              },
+              "response": []
+            },
+            {
+              "name": "Delete feed",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}/ical/{{feed_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}",
+                    "ical",
+                    "{{feed_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": ""
+              },
+              "response": []
+            },
+            {
+              "name": "Export .ics URL",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/units/{{unit_id}}/ical/export",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "units",
+                    "{{unit_id}}",
+                    "ical",
+                    "export"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Returns { url } — a public tokenized .ics under /api/v1/calendar/{token}.ics. Don't build it yourself."
+              },
+              "response": []
+            }
+          ],
+          "description": "Contract §5.4–5.5."
+        },
+        {
+          "name": "Bookings",
+          "item": [
+            {
+              "name": "List bookings",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/bookings?status=&unitId=&from=&to=&q=&page=1&limit=20",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "bookings"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": ""
+                    },
+                    {
+                      "key": "unitId",
+                      "value": ""
+                    },
+                    {
+                      "key": "from",
+                      "value": ""
+                    },
+                    {
+                      "key": "to",
+                      "value": ""
+                    },
+                    {
+                      "key": "q",
+                      "value": ""
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Filters: status, unitId, from/to (date range), q (booking code). Paginated."
+              },
+              "response": []
+            },
+            {
+              "name": "Get booking",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/bookings/{{booking_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "bookings",
+                    "{{booking_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": ""
+              },
+              "response": []
+            },
+            {
+              "name": "Host-cancel booking",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/bookings/{{booking_id}}/host-cancel",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "bookings",
+                    "{{booking_id}}",
+                    "host-cancel"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Atomic + idempotent (send Idempotency-Key). 100% refund to guest, dates blocked, guest SMS, host_cancellation notification. Preconditions (else 409): status=confirmed & check-in in the future.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"الوحدة محجوزة في منصة أخرى\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ],
+          "description": "Contract §6. Bookings are created by the user website — dashboard only reads + host-cancels."
+        },
+        {
+          "name": "Reports",
+          "item": [
+            {
+              "name": "Summary",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/reports/summary?from=2026-01-01&to=2026-12-31",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "reports",
+                    "summary"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-01-01"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-12-31"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "grossRevenue (full totals), commission (2%), netProfit, series, perUnit. Both from/to required, to>=from."
+              },
+              "response": []
+            },
+            {
+              "name": "Export (PDF)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/reports/export?from=2026-01-01&to=2026-12-31&format=pdf",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "reports",
+                    "export"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-01-01"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-12-31"
+                    },
+                    {
+                      "key": "format",
+                      "value": "pdf"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "format=pdf → real Arabic RTL PDF (mpdf). format=csv|xlsx → CSV download. Binary — use Postman 'Send and Download'."
+              },
+              "response": []
+            }
+          ],
+          "description": ""
+        },
+        {
+          "name": "Notifications",
+          "item": [
+            {
+              "name": "List",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/notifications?page=1&limit=20",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "notifications"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Newest first: { id, type, title, body, read, createdAt, href }. Paginated."
+              },
+              "response": []
+            },
+            {
+              "name": "Unread count",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/notifications/unread-count",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "notifications",
+                    "unread-count"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "{ count }."
+              },
+              "response": []
+            },
+            {
+              "name": "Mark one read",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/notifications/{{notification_id}}/read",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "notifications",
+                    "{{notification_id}}",
+                    "read"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": ""
+              },
+              "response": []
+            },
+            {
+              "name": "Mark all read",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/notifications/read-all",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "notifications",
+                    "read-all"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": ""
+              },
+              "response": []
+            }
+          ],
+          "description": "Contract §8. 5 types: unit_approved, unit_rejected, new_booking, sync_failed, host_cancellation."
+        },
+        {
+          "name": "Uploads",
+          "item": [
+            {
+              "name": "Presign upload",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/uploads/presign",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "uploads",
+                    "presign"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "kind: unit_photo|license_pdf|company_doc. Returns { uploadUrl, fileId }; PUT the raw bytes to uploadUrl (validated by magic bytes + size ≤10MB), then reference fileId. Captures {{file_id}} + {{upload_url}}.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"kind\": \"unit_photo\",\n  \"fileName\": \"photo.jpg\",\n  \"mimeType\": \"image/jpeg\",\n  \"size\": 204800\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const d = (j && j.data) ? j.data : j;",
+                      "if (d && d.fileId) pm.collectionVariables.set('file_id', d.fileId);",
+                      "if (d && d.uploadUrl) pm.collectionVariables.set('upload_url', d.uploadUrl);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Contract §9.1. Signed PUT to our own endpoint (no S3)."
+        }
+      ],
+      "description": "Root-mounted contract API for the Next.js partner dashboard (base = {{dashboard_url}}, NO /api/v1). Cookie-session auth: run Auth → Verify OTP first; the cookie jar carries the session. Error envelope { error:{code,message,fields} }. See docs/NEXTJS-DASHBOARD-*.md."
     }
   ],
   "variable": [
@@ -3034,6 +4417,26 @@
     },
     {
       "key": "block_id",
+      "value": ""
+    },
+    {
+      "key": "dashboard_url",
+      "value": "https://staging.mamsaa.com"
+    },
+    {
+      "key": "dashboard_phone",
+      "value": "512345678"
+    },
+    {
+      "key": "feed_id",
+      "value": ""
+    },
+    {
+      "key": "file_id",
+      "value": ""
+    },
+    {
+      "key": "upload_url",
       "value": ""
     }
   ]
