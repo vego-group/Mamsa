@@ -55,10 +55,12 @@ and `GET /units/1` both work. Just echo back whatever we send.
 ## 6. Cities & amenities are enums mapped server-side
 
 Send the contract slugs (`city: "riyadh"`, `amenities: ["wifi","ac",…]`). We store the Arabic value
-for the public site and map back to slugs in responses. The **city enum** we accept is in
-`config`/`Maps::CITIES` — currently 20 Saudi cities. If you need one that's missing, we add it (a unit
-`submit` with an unlisted city fails validation with `city` field error). Amenity keys are exactly the
-8 in the contract §4.
+for the public site and map back to slugs in responses.
+
+👉 **The literal accepted values for `city` (20), `type` (3) and `amenities` (8) are listed in
+[`NEXTJS-DASHBOARD-ENUMS.md`](./NEXTJS-DASHBOARD-ENUMS.md).** Copy them from there — note
+`makkah`/`madinah`, **not** `mecca`/`medina`. An unlisted value fails with a `city` / `type` /
+`amenities.N` field error. If you need a city that isn't listed, ask and we'll add it.
 
 ## 7. iCal feeds are stored as named multi-feeds (§5.4) — matches contract
 
