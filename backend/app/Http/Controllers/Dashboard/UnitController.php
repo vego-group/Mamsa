@@ -59,6 +59,7 @@ class UnitController extends DashboardController
     {
         // Drafts don't validate required fields — only whatever is provided.
         $data = $this->validateUnit($request, required: false);
+        $this->assertFilesOwned($request, $data);
 
         $unit = $request->user()->units()->create(array_merge(
             $this->toColumns($data),
@@ -70,6 +71,7 @@ class UnitController extends DashboardController
         ));
 
         $this->syncAmenities($unit, $data['amenities'] ?? null);
+        $this->syncPhotos($request, $unit, $data);
 
         return $this->ok(UnitPresenter::make($unit->fresh(['images', 'features'])), 201);
     }
@@ -84,6 +86,7 @@ class UnitController extends DashboardController
         }
 
         $data = $this->validateUnit($request, required: false);
+        $this->assertFilesOwned($request, $data);
         $columns = $this->toColumns($data);
 
         // §4 — an approved unit edited → back to pending + hidden from the site.
@@ -94,6 +97,7 @@ class UnitController extends DashboardController
 
         $unit->update($columns);
         $this->syncAmenities($unit, $data['amenities'] ?? null);
+        $this->syncPhotos($request, $unit, $data);
 
         if ($wasApproved) {
             $this->notifyAdmins($unit);
@@ -160,6 +164,11 @@ class UnitController extends DashboardController
             'address'              => ['sometimes', 'nullable', 'string', 'max:255'],
             'tourismLicenseNumber' => ['sometimes', 'nullable', 'string', 'max:50'],
             'tourismLicenseFileId' => ['sometimes', 'nullable', 'string'],
+            // Photos are attached by referencing fileIds from POST /uploads/presign,
+            // in display order; coverFileId marks the main image.
+            'photoFileIds'         => ['sometimes', 'array', 'max:10'],
+            'photoFileIds.*'       => ['string'],
+            'coverFileId'          => ['sometimes', 'nullable', 'string'],
         ]);
     }
 
@@ -226,6 +235,80 @@ class UnitController extends DashboardController
             && ! ProfileController::docs($user)['complete']) {
             $this->fail('COMPANY_DOCS_INCOMPLETE', 'أكمل مستندات الشركة قبل تقديم الوحدة', 409);
         }
+    }
+
+    /* ---- files (§9.1 presign flow → unit) ---- */
+
+    /**
+     * Every referenced upload must be a stored upload owned by THIS partner
+     * (§0.2), of the kind matching where it's used. Validated up-front so a bad
+     * fileId fails before any mutation — never leaves a half-attached unit.
+     */
+    private function assertFilesOwned(Request $request, array $data): void
+    {
+        $errors = [];
+
+        if (! empty($data['tourismLicenseFileId'])
+            && ! $this->ownedUpload($request, $data['tourismLicenseFileId'], 'license_pdf')) {
+            $errors['tourismLicenseFileId'] = 'ملف الرخصة غير موجود';
+        }
+
+        foreach ($data['photoFileIds'] ?? [] as $i => $fileId) {
+            if (! $this->ownedUpload($request, $fileId, 'unit_photo')) {
+                $errors["photoFileIds.$i"] = 'الصورة غير موجودة';
+            }
+        }
+
+        if (! empty($data['coverFileId'])
+            && ! in_array($data['coverFileId'], $data['photoFileIds'] ?? [], true)) {
+            $errors['coverFileId'] = 'صورة الغلاف يجب أن تكون ضمن الصور المرفوعة';
+        }
+
+        if ($errors) {
+            $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $errors);
+        }
+    }
+
+    private function ownedUpload(Request $request, string $fileId, string $kind): ?DashboardUpload
+    {
+        return DashboardUpload::whereKey($fileId)
+            ->where('user_id', $request->user()->id)
+            ->where('kind', $kind)
+            ->where('status', 'stored')
+            ->first();
+    }
+
+    /**
+     * Replace the unit's gallery from the ordered photoFileIds (§1 answer:
+     * photoFileIds[] + coverFileId). Absent key → gallery untouched; present
+     * (even empty) → authoritative replace. coverFileId marks the main image,
+     * else the first photo. Files are already stored (presign+PUT); we just
+     * link them as UnitImage rows in order.
+     */
+    private function syncPhotos(Request $request, Unit $unit, array $data): void
+    {
+        if (! array_key_exists('photoFileIds', $data)) {
+            return;
+        }
+
+        $cover = $data['coverFileId'] ?? ($data['photoFileIds'][0] ?? null);
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $unit, $data, $cover) {
+            $unit->images()->delete();
+
+            foreach ($data['photoFileIds'] as $fileId) {
+                $upload = $this->ownedUpload($request, $fileId, 'unit_photo');
+                if (! $upload) {
+                    continue; // already validated in assertFilesOwned; defensive
+                }
+
+                $unit->images()->create([
+                    'file_id' => $upload->id,
+                    'path'    => $upload->path,
+                    'is_main' => $fileId === $cover,
+                ]);
+            }
+        });
     }
 
     /* ---- helpers ---- */

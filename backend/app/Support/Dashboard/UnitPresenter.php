@@ -48,7 +48,9 @@ class UnitPresenter
             'tourismLicenseNumber' => $unit->tourism_permit_no,
             'tourismLicenseFileId' => $unit->tourism_permit_file,
             'photos'               => $unit->images->map(fn ($img) => [
-                'id'      => 'ph'.$img->id,
+                // The source fileId (stable, re-sendable in photoFileIds on edit)
+                // when the photo came via the presign flow; else the row id.
+                'id'      => $img->file_id ?: 'ph'.$img->id,
                 'url'     => $img->url,
                 'isCover' => $cover && $img->id === $cover->id,
             ])->values(),

@@ -158,6 +158,67 @@ class PartnerDashboardTest extends TestCase
             ->assertJsonPath('status', 'pending');
     }
 
+    /* ---- photo/license attach via presign fileIds (wizard §1) ---- */
+
+    public function test_attach_photos_and_cover_by_file_ids(): void
+    {
+        $partner = $this->partner();
+        $unit = $this->unit($partner, ['approval_status' => 'draft']);
+        [$a, $b] = [$this->upload($partner, 'unit_photo'), $this->upload($partner, 'unit_photo')];
+
+        $this->actingAs($partner, 'dashboard')
+            ->patchJson('/units/'.$unit->id, [
+                'photoFileIds' => [$a->id, $b->id],
+                'coverFileId'  => $b->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('photos.0.id', $a->id)   // echoes fileId, order preserved
+            ->assertJsonPath('photos.1.isCover', true);
+
+        $this->assertSame(2, $unit->images()->count());
+        $this->assertSame($b->id, $unit->images()->where('is_main', true)->first()->file_id);
+    }
+
+    public function test_photo_file_id_must_be_owned(): void
+    {
+        $partner = $this->partner();
+        $other   = $this->partner();
+        $unit = $this->unit($partner, ['approval_status' => 'draft']);
+        $foreign = $this->upload($other, 'unit_photo');
+
+        $this->actingAs($partner, 'dashboard')
+            ->patchJson('/units/'.$unit->id, ['photoFileIds' => [$foreign->id]])
+            ->assertStatus(400)
+            ->assertJsonPath('error.code', 'VALIDATION')
+            ->assertJsonStructure(['error' => ['fields' => ['photoFileIds.0']]]);
+
+        $this->assertSame(0, $unit->images()->count()); // nothing attached
+    }
+
+    public function test_cover_must_be_among_photos(): void
+    {
+        $partner = $this->partner();
+        $unit = $this->unit($partner, ['approval_status' => 'draft']);
+        $a = $this->upload($partner, 'unit_photo');
+
+        $this->actingAs($partner, 'dashboard')
+            ->patchJson('/units/'.$unit->id, ['photoFileIds' => [$a->id], 'coverFileId' => 'file_stray'])
+            ->assertStatus(400)
+            ->assertJsonPath('error.code', 'VALIDATION');
+    }
+
+    private function upload(User $owner, string $kind): \App\Models\DashboardUpload
+    {
+        return \App\Models\DashboardUpload::create([
+            'id'            => 'file_'.\Illuminate\Support\Str::lower((string) \Illuminate\Support\Str::ulid()),
+            'user_id'       => $owner->id,
+            'kind'          => $kind,
+            'original_name' => 'x.'.($kind === 'unit_photo' ? 'jpg' : 'pdf'),
+            'status'        => 'stored',
+            'path'          => 'dashboard/'.$kind.'/x.'.($kind === 'unit_photo' ? 'jpg' : 'pdf'),
+        ]);
+    }
+
     /* ---- host-cancel idempotency (§6.1 / §10.8) ---- */
 
     public function test_host_cancel_is_idempotent(): void

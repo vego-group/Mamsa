@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UnitImage extends Model
 {
-    protected $fillable = ['unit_id', 'path', 'is_main'];
+    protected $fillable = ['unit_id', 'file_id', 'path', 'is_main'];
 
     protected $casts = ['is_main' => 'boolean'];
 
