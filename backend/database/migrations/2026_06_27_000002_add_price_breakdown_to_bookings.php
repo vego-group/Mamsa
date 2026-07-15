@@ -25,6 +25,12 @@ return new class extends Migration
 
         // Legacy bookings had no fees: the whole total was nights × nightly.
         // Derive a per-night rate from the stored total so the page still adds up.
+        // MySQL-only (DATEDIFF/GREATEST): this backfills real legacy rows, which
+        // only exist on the servers — a fresh sqlite test DB has none to fix.
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement(
             'UPDATE bookings SET subtotal = total_amount, '.
             'nightly_rate = ROUND(total_amount / GREATEST(DATEDIFF(end_date, start_date), 1), 2) '.

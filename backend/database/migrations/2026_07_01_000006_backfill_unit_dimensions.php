@@ -13,8 +13,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // CASE WHEN, not GREATEST() — sqlite (the test DB) has no GREATEST, and
+        // the raw expression is parsed even when no rows match.
         DB::table('units')->whereNull('bathrooms')
-            ->update(['bathrooms' => DB::raw('GREATEST(1, bedrooms)')]);
+            ->update(['bathrooms' => DB::raw('CASE WHEN bedrooms > 1 THEN bedrooms ELSE 1 END')]);
 
         DB::table('units')->whereNull('area')
             ->update(['area' => DB::raw('(bedrooms * 60 + capacity * 15 + 40)')]);

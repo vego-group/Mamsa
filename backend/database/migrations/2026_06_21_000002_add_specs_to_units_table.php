@@ -16,7 +16,7 @@ return new class extends Migration
 
         // Backfill existing rows with plausible values so listing cards render fully.
         DB::table('units')->whereNull('bathrooms')
-            ->update(['bathrooms' => DB::raw('GREATEST(1, bedrooms)')]);
+            ->update(['bathrooms' => DB::raw('CASE WHEN bedrooms > 1 THEN bedrooms ELSE 1 END')]);
         DB::table('units')->whereNull('area')
             ->update(['area' => DB::raw('(bedrooms * 60 + capacity * 15 + 40)')]);
     }
