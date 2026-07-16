@@ -1,7 +1,17 @@
 # Mamsa — Registration & Login Guide for the Next.js Frontend
 
 How to implement **individual user sign-up/login** and **"Join as Partner"** (individual & company)
-against the live Laravel API. Everything below is verified against the deployed backend.
+against the live Laravel API. Everything below is verified against the deployed backend — the partner
+payloads and flow were **re-run end-to-end on staging 2026-07-16** (individual + company registration
+→ `201 pending`, then dashboard login gate). The exact bodies that returned `201` are in §4.2.
+
+> **Two different logins — don't conflate them.** This guide is the **user-site** (`mamsaa.com`)
+> auth: passwordless OTP that returns a **Bearer token**. The **partner dashboard** at
+> `partner.mamsaa.com` is a **separate app** with its **own** login — a root-mounted **cookie
+> session** (`POST /auth/otp/verify`, no `/api/v1`) that **only admits `approved` partners**. A
+> freshly-registered partner is `pending` and **cannot enter the dashboard yet** (see §4.4). Dashboard
+> wiring lives in `NEXTJS-DASHBOARD-PRODUCTION.md`; this doc covers registration + the customer/partner
+> user-site.
 
 ---
 
@@ -181,13 +191,15 @@ POST /auth/request-otp
 { "phone": "0512345678" }          // no intent — allows both new phones and upgrades
 ```
 
-### Step 2 — register (submits profile + OTP code in one shot)
+### Step 2 — register (submits profile + OTP code in one shot)   ✅ verified 2026-07-16
 
 ```
 POST /auth/partner/register                   (throttle: 5/min per IP)
 ```
 
-Individual owner:
+Both bodies below were sent to staging and returned **`201`** with `partner_status: "pending"`.
+
+Individual owner — **`national_id` required, no `cr_number`**:
 
 ```json
 {
@@ -201,7 +213,7 @@ Individual owner:
 }
 ```
 
-Company:
+Company — **`cr_number` required, no `national_id`**:
 
 ```json
 {
@@ -270,22 +282,38 @@ POST /auth/email/request-otp                  (Bearer token, throttle: 5/min)
 
 `email/verify` returns the fresh `user` with `email_verified: true`.
 
-### Step 4 — pending-review state
+### Step 4 — pending-review state (this gates the dashboard)   ✅ verified 2026-07-16
 
 New partners land with `partner_status: "pending"`. An admin reviews the application:
 
-- `pending` → show an "application under review" screen; partner endpoints are role-gated,
-  so keep the dashboard read-only/limited until approved.
+- `pending` → "application under review" screen.
 - `approved` → full partner dashboard.
-- `rejected` → show the rejection notice and offer re-submitting the form (step 2 again).
+- `rejected` → rejection notice + offer re-submitting the form (step 2 again).
 
-Check the current status any time via `GET /auth/me`.
+**What this means for `partner.mamsaa.com` specifically** — the dashboard login (`POST /auth/otp/verify`,
+cookie session) enforces the status server-side; it does **not** just role-gate individual endpoints:
 
-### Partner logs in later — same as Flow A
+| Partner state | Dashboard login (`/auth/otp/verify`) |
+|---|---|
+| `pending` **or** `rejected` | **`403 { error.code: "ACCOUNT_PENDING" }`** — no session issued |
+| suspended (`is_active:false`) | `403 ACCOUNT_SUSPENDED` |
+| not a partner | `404 PARTNER_NOT_FOUND` |
+| `approved` | `200` + session cookie → dashboard opens |
 
-An existing partner signs in with the normal `request-otp (intent: "login")` + `verify-otp`.
-The response `user.roles` will contain `Individual`/`Company` — route them to the partner
-dashboard instead of the customer account.
+Verified live: right after registration the individual got `403 ACCOUNT_PENDING`; after an admin set
+`approved`, the same login returned `200` and `GET /me` succeeded. So on `ACCOUNT_PENDING`, the
+dashboard app must show an "under review" screen — **not** a login error — and the partner cannot see
+any dashboard data until approved. (The customer user-site below is different — a partner CAN log into
+`mamsaa.com` while `pending`; only the dashboard is gated.)
+
+Check status any time via `GET /auth/me`.
+
+### Partner logs in to the user-site later — same as Flow A
+
+On **`mamsaa.com`**, an existing partner signs in with the normal `request-otp (intent: "login")` +
+`verify-otp` → Bearer token. `user.roles` will contain `Individual`/`Company`. This works even while
+`pending`. For the **dashboard** (`partner.mamsaa.com`) use the cookie-session login above, which
+requires `approved`.
 
 ---
 
