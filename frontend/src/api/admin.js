@@ -17,6 +17,11 @@ export const adminApi = {
     // رفض الطلب (متطابق مع: Route::post('{unit}/reject'))
     rejectRequest: (id, reason) => http.post(`/admin/requests/${id}/reject`, { reason }),
 
+    // طلبات انضمام الشركاء (متطابق مع: Route::prefix('partners'))
+    listPartners: (params) => http.get('/admin/partners', { params }),
+    approvePartner: (userId) => http.post(`/admin/partners/${userId}/approve`),
+    rejectPartner: (userId, reason) => http.post(`/admin/partners/${userId}/reject`, { reason }),
+
     // المستخدمون
     listUsers: (params) => http.get('/admin/users', { params }),
     createUser: (payload) => http.post('/admin/users', payload),

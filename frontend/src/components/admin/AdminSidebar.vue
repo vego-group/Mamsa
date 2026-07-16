@@ -75,6 +75,7 @@ const navItems = [
   { name: 'admin-units',     icon: 'apartment',     label: 'الوحدات' },
   { name: 'admin-bookings',  icon: 'calendar_today',label: 'الحجوزات' },
   { name: 'admin-requests',  icon: 'assignment',    label: 'الطلبات' },
+  { name: 'admin-partners',  icon: 'handshake',     label: 'طلبات الشركاء' },
   { name: 'admin-reports',   icon: 'analytics',     label: 'التقارير' },
   { name: 'admin-settings',  icon: 'person',        label: 'الحساب' },
 ]

@@ -185,6 +185,11 @@ const router = createRouter({
           component: () => import('@/views/admin/AdminRequestsView.vue'),
         },
         {
+          path: 'partners',
+          name: 'admin-partners',
+          component: () => import('@/views/admin/AdminPartnersView.vue'),
+        },
+        {
           path: 'requests/:id',
           name: 'admin-request-detail',
           component: () => import('@/views/admin/AdminRequestDetailView.vue'),

@@ -91,6 +91,7 @@ const pageTitles = {
   'admin-bookings':  'الحجوزات',
   'admin-requests':  'الطلبات',
   'admin-request-detail': 'تفاصيل الطلب',
+  'admin-partners':  'طلبات الشركاء',
   'admin-reports':   'التقارير',
   'admin-settings':  'الحساب',
 }
