@@ -1,36 +1,41 @@
 # Partner Dashboard — Reports & Overview (D-9 / D-3)
 
-Implementation guide for the Next.js **partner dashboard** Reports screen and the Overview
-metrics, matched to the live backend. Read alongside `NEXTJS-DASHBOARD-DEVIATIONS.md` for the
-shared conventions (cookie-session auth, error envelope, ID prefixes). All endpoints are
-**root-mounted** on `https://api.mamsaa.com` (staging: `https://staging.mamsaa.com`) and require an
-authenticated partner **session cookie** — send `credentials: "include"` on every request.
+Implementation guide for the Next.js **partner dashboard** Reports screen and the Overview metrics,
+regenerated 2026-07-16 directly from the live controllers (`OverviewController`, `ReportController`).
+Read alongside `NEXTJS-DASHBOARD-DEVIATIONS.md` for the shared conventions (cookie-session auth, error
+envelope, ID prefixes).
+
+**Base URL** — root-mounted, **no `/api/v1`**: `https://api.mamsaa.com` (prod) ·
+`https://staging.mamsaa.com` (staging). **Auth:** partner session cookie — send
+`credentials: "include"` on every request. Example numbers below are illustrative.
 
 ---
 
 ## 1. Overview metrics — `GET /overview`
 
-Powers the dashboard home cards + the 12-month spark charts. No query params.
+Powers the dashboard home cards + the 12-month spark charts. **No query params.**
 
 ```jsonc
 {
-  "unitsCount": 4,            // partner's units EXCLUDING drafts
-  "bookingsCount": 12,        // confirmed + completed (not cancelled)
-  "totalRevenue": 84200,      // SAR, partner share (total − 2% commission)
-  "bookingsByMonth": [ { "month": "2025-08", "count": 0 }, /* …12, oldest→newest */ ],
-  "revenueByMonth":  [ { "month": "2025-08", "amount": 0 }, /* …12, SAR partner share */ ],
-  "thisMonthRevenue": 12400,  // SAR partner share, current calendar month
-  "occupancyRate": 62,        // 0–100 integer: booked nights / available nights, approved units, this month
+  "unitsCount": 4,            // partner's units EXCLUDING drafts (approved+pending+rejected)
+  "bookingsCount": 12,        // confirmed + completed (cancelled excluded)
+  "totalRevenue": 84200.00,   // SAR, PARTNER SHARE (total − 2% commission)
+  "bookingsByMonth": [ { "month": "2025-08", "count": 0 }, /* …exactly 12, oldest→newest */ ],
+  "revenueByMonth":  [ { "month": "2025-08", "amount": 0 }, /* …exactly 12, PARTNER SHARE */ ],
+  "thisMonthRevenue": 12400.00, // SAR partner share, current calendar month
+  "occupancyRate": 62,        // integer 0–100: booked nights ÷ (approved units × days this month)
   "hasRejectedUnit": true     // show the "unit needs attention" banner
 }
 ```
 
-- **All money is partner share** (after Mamsa's 2%). Whole/decimal SAR — never halalas.
-- The series are always **exactly 12 entries, oldest → newest, zero-filled**. Compute deltas,
-  month-over-month %, and sparklines **on the client** — the API deliberately doesn't send them.
+- **All Overview money is partner share** (after Mamsa's 2%), rounded to 2 decimals (SAR, never halalas).
+- The two series are **always exactly 12 entries, oldest → newest, zero-filled**. Compute deltas,
+  MoM %, and sparklines **on the client** — the API deliberately doesn't send them.
+- `occupancyRate` counts booked nights (confirmed+completed) across **approved** units only, clamped
+  to the current month, over `approvedUnits × daysInMonth`. `0` when the partner has no approved unit.
 
 ```ts
-type MonthCount = { month: string; count: number };   // month = "YYYY-MM"
+type MonthCount  = { month: string; count: number };   // month = "YYYY-MM"
 type MonthAmount = { month: string; amount: number };
 type Overview = {
   unitsCount: number; bookingsCount: number; totalRevenue: number;
@@ -46,28 +51,33 @@ export const getOverview = () =>
 
 ## 2. Reports summary — `GET /reports/summary?from=&to=`
 
-Both `from` and `to` are **required**, format `YYYY-MM-DD`, and `to` must be ≥ `from` (else
-`400 VALIDATION` with `error.fields.to`). The date shortcut buttons (this month / last 3 months /
-this year) are computed on the client — just pass the resolved from/to.
+`from` and `to` are **required**, format `YYYY-MM-DD`, and `to ≥ from` (else `400 VALIDATION` with
+`error.fields.from` / `error.fields.to`). The date-shortcut buttons (this month / last 3 months / this
+year) are computed on the client — just pass the resolved `from`/`to`. Scope is **all** the partner's
+units automatically; there is no unit-filter param.
 
 ```jsonc
 {
-  "grossRevenue": 88500,     // SUM of booking totals (non-cancelled) in range — the FULL total, not partner share
+  "grossRevenue": 88500.00,  // SUM of booking totals (confirmed+completed) in range — the FULL total
   "bookingsCount": 14,
-  "commission": 1770,        // Mamsa 2%
-  "netProfit": 86730,        // grossRevenue − commission (a real SAR amount, NOT a count)
-  "revenueByMonth":  [ { "month": "2026-05", "amount": 24498 }, /* only months with data, ascending */ ],
-  "bookingsByMonth": [ { "month": "2026-05", "count": 6 } ],
+  "commission": 1770.00,     // Mamsa 2% (frozen commission_amount, or 2% of total for legacy rows)
+  "netProfit": 86730.00,     // grossRevenue − commission (a real SAR amount, NOT a count)
+  "revenueByMonth":  [ { "month": "2026-05", "amount": 24498.00 } ], // GROSS; only months WITH data, ascending
+  "bookingsByMonth": [ { "month": "2026-05", "count": 6 } ],         // only months WITH data
   "perUnit": [
-    { "unitId": "u_1", "unitName": "استوديو مرسى العليا", "bookings": 5, "revenue": 28800 }
+    { "unitId": "u_12", "unitName": "استوديو مرسى العليا", "bookings": 5, "revenue": 28800.00 } // revenue = GROSS
   ]
 }
 ```
 
-> **Note on revenue basis:** Overview `totalRevenue` is the **partner share** (after commission),
-> but Reports `grossRevenue` is the **full total** and `netProfit = grossRevenue − commission`.
-> That's intentional — the reports screen breaks the commission out as its own line, so it starts
-> from gross. Don't try to reconcile the two figures 1:1.
+> **Two revenue bases — don't reconcile them 1:1:**
+> - **Overview** `totalRevenue` / `revenueByMonth` = **partner share** (after the 2% commission).
+> - **Reports** `grossRevenue` / `revenueByMonth` / `perUnit.revenue` = **full total** (gross). The
+>   reports screen breaks commission out as its own line, so it starts from gross:
+>   `netProfit = grossRevenue − commission`.
+
+> **Series shape differs from Overview:** these series list **only months that have data** (ascending),
+> not a fixed zero-filled 12. If your chart needs a continuous axis, fill the gaps client-side.
 
 ```ts
 type ReportSummary = {
@@ -81,9 +91,11 @@ export const getReportSummary = (from: string, to: string) =>
     .then(r => r.json()) as Promise<ReportSummary>;
 ```
 
-> ⚠️ **Historical commission may read 0** for bookings created before the 2% commission feature
-> shipped — those rows genuinely had no commission. New bookings always carry it. Don't treat a
-> `commission: 0` on old data as a bug.
+> ℹ️ **Commission is never blank on reports.** Legacy bookings created before the 2% feature shipped
+> have no stored `commission_amount`, but the summary falls back to `2% × total` for them — so
+> `commission` reflects the real 2% for every row and only reads `0` when `grossRevenue` itself is `0`.
+> (This changed from an earlier version of this doc, which incorrectly warned commission could read 0
+> on old data — the fallback makes that not happen.)
 
 ---
 
@@ -93,34 +105,39 @@ Same required `from`/`to`. `format` is `pdf` (default), `csv`, or `xlsx`.
 
 | format | Response | Notes |
 |---|---|---|
-| `pdf` | `application/pdf` file (`Content-Disposition: attachment`) | Server-rendered, **Arabic RTL**, one A4 page for typical ranges. |
-| `csv` / `xlsx` | `text/csv` file, UTF-8 BOM | Opens natively in Excel with Arabic intact. `xlsx` currently returns the same CSV file. |
+| `pdf` (default) | `application/pdf`, `Content-Disposition: attachment` | Server-rendered via **mpdf**, proper **Arabic shaping + RTL**, one A4 page for typical ranges. |
+| `csv` | `text/csv; charset=utf-8`, UTF-8 BOM | Opens in Excel with Arabic intact. |
+| `xlsx` | same as `csv` | `xlsx` is currently an **alias to CSV** (no binary dependency); you still get a `.csv` file. |
 
-This is an **authenticated file download**, not JSON — so you can't just drop the URL in an
-`<img>`/`fetch().json()`. Two working patterns:
+**Filename:** `mamsa-report-<from>_<to>.pdf` (or `.csv`).
+**CSV columns (in order):** `Code, Unit, Guest, Check-in, Check-out, Nights, Total (SAR), Commission, Net, Status`.
 
-**A. In-app download via blob (recommended — keeps the session header logic in one place):**
+This is an **authenticated file download**, not JSON — don't `fetch().json()` it or drop the URL in an
+`<img>`. Two working patterns:
+
+**A. In-app download via blob (recommended — keeps the credentialed fetch in one place):**
 
 ```ts
-export async function downloadReport(from: string, to: string, format: "pdf" | "csv") {
+export async function downloadReport(from: string, to: string, format: "pdf" | "csv" | "xlsx" = "pdf") {
   const res = await fetch(`${API}/reports/export?from=${from}&to=${to}&format=${format}`, {
     credentials: "include",
   });
   if (!res.ok) throw await res.json();           // { error: { code, message } }
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
+  const ext  = format === "pdf" ? "pdf" : "csv"; // xlsx returns csv
+  const url  = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = `mamsa-report-${from}_${to}.${format === "pdf" ? "pdf" : "csv"}`;
+  a.href = url; a.download = `mamsa-report-${from}_${to}.${ext}`;
   a.click();
   URL.revokeObjectURL(url);
 }
 ```
 
-**B. New-tab (simplest):** `window.open(\`${API}/reports/export?from=${from}&to=${to}&format=pdf\`)`.
-This works because it's a top-level GET navigation to `api.mamsaa.com` — the SameSite=Lax session
-cookie **is** sent on top-level navigations. (It is NOT sent on a cross-site `fetch` without
-`credentials:"include"`, which is why pattern A passes it explicitly.)
+**B. New-tab (simplest, PDF only):**
+`window.open(\`${API}/reports/export?from=${from}&to=${to}&format=pdf\`)`.
+Works on **production** because it's a top-level GET navigation to `api.mamsaa.com`, and the
+`SameSite=Lax` session cookie is sent on top-level navigations (same-site). On **staging** the cookie
+is `SameSite=None; Secure`, which also works. Prefer pattern A if you want error handling.
 
 ---
 

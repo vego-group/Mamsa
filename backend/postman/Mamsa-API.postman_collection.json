@@ -3006,6 +3006,47 @@
               "response": []
             },
             {
+              "name": "Resend OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/auth/otp/resend",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "otp",
+                    "resend"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Same as Request OTP (rate-limited by pd-otp). Re-sends the login code; daily cap 10/phone.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"{{dashboard_phone}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
               "name": "Verify OTP (login)",
               "request": {
                 "method": "POST",
@@ -4134,6 +4175,51 @@
                 "description": "format=pdf → real Arabic RTL PDF (mpdf). format=csv|xlsx → CSV download. Binary — use Postman 'Send and Download'."
               },
               "response": []
+            },
+            {
+              "name": "Export (CSV / xlsx)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/reports/export?from=2026-01-01&to=2026-12-31&format=csv",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "reports",
+                    "export"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-01-01"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-12-31"
+                    },
+                    {
+                      "key": "format",
+                      "value": "csv"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "format=csv|xlsx → UTF-8-BOM CSV download (xlsx aliases to CSV). Columns: Code, Unit, Guest, Check-in, Check-out, Nights, Total (SAR), Commission, Net, Status. Binary — use Postman 'Send and Download'."
+              },
+              "response": []
             }
           ],
           "description": ""
@@ -4334,9 +4420,84 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "Upload file to signed URL (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "image/jpeg"
+                  }
+                ],
+                "url": {
+                  "raw": "{{upload_url}}",
+                  "host": [
+                    "{{upload_url}}"
+                  ],
+                  "path": []
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Step 2 of the upload flow: PUT the RAW file bytes to the {{upload_url}} captured from Presign. Auth is the URL signature (no session). Set the Body to 'binary' and pick a file whose type matches the presign kind (unit_photo=jpeg/png, license_pdf/company_doc=pdf) — magic bytes + size ≤10MB are validated. Then reference {{file_id}} in the unit/company-docs payload.",
+                "body": {
+                  "mode": "file",
+                  "file": {
+                    "src": null
+                  }
+                }
+              },
+              "response": []
             }
           ],
           "description": "Contract §9.1. Signed PUT to our own endpoint (no S3)."
+        },
+        {
+          "name": "Webhooks (server→server)",
+          "item": [
+            {
+              "name": "Moyasar webhook (server→server)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/webhooks/moyasar",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "webhooks",
+                    "moyasar"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Moyasar → Mamsa payment/refund callback. Verified by a shared secret token in the controller, NOT session auth — the frontend never calls this; included for completeness. Body below is a sample event.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"payment_paid\",\n  \"secret_token\": \"<moyasar-webhook-secret>\",\n  \"data\": {\n    \"id\": \"pay_xxx\",\n    \"status\": \"paid\",\n    \"amount\": 90000\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
         }
       ],
       "description": "Root-mounted contract API for the Next.js partner dashboard (base = {{dashboard_url}}, NO /api/v1). Cookie-session auth: run Auth → Verify OTP first; the cookie jar carries the session. Error envelope { error:{code,message,fields} }. See docs/NEXTJS-DASHBOARD-*.md."
