@@ -2697,6 +2697,119 @@
           ]
         },
         {
+          "name": "Partners (Application Review)",
+          "item": [
+            {
+              "name": "List Applications",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/admin/partners?status=pending",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "pending"
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Partner join applications. status=pending|approved|rejected (omit for all); search matches name/phone. Response rows include user_id — use it as {{user_id}} for approve/reject."
+              },
+              "response": []
+            },
+            {
+              "name": "Approve Partner",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/admin/partners/{{user_id}}/approve",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "{{user_id}}",
+                    "approve"
+                  ]
+                },
+                "description": "THE partner-approval action (FR flow): sets partnerDetail.status=approved + reviewed_at and notifies the applicant (in-app + email). After this the partner can log into partner.mamsaa.com. NOT the same as Users/Update Status (is_active) — that only activates/suspends the account and does NOT clear ACCOUNT_PENDING. 422 if the application is not pending (already approved/rejected)."
+              },
+              "response": []
+            },
+            {
+              "name": "Reject Partner",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/admin/partners/{{user_id}}/reject",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "{{user_id}}",
+                    "reject"
+                  ]
+                },
+                "description": "Rejects the application with a required reason (max 500); notifies the applicant. A rejected applicant can re-submit partner/register, which returns them to pending.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"المستندات غير مكتملة\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
           "name": "Requests (Unit Review)",
           "item": [
             {
