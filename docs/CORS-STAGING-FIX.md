@@ -53,7 +53,7 @@ Current staging allowlist:
 https://www.mamsaa.com, https://mamsaa.com, https://testvue.mamsaa.com,
 http://localhost:5173, http://localhost:5174,
 http://localhost:3000, http://localhost:3001, http://localhost:3002
-+ pattern: https://mamsa-*.vercel.app
++ https://mamsa-partner-dashboard.vercel.app + regex ~^https://mamsa-[a-z0-9-]+\.vercel\.app$~
 ```
 
 ## `Access-Control-Allow-Origin: *` is not coming back — here's why
@@ -79,7 +79,7 @@ Origin: https://evil.example  ->  (no ACAO)  ✅ refused
 usually minutes:
 
 - other local dev ports (we've pre-added `:3000`–`:3002`),
-- your staging/preview URL — `https://mamsa-*.vercel.app` is already covered by pattern; anything
+- your staging/preview URL — any `https://mamsa-*.vercel.app` is covered by the regex pattern; anything
   else needs listing,
 - your production domain.
 

@@ -81,8 +81,17 @@ CORS allowlists, per environment:
 - **Production** (`api.mamsaa.com`): `https://partner.mamsaa.com` (+ the website domains). Preview
   `*.vercel.app` is deliberately **not** allowed here — see above.
 - **Staging** (`staging.mamsaa.com`): `localhost:3000/3001/3002`, `localhost:5173/5174`, the mamsaa.com
-  domains, and pattern `https://mamsa-*.vercel.app`. Need another preview origin added? Send it — one
-  line + deploy.
+  domains, `https://mamsa-partner-dashboard.vercel.app` (explicit), and the regex
+  `~^https://mamsa-[a-z0-9-]+\.vercel\.app$~` — so **any** `mamsa-*.vercel.app`, including preview
+  deploys like `mamsa-partner-dashboard-git-main-*.vercel.app`, is allowed. Verified 2026-07-16 with a
+  full login→cookie→`/me` from the `mamsa-partner-dashboard.vercel.app` origin. Need another origin?
+  Send it — one line + deploy.
+
+  > **Fixed 2026-07-16:** the earlier pattern used `#…#` delimiters, and phpdotenv reads a value that
+  > starts with `#` as a comment — so `env()` returned null and the pattern was silently inactive on
+  > staging (it never matched any `*.vercel.app`, despite this doc previously saying it did). Now
+  > single-quoted with `~` delimiters. If you write CORS patterns in `.env`, never start the value with
+  > `#`, and single-quote regexes containing `$`.
 
 ## 4. Unchanged from staging
 
