@@ -15,8 +15,16 @@ website's API). Same contract, envelope and endpoints as staging; only the host 
 
 | Your environment | `API_BASE` |
 |---|---|
-| Production (`partner.mamsaa.com`) | `https://api.mamsaa.com` |
-| Local dev / staging / Vercel preview | `https://staging.mamsaa.com` |
+| Production (`partner.mamsaa.com` → prod data) | `https://api.mamsaa.com` |
+| **QA: `partner.mamsaa.com` → staging data** | `https://staging.mamsaa.com` |
+| Local dev / Vercel preview | `https://staging.mamsaa.com` |
+
+> **`partner.mamsaa.com` can point at either backend.** It's allowlisted on **both** `api.mamsaa.com`
+> (production) and `staging.mamsaa.com` (QA), so you can flip the same production domain between real
+> and test data by changing only `NEXT_PUBLIC_API_BASE_URL` — no backend change either way. Both work
+> because `partner.mamsaa.com` is same-site with both hosts (all `mamsaa.com`). Verified end-to-end
+> against staging on 2026-07-16: login → session cookie → authenticated `/me`, all from the
+> `partner.mamsaa.com` origin.
 
 ```
 # .env.production   (Vercel: Production env)
