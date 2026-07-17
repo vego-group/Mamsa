@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mamsa — UAT Test Plan</title>
+<style>
+  :root{
+    --paper:#FAFAF8; --card:#FFFFFF; --ink:#1D2420; --ink-2:#5A6660; --line:#E2E6E0;
+    --green:#1A4A2E; --green-soft:#EAF2EC; --pass:#0E7A4A; --pass-soft:#E5F2EA;
+    --fail:#B3372E; --fail-soft:#F7E9E7; --warn:#B87514; --warn-soft:#F8EFDF;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
+    --sans:-apple-system,"Segoe UI",system-ui,"Helvetica Neue",Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --paper:#141915; --card:#1C231E; --ink:#E6EAE5; --ink-2:#95A29A; --line:#2C352E;
+    --green:#8FCBA8; --green-soft:#20301F; --pass:#5FBE8E; --pass-soft:#1C3327;
+    --fail:#E08578; --fail-soft:#3A2320; --warn:#D9A054; --warn-soft:#37301E;
+  }}
+  :root[data-theme="dark"]{
+    --paper:#141915; --card:#1C231E; --ink:#E6EAE5; --ink-2:#95A29A; --line:#2C352E;
+    --green:#8FCBA8; --green-soft:#20301F; --pass:#5FBE8E; --pass-soft:#1C3327;
+    --fail:#E08578; --fail-soft:#3A2320; --warn:#D9A054; --warn-soft:#37301E;
+  }
+  :root[data-theme="light"]{
+    --paper:#FAFAF8; --card:#FFFFFF; --ink:#1D2420; --ink-2:#5A6660; --line:#E2E6E0;
+    --green:#1A4A2E; --green-soft:#EAF2EC; --pass:#0E7A4A; --pass-soft:#E5F2EA;
+    --fail:#B3372E; --fail-soft:#F7E9E7; --warn:#B87514; --warn-soft:#F8EFDF;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 var(--sans)}
+  header{position:sticky;top:0;z-index:10;background:var(--card);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:17px;font-weight:700;letter-spacing:-.01em;margin:0}
+  header h1 span{color:var(--green)}
+  .bar{flex:1;min-width:160px;height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--pass);width:0;transition:width .25s}
+  .tally{font:600 13px var(--mono);font-variant-numeric:tabular-nums;color:var(--ink-2);white-space:nowrap}
+  .tally b{color:var(--pass)} .tally em{color:var(--fail);font-style:normal}
+  .hbtn{border:1px solid var(--line);background:none;color:var(--ink-2);border-radius:7px;padding:5px 12px;font:600 12.5px var(--sans);cursor:pointer}
+  .hbtn:hover{color:var(--ink);border-color:var(--ink-2)}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 90px;display:grid;grid-template-columns:210px 1fr;gap:32px}
+  @media(max-width:880px){.wrap{grid-template-columns:1fr}nav.rail{display:none}}
+  nav.rail{position:sticky;top:64px;align-self:start;display:flex;flex-direction:column;gap:2px}
+  nav.rail a{display:flex;justify-content:space-between;gap:8px;padding:7px 10px;border-radius:8px;color:var(--ink-2);text-decoration:none;font-size:13px;font-weight:600}
+  nav.rail a:hover{background:var(--green-soft);color:var(--ink)}
+  nav.rail a .n{font:600 11.5px var(--mono);font-variant-numeric:tabular-nums}
+  nav.rail a .n.done{color:var(--pass)}
+  .intro{margin:0 0 26px;max-width:68ch}
+  .intro p{color:var(--ink-2);margin:6px 0 0}
+  section.suite{margin:0 0 34px}
+  .shead{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--green);padding-bottom:8px;margin-bottom:4px;flex-wrap:wrap}
+  .shead h2{margin:0;font-size:19px;letter-spacing:-.01em}
+  .shead .env{font:700 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:5px;background:var(--green-soft);color:var(--green)}
+  .shead .env.prod{background:var(--fail-soft);color:var(--fail)}
+  .shead .env.both{background:var(--warn-soft);color:var(--warn)}
+  .shead .sn{margin-inline-start:auto;font:600 12.5px var(--mono);font-variant-numeric:tabular-nums;color:var(--ink-2)}
+  .snote{color:var(--ink-2);font-size:13.5px;margin:6px 0 14px;max-width:75ch}
+  .test{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 10px;display:grid;grid-template-columns:1fr auto;gap:4px 16px}
+  .test.p{border-color:var(--pass)} .test.f{border-color:var(--fail);background:var(--fail-soft)}
+  .test h3{margin:0;font-size:14.5px;display:flex;gap:9px;align-items:baseline}
+  .test h3 .tid{font:700 11.5px var(--mono);color:var(--green);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .test ol{margin:8px 0 0;padding-inline-start:22px;color:var(--ink-2);font-size:13.5px}
+  .test ol li{margin:2px 0}
+  .exp{grid-column:1/-1;margin-top:9px;padding:8px 12px;border-radius:7px;background:var(--pass-soft);font-size:13.5px}
+  .exp b{color:var(--pass);font-size:11px;letter-spacing:.07em;text-transform:uppercase;display:block;margin-bottom:2px}
+  .warncall{grid-column:1/-1;margin-top:8px;padding:8px 12px;border-radius:7px;background:var(--warn-soft);color:var(--ink);font-size:13px}
+  .warncall b{color:var(--warn)}
+  .ctrl{display:flex;gap:6px;align-items:flex-start}
+  .ctrl button{width:34px;height:34px;border-radius:8px;border:1.5px solid var(--line);background:none;color:var(--ink-2);font-size:15px;font-weight:700;cursor:pointer}
+  .ctrl button:hover{border-color:var(--ink-2)}
+  .ctrl button:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+  .test.p .ok{background:var(--pass);border-color:var(--pass);color:#fff}
+  .test.f .no{background:var(--fail);border-color:var(--fail);color:#fff}
+  code{font:12.5px var(--mono);background:var(--green-soft);padding:1px 6px;border-radius:5px;white-space:nowrap}
+  .test.f code{background:rgba(0,0,0,.07)}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;background:var(--card)}
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin:12px 0 6px}
+  th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
+  th{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2)}
+  tr:last-child td{border-bottom:0}
+  td code{white-space:nowrap}
+  .ar{direction:rtl;unicode-bidi:isolate}
+  footer{max-width:1180px;margin:0 auto;padding:0 20px 40px;color:var(--ink-2);font-size:12.5px}
+  @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+
+  @media print{
+    header .hbtn,.bar{display:none}
+    header{position:static;border-bottom:2px solid #1A4A2E}
+    nav.rail{display:none}
+    .wrap{grid-template-columns:1fr;max-width:100%;padding:12px 0}
+    .test{break-inside:avoid;border:1px solid #bbb}
+    .ctrl button{border:1.5px solid #555;color:transparent}
+    section.suite{break-before:auto}
+    .shead{break-after:avoid}
+    a{color:inherit;text-decoration:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>ممسى <span>· UAT Test Plan</span></h1>
+  <div class="bar" aria-hidden="true"><i id="pbar"></i></div>
+  <span class="tally" id="tally"></span>
+  <button class="hbtn" id="report">Copy report</button>
+  <button class="hbtn" id="reset">Reset all</button>
+</header>
+
+<div class="wrap">
+  <nav class="rail" id="rail" aria-label="Test suites"></nav>
+  <main id="main">
+    <div class="intro">
+      <p>Browser acceptance run for the full platform — every flow, in the order a real user meets it.
+      Mark each test <b>✓ pass</b> or <b>✕ fail</b>; progress saves in this browser. When a round is done,
+      <b>Copy report</b> produces a summary (including failures) to paste into the team chat.</p>
+    </div>
+
+    <section class="suite" id="s0">
+      <div class="shead"><h2>0 · Environment &amp; test data</h2><span class="env both">read first</span></div>
+      <p class="snote">Everything money-related runs on <b>staging only</b>. testvue points at <b>production with live Moyasar</b> — a card payment there is a real charge.</p>
+      <div class="tblwrap"><table>
+        <tr><th>What</th><th>Value</th></tr>
+        <tr><td>User website (staging data)</td><td>your Next.js dev/preview → API <code>https://staging.mamsaa.com/api/v1</code></td></tr>
+        <tr><td>Partner dashboard</td><td><code>partner.mamsaa.com</code> (or local) → API <code>https://staging.mamsaa.com</code> (root, no /api/v1)</td></tr>
+        <tr><td>Admin panel</td><td><code>testvue.mamsaa.com/admin</code> — ⚠ production data · staging admin: local Vue → staging API</td></tr>
+        <tr><td>OTP on staging</td><td>fixed code <code>111222</code> (also echoed as <code>debug_otp</code>) · caps: 100/phone/day, 300/IP/day, 5/min burst</td></tr>
+        <tr><td>Approved partner (staging)</td><td><code>0512345678</code> — units in all 4 states, bookings, iCal feed</td></tr>
+        <tr><td>Approved individual (staging)</td><td><code>0577777777</code> — clean account, no units</td></tr>
+        <tr><td>Pending partners (staging)</td><td><code>0533333333</code>, <code>0599999999</code> — keep pending; they test the review screen</td></tr>
+        <tr><td>Admin (staging)</td><td><code>admin@mamsaa.sa</code> / <code>Password1</code></td></tr>
+        <tr><td>Moyasar test card</td><td><code>4111 1111 1111 1111</code> · any future expiry · CVC <code>123</code> · 3-DS page: choose success or failure</td></tr>
+        <tr><td>Fresh phones</td><td>use <code>05971xxxxx</code> numbers for registration tests — never a teammate's real number</td></tr>
+      </table></div>
+    </section>
+    <div id="suites"></div>
+  </main>
+</div>
+
+<footer>Generated from the live backend routes · staging fixed OTP and caps are testing-only and revert at delivery · keep this tab open while testing — progress is stored per browser.</footer>
+
+<script>
+const SUITES=[
+{id:"s1",title:"1 · Visitor — browse & discover",env:"staging",note:"No login. The public storefront on the user website.",tests:[
+ {id:"1.1",t:"Home page & popular units",s:["Open the site home","Scroll the popular-units rail"],e:"Units render with photo, name, city, price/night and rating; no broken images (default image shows where a unit has no photos)."},
+ {id:"1.2",t:"Search & filters",s:["Open listing page","Filter by city, type, price range; combine with dates"],e:"Result set changes per filter; empty result shows a friendly empty state, not an error."},
+ {id:"1.3",t:"Unit detail — tiered cancellation policy",s:["Open any unit page","Find the cancellation-policy section"],e:"Shows the policy NAME + tiers (e.g. <span class='ar'>مرنة</span>: 100% / 50% / 0% by days-before-checkin) — not a generic ‘48 hours’ text."},
+ {id:"1.4",t:"Reviews on unit page",s:["Open a unit that has reviews"],e:"Rating average and individual reviews render; count matches."},
+ {id:"1.5",t:"Availability check",s:["Pick dates that overlap an existing booking on u_12","Pick free dates"],e:"Overlapping dates are refused with a clear message; free dates show the price breakdown."},
+ {id:"1.6",t:"Offers & testimonials",s:["Open the offers section/page","Check testimonials block"],e:"Active offers and testimonials load from the API (not hardcoded)."},
+ {id:"1.7",t:"Contact form",s:["Submit the contact form with valid data","Submit 6× rapidly"],e:"First submits succeed with confirmation; rapid submits hit the 5/min throttle with a polite message."}]},
+
+{id:"s2",title:"2 · User account — register & login",env:"staging",note:"Passwordless OTP. Staging code is always 111222.",tests:[
+ {id:"2.1",t:"Register a new user",s:["Register with a fresh 05971… number","Enter OTP 111222","Complete profile (name)"],e:"Account created; you land signed-in; profile shows the name."},
+ {id:"2.2",t:"Intent guards",s:["Try LOGIN with a never-registered phone","Try REGISTER with an already-registered phone"],e:"Login → ‘not registered’ with a switch-to-register suggestion; Register → <span class='ar'>هذا الرقم مسجّل بالفعل</span> bouncing to login. No SMS wasted on either."},
+ {id:"2.3",t:"Wrong OTP & lockout",s:["Request OTP, enter a wrong code 3×"],e:"Each attempt shows remaining tries; 3rd locks the code and asks to request a new one."},
+ {id:"2.4",t:"Resend cooldown",s:["Request OTP, immediately press resend"],e:"Resend blocked for 60s with a countdown."},
+ {id:"2.5",t:"Session persistence & logout",s:["Reload the page while signed in","Log out"],e:"Reload keeps you signed in (token refresh is silent); logout returns to guest state and back-button does not restore the session."}]},
+
+{id:"s3",title:"3 · Booking & payment",env:"staging",note:"STAGING ONLY — live Moyasar runs on production/testvue. Use the test card.",tests:[
+ {id:"3.1",t:"Create a booking",s:["As a signed-in user pick a unit + free dates","Confirm the booking"],e:"Pending booking created; price breakdown (nightly × nights, fees, total) matches the unit page quote."},
+ {id:"3.2",t:"Pay with test card + 3-DS success",s:["Pay with 4111… card","On the 3-DS page choose SUCCESS"],e:"You return to the app’s callback page, then the booking shows CONFIRMED with a receipt/payment reference."},
+ {id:"3.3",t:"3-DS failure path",s:["Make another booking","On the 3-DS page choose FAILURE"],e:"App shows payment failed with retry option; booking is NOT confirmed; no money state shown as paid."},
+ {id:"3.4",t:"Booking detail — frozen policy",s:["Open the confirmed booking’s detail"],e:"Cancellation section shows the policy snapshot frozen at payment time (name + tiers), plus dates, guests, and full price breakdown."},
+ {id:"3.5",t:"Double-booking guard",s:["With a second user, try to book the exact same dates on the same unit"],e:"Second attempt is refused — dates are already taken."}]},
+
+{id:"s4",title:"4 · Cancellation & wallet",env:"staging",tests:[
+ {id:"4.1",t:"Cancellation preview",s:["On a confirmed booking press cancel","Read the preview before confirming"],e:"Preview names the applicable tier NOW and the exact refund amount, derived from the frozen policy."},
+ {id:"4.2",t:"Cancel & refund",s:["Confirm the cancellation"],e:"Booking becomes cancelled; refund appears in the wallet ledger; the unit’s dates become bookable again."},
+ {id:"4.3",t:"Wallet ledger",s:["Open account → transactions"],e:"Refund row with reference code, amount and date; running history is read-only."}]},
+
+{id:"s5",title:"5 · User account area",env:"staging",tests:[
+ {id:"5.1",t:"Edit profile",s:["Change name/email in account settings"],e:"Saved and reflected after reload."},
+ {id:"5.2",t:"Change phone (two-step OTP)",s:["Start phone change to a fresh number","Enter the OTP sent to the NEW number"],e:"Phone updated; login works with the new number afterwards."},
+ {id:"5.3",t:"Favorites",s:["Heart a unit from listing and from detail","Open favorites; unheart one"],e:"Hearts sync across pages and survive reload (server-side, not just local)."},
+ {id:"5.4",t:"Saved cards",s:["Save a card from the wallet (test card)","Set default; delete a card"],e:"Card shows masked (last-4 + brand only); default badge moves; deletion removes it."},
+ {id:"5.5",t:"Review after stay",s:["With a COMPLETED booking, submit a rating + text"],e:"Review accepted once (second attempt refused) and appears on the unit page."},
+ {id:"5.6",t:"Delete account",s:["Use a throwaway account → account deletion"],e:"Confirmation required; after deletion login says not registered."}]},
+
+{id:"s6",title:"6 · Join as partner (on the user website)",env:"staging",tests:[
+ {id:"6.1",t:"Register — individual",s:["Join as partner → individual","Fresh phone + OTP 111222 + national ID (10 digits)"],e:"201 success; account has partner role; status is PENDING."},
+ {id:"6.2",t:"Register — company",s:["Join as partner → company with CR number"],e:"Same as 6.1 with company type; CR stored, no national-ID field."},
+ {id:"6.3",t:"Email verification",s:["After registering, enter the 6-digit code from the email screen","Try resend inside 60s"],e:"Email verified flag flips; resend respects the cooldown. (If email delivery is pending Resend DNS, code arrives once that’s live.)"},
+ {id:"6.4",t:"Existing user upgrades to partner",s:["Use an existing normal user’s phone in the partner form (request OTP WITHOUT choosing register-intent)"],e:"Upgrade succeeds — no ‘already registered’ block on the partner flow."},
+ {id:"6.5",t:"Pending partner CAN use the user site",s:["As the fresh pending partner, log into the user website"],e:"Login works — only the partner DASHBOARD is gated by approval, not the website."}]},
+
+{id:"s7",title:"7 · Admin panel",env:"staging",note:"Test against the staging admin. On testvue.mamsaa.com/admin you are touching production.",tests:[
+ {id:"7.1",t:"Admin login",s:["Log in with admin@mamsaa.sa / Password1"],e:"Admin dashboard loads with KPI cards."},
+ {id:"7.2",t:"Partner review screen exists",s:["Open sidebar → <span class='ar'>طلبات الشركاء</span>"],e:"List defaults to pending tab; stats row; search by name/phone/email works; individual vs company badge with ID/CR shown."},
+ {id:"7.3",t:"Approve a partner",s:["Approve the partner you registered in 6.1"],e:"Toast confirms; row moves to approved; applicant receives an in-app notification."},
+ {id:"7.4",t:"Reject with reason",s:["Reject the company from 6.2 with a reason"],e:"Reason required; row shows rejected + the reason text."},
+ {id:"7.5",t:"User status ≠ partner approval",s:["On the USERS screen toggle a pending partner’s active status"],e:"Toggling is_active does NOT approve them — dashboard login still says under review. (This is the distinction that caused a real incident.)"},
+ {id:"7.6",t:"Unit requests review",s:["Open requests; approve one pending unit; reject another with reason"],e:"Approved unit goes public on the website; rejected one shows the reason to its partner."}]},
+
+{id:"s8",title:"8 · Partner dashboard — login & approval gate",env:"staging",note:"partner.mamsaa.com pointed at staging. Cookie session — check the browser doesn’t block third-party cookies in your setup.",tests:[
+ {id:"8.1",t:"Pending partner is gated",s:["Try dashboard login with a PENDING partner (0533333333)"],e:"OTP accepted but entry refused with <span class='ar'>طلب انضمامك قيد المراجعة</span> — an under-review screen WITH a ‘try again’ action, not a dead end."},
+ {id:"8.2",t:"Approved partner enters",s:["Log in with 0512345678 + OTP 111222"],e:"Straight to the dashboard; reloading keeps the session (2-hour cookie)."},
+ {id:"8.3",t:"Approval unlocks the same login",s:["After 7.3, retry login with that newly-approved partner"],e:"The retry that previously said under-review now enters — no cache traps."},
+ {id:"8.4",t:"Non-partner phone",s:["Try a regular user’s phone on the dashboard login"],e:"Clear ‘not registered as partner’ message pointing to Join-as-Partner."},
+ {id:"8.5",t:"Logout",s:["Log out from the dashboard menu"],e:"Back to login; deep links to /units redirect to login."}]},
+
+{id:"s9",title:"9 · Partner dashboard — property wizard & units",env:"staging",tests:[
+ {id:"9.1",t:"Save a partial draft",s:["Start Add Property; fill ONLY the name; save draft"],e:"Draft saves without price/type/capacity — no error. It lists with a draft badge."},
+ {id:"9.2",t:"License & photos upload",s:["Upload tourism license PDF","Upload 3+ photos; reorder; pick a non-first cover"],e:"Uploads succeed (≤10MB, correct types enforced); order and cover survive save + reload."},
+ {id:"9.3",t:"City enum",s:["In details choose Makkah / Madinah from the city list"],e:"Saves cleanly — the app sends slugs makkah/madinah (mecca/medina would be rejected by the API)."},
+ {id:"9.4",t:"Submit validation",s:["Submit the incomplete draft from 9.1"],e:"Field-level errors list everything missing (price, location, license…) — not one generic error."},
+ {id:"9.5",t:"Submit for review",s:["Complete all fields; submit"],e:"Status becomes pending review; unit is NOT yet on the public site."},
+ {id:"9.6",t:"Approval → public",s:["Admin approves it (7.6)","Open its public URL from the unit card"],e:"Unit is live on the website with photos, price and policy."},
+ {id:"9.7",t:"Edit approved → re-review",s:["Edit the approved unit’s price"],e:"Warning that it returns to review; status flips to pending; public page keeps serving until re-approved per product rules."},
+ {id:"9.8",t:"Delete rules",s:["Try deleting an approved unit, then a draft"],e:"Approved refuses with explanation; draft deletes."},
+ {id:"9.9",t:"Company docs gate (company partner)",s:["As an approved COMPANY partner missing docs, try submitting a unit","Fill CR/IBAN + 3 PDFs in company docs, partially first"],e:"Submit blocked until docs complete; partial saves are kept between visits; complete flag flips when all five present."}]},
+
+{id:"s10",title:"10 · Partner dashboard — calendar & iCal",env:"staging",tests:[
+ {id:"10.1",t:"Month grid states",s:["Open the calendar for u_12; browse prev/current/next months"],e:"Days render as available / booked (with booking code) / blocked (reason) / external (source name e.g. Airbnb). No month errors."},
+ {id:"10.2",t:"Block & unblock",s:["Block 2 free days with a reason; unblock one"],e:"Blocked days flip instantly; unblock only works on manual blocks."},
+ {id:"10.3",t:"Guards",s:["Try blocking an already-booked day"],e:"Refused with a clear conflict message."},
+ {id:"10.4",t:"Add iCal feed — invalid then valid",s:["Add feed with a junk URL","Add a real .ics URL"],e:"Junk → invalid-calendar error, nothing saved; valid → feed listed, synced, its days show as external."},
+ {id:"10.5",t:"Feed sync & delete",s:["Press sync-now; then delete the feed"],e:"Sync updates the last-synced stamp; deleting removes the feed AND its external days from the grid."},
+ {id:"10.6",t:"Export link",s:["Copy the export-calendar URL; open in an incognito tab"],e:"A .ics file downloads without any login — contains the unit’s bookings/blocks."},
+ {id:"10.7",t:"Booked dates auto-block after host-cancel",s:["Do 11.2 then return to this calendar"],e:"The cancelled booking’s dates show as blocked (not instantly rebookable)."}]},
+
+{id:"s11",title:"11 · Partner dashboard — bookings, reports, notifications",env:"staging",tests:[
+ {id:"11.1",t:"Bookings list & detail",s:["Open bookings; filter/paginate; open one"],e:"Guest name, dates, amounts (partner share consistent with 2% commission), status chips."},
+ {id:"11.2",t:"Host-cancel (the dangerous one)",s:["Host-cancel a confirmed booking with a reason","Double-click the confirm button on purpose"],e:"Guest refunded 100%; dates blocked; double-click does NOT double-refund; the cancellation counts toward the partner’s 12-month tally in profile."},
+ {id:"11.3",t:"Overview KPIs",s:["Open the dashboard home"],e:"Units count (drafts excluded), bookings, revenue (partner share), occupancy %, 12-month charts — numbers plausible vs the bookings list."},
+ {id:"11.4",t:"Reports summary",s:["Set a from/to range covering known bookings","Set to < from"],e:"Gross / commission (2%) / net add up; per-unit table matches; inverted range shows a field error."},
+ {id:"11.5",t:"PDF export",s:["Export the range as PDF; open it"],e:"Arabic renders correctly (proper letter joining, RTL) on ~1 page — not mirrored or disconnected letters."},
+ {id:"11.6",t:"CSV/Excel export",s:["Export CSV; open in Excel"],e:"Arabic intact (UTF-8 BOM), columns: code, unit, guest, dates, nights, total, commission, net, status."},
+ {id:"11.7",t:"Notifications",s:["Check the bell after admin actions (approval, unit review)","Mark one read; mark all read"],e:"Unread count accurate; read states persist."},
+ {id:"11.8",t:"Profile & phone change",s:["Edit partner name/email","Change phone with OTP to the new number"],e:"Both persist; next login uses the new phone."}]},
+
+{id:"s12",title:"12 · Cross-cutting quality",env:"both",tests:[
+ {id:"12.1",t:"RTL & Arabic rendering",s:["Skim every page in Arabic UI"],e:"No mirrored icons, cut-off Arabic, or LTR-leaking numbers where they shouldn’t."},
+ {id:"12.2",t:"Mobile viewport",s:["Repeat key flows (browse, book, wizard) at 375px width"],e:"No horizontal scroll; menus and modals usable."},
+ {id:"12.3",t:"Throttle handling",s:["Hammer OTP request >5×/min"],e:"UI shows a wait message with retry timing — not a raw error."},
+ {id:"12.4",t:"Session expiry behaviour",s:["Leave the dashboard idle >2h (or clear the cookie) then click something"],e:"Clean redirect to login, no broken half-rendered screens."},
+ {id:"12.5",t:"Error envelope sanity",s:["Trigger any validation error in each app"],e:"User sees the Arabic message from the API, mapped to the right field — never a raw JSON dump or English stack trace."}]}
+];
+
+const $=s=>document.querySelector(s);
+const KEY=id=>"mamsa-uat:"+id;
+const state=id=>+(localStorage.getItem(KEY(id))||0);
+
+function render(){
+  const host=$("#suites"),rail=$("#rail");
+  rail.innerHTML='<a href="#s0">0 · Setup<span class="n"></span></a>';
+  host.innerHTML="";
+  for(const su of SUITES){
+    const sec=document.createElement("section");
+    sec.className="suite";sec.id=su.id;
+    sec.innerHTML=`<div class="shead"><h2>${su.title}</h2><span class="env ${su.env==='prod'?'prod':su.env==='both'?'both':''}">${su.env}</span><span class="sn" data-sn="${su.id}"></span></div>${su.note?`<p class="snote">${su.note}</p>`:""}`;
+    for(const t of su.tests){
+      const d=document.createElement("div");
+      d.className="test";d.dataset.tid=t.id;
+      d.innerHTML=`<h3><span class="tid">T-${t.id}</span>${t.t}</h3>
+        <div class="ctrl">
+          <button class="ok" title="Pass" aria-label="Pass T-${t.id}">✓</button>
+          <button class="no" title="Fail" aria-label="Fail T-${t.id}">✕</button>
+        </div>
+        <ol>${t.s.map(x=>`<li>${x}</li>`).join("")}</ol>
+        <div class="exp"><b>Expected</b>${t.e}</div>${t.w?`<div class="warncall"><b>⚠</b> ${t.w}</div>`:""}`;
+      d.querySelector(".ok").onclick=()=>{localStorage.setItem(KEY(t.id),state(t.id)===1?0:1);refresh()};
+      d.querySelector(".no").onclick=()=>{localStorage.setItem(KEY(t.id),state(t.id)===2?0:2);refresh()};
+      sec.appendChild(d);
+    }
+    host.appendChild(sec);
+    const a=document.createElement("a");
+    a.href="#"+su.id;
+    a.innerHTML=`<span>${su.title.split(" — ")[0].split(" (")[0]}</span><span class="n" data-rn="${su.id}"></span>`;
+    rail.appendChild(a);
+  }
+  refresh();
+}
+function refresh(){
+  let all=0,pass=0,fail=0;
+  for(const su of SUITES){
+    let p=0,f=0;
+    for(const t of su.tests){
+      const st=state(t.id);
+      all++;if(st===1){pass++;p++}if(st===2){fail++;f++}
+      const el=document.querySelector(`[data-tid="${t.id}"]`);
+      if(el){el.classList.toggle("p",st===1);el.classList.toggle("f",st===2)}
+    }
+    const done=p+f===su.tests.length&&f===0;
+    const sn=document.querySelector(`[data-sn="${su.id}"]`);
+    if(sn)sn.textContent=`${p}/${su.tests.length}${f?` · ${f} fail`:""}`;
+    const rn=document.querySelector(`[data-rn="${su.id}"]`);
+    if(rn){rn.textContent=`${p}/${su.tests.length}`;rn.classList.toggle("done",done)}
+  }
+  $("#pbar").style.width=(all?100*pass/all:0)+"%";
+  $("#tally").innerHTML=`<b>${pass}</b>/${all} pass${fail?` · <em>${fail} fail</em>`:""}`;
+}
+$("#reset").onclick=()=>{if(confirm("Clear all pass/fail marks?")){SUITES.forEach(s=>s.tests.forEach(t=>localStorage.removeItem(KEY(t.id))));refresh()}};
+$("#report").onclick=()=>{
+  let out="Mamsa UAT — "+new Date().toISOString().slice(0,10)+"\n";
+  let all=0,pass=0;const fails=[];
+  for(const su of SUITES){let p=0;for(const t of su.tests){all++;const st=state(t.id);if(st===1){pass++;p++}if(st===2)fails.push(`T-${t.id} ${t.t}`)}
+    out+=`  ${su.title}: ${p}/${su.tests.length}\n`}
+  out+=`TOTAL: ${pass}/${all} pass, ${fails.length} fail\n`;
+  if(fails.length)out+="FAILED:\n"+fails.map(f=>"  ✕ "+f).join("\n")+"\n";
+  navigator.clipboard.writeText(out).then(()=>{const b=$("#report");b.textContent="Copied ✓";setTimeout(()=>b.textContent="Copy report",1500)});
+};
+render();
+</script>
+
+</body>
+</html>
