@@ -8,6 +8,7 @@ use App\Http\Resources\BookingResource;
 use App\Models\Booking;
 use App\Models\Unit;
 use App\Services\CancellationPolicyService;
+use App\Support\Pricing;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -103,8 +104,8 @@ class BookingController extends Controller
             return response()->json(['message' => 'الوحدة غير متاحة في هذه الفترة'], 422);
         }
 
-        $nights  = now()->parse($data['start_date'])->diffInDays($data['end_date']);
-        $pricing = $this->priceBreakdown((float) $unit->price, $nights);
+        $nights  = (int) now()->parse($data['start_date'])->diffInDays($data['end_date']);
+        $pricing = Pricing::breakdown((float) $unit->price, $nights, (float) $unit->cleaning_fee);
 
         $booking = Booking::create([
             'unit_id'           => $unit->id,
@@ -125,34 +126,5 @@ class BookingController extends Controller
         ]);
 
         return response()->json(new BookingResource($booking->load('unit.images')), 201);
-    }
-
-    /**
-     * Itemise a booking total from the unit's nightly price (ملخص السعر).
-     * Fees come from config/booking.php and are frozen onto the row by store().
-     *
-     * @return array{nightly_rate: float, subtotal: float, service_fee: float, cleaning_fee: float, taxes: float, commission_rate: float, commission_amount: float, total: float}
-     */
-    private function priceBreakdown(float $nightly, int $nights): array
-    {
-        $subtotal    = round($nightly * $nights, 2);
-        $serviceFee  = round($subtotal * (float) config('booking.service_fee_rate'), 2);
-        $cleaningFee = round((float) config('booking.cleaning_fee'), 2);
-        $taxes       = round($subtotal * (float) config('booking.tax_rate'), 2);
-
-        // Mamsa's cut of the partner's rental income — deducted from the
-        // partner's payout, so it is NOT part of the guest-facing total.
-        $commissionRate = (float) config('booking.commission_rate');
-
-        return [
-            'nightly_rate'      => $nightly,
-            'subtotal'          => $subtotal,
-            'service_fee'       => $serviceFee,
-            'cleaning_fee'      => $cleaningFee,
-            'taxes'             => $taxes,
-            'commission_rate'   => $commissionRate,
-            'commission_amount' => round($subtotal * $commissionRate, 2),
-            'total'             => round($subtotal + $serviceFee + $cleaningFee + $taxes, 2),
-        ];
     }
 }

@@ -32,6 +32,8 @@ class UnitPresenter
             'status'               => $unit->approval_status,
             // Draft fields can be null (partial body) — don't coerce to 0.
             'pricePerNight'        => $unit->price !== null ? (float) $unit->price : null,
+            // Per-unit, partner-editable; column default 0 so never null.
+            'cleaningFee'          => (float) $unit->cleaning_fee,
             'bedrooms'             => $unit->bedrooms !== null ? (int) $unit->bedrooms : null,
             'capacity'             => $unit->capacity !== null ? (int) $unit->capacity : null,
             'bathrooms'            => $unit->bathrooms !== null ? (int) $unit->bathrooms : null,

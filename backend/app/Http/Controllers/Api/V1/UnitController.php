@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\Booking;
 use App\Models\Unit;
+use App\Support\Pricing;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -236,7 +237,22 @@ class UnitController extends Controller
             ->overlapping($request->start_date, $request->end_date)
             ->exists();
 
-        return response()->json(['available' => ! $conflict && ! $blocked]);
+        $available = ! $conflict && ! $blocked;
+        $payload   = ['available' => $available];
+
+        // Server-computed breakdown for the checkout page — the exact same
+        // math POST /bookings freezes, so the frontend never does money math.
+        // Commission lines are partner-facing and stay out of this public payload.
+        if ($available) {
+            $nights = (int) now()->parse($request->start_date)->diffInDays($request->end_date);
+
+            $payload['pricing'] = \Illuminate\Support\Arr::except(
+                Pricing::breakdown((float) $unit->price, $nights, (float) $unit->cleaning_fee),
+                ['commission_rate', 'commission_amount'],
+            );
+        }
+
+        return response()->json($payload);
     }
 
     /**

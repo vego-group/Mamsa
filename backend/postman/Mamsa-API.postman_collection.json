@@ -855,7 +855,8 @@
             },
             "auth": {
               "type": "noauth"
-            }
+            },
+            "description": "Returns { available } plus, when available=true, a server-computed `pricing` block: { nights, nightly_rate, subtotal, service_fee, service_fee_percent, cleaning_fee, taxes, tax_percent, total }. Formula (2026-07-18 contract): service = subtotal × serviceFeePercent; tax (KSA VAT 15%) = (subtotal + cleaning + service) × taxPercent; total × 100 is an exact halalas integer. The checkout page MUST render these numbers — never compute its own. POST /bookings freezes the identical breakdown onto the booking row."
           },
           "response": []
         },
@@ -1949,7 +1950,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"unit_name\": \"شقة فاخرة بإطلالة\",\n  \"unit_type\": \"apartment\",\n  \"price\": 450,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"city\": \"الرياض\",\n  \"district\": \"النخيل\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"description\": \"شقة مفروشة بالكامل\",\n  \"tourism_permit_no\": \"TP-12345\",\n  \"company_license_no\": null,\n  \"cancellation_policy\": \"48_hours\",\n  \"checkin_time\": \"15:00\",\n  \"checkout_time\": \"12:00\",\n  \"features\": [\n    \"wifi\",\n    \"parking\",\n    \"pool\"\n  ]\n}",
+                  "raw": "{\n  \"unit_name\": \"شقة فاخرة بإطلالة\",\n  \"unit_type\": \"apartment\",\n  \"price\": 450,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"city\": \"الرياض\",\n  \"district\": \"النخيل\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"description\": \"شقة مفروشة بالكامل\",\n  \"tourism_permit_no\": \"TP-12345\",\n  \"company_license_no\": null,\n  \"cancellation_policy\": \"48_hours\",\n  \"checkin_time\": \"15:00\",\n  \"checkout_time\": \"12:00\",\n  \"features\": [\n    \"wifi\",\n    \"parking\",\n    \"pool\"\n  ],\n  \"cleaning_fee\": 150\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2023,7 +2024,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"unit_name\": \"شقة فاخرة بإطلالة\",\n  \"unit_type\": \"apartment\",\n  \"price\": 450,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"city\": \"الرياض\",\n  \"district\": \"النخيل\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"description\": \"شقة مفروشة بالكامل\",\n  \"tourism_permit_no\": \"TP-12345\",\n  \"company_license_no\": null,\n  \"cancellation_policy\": \"48_hours\",\n  \"checkin_time\": \"15:00\",\n  \"checkout_time\": \"12:00\",\n  \"features\": [\n    \"wifi\",\n    \"parking\",\n    \"pool\"\n  ]\n}",
+                  "raw": "{\n  \"unit_name\": \"شقة فاخرة بإطلالة\",\n  \"unit_type\": \"apartment\",\n  \"price\": 450,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"city\": \"الرياض\",\n  \"district\": \"النخيل\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"description\": \"شقة مفروشة بالكامل\",\n  \"tourism_permit_no\": \"TP-12345\",\n  \"company_license_no\": null,\n  \"cancellation_policy\": \"48_hours\",\n  \"checkin_time\": \"15:00\",\n  \"checkout_time\": \"12:00\",\n  \"features\": [\n    \"wifi\",\n    \"parking\",\n    \"pool\"\n  ],\n  \"cleaning_fee\": 150\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -3024,6 +3025,73 @@
               "response": []
             }
           ]
+        },
+        {
+          "name": "Platform Settings",
+          "description": "Platform pricing knobs (2026-07-18). GET readable by any admin; PATCH is SuperAdmin-ONLY (role gate → 403 for plain Admin). tax_percent is the legal KSA VAT rate: read-only everywhere — sending it in PATCH returns 422 (prohibited).",
+          "item": [
+            {
+              "name": "Get Platform Settings",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/admin/platform-settings",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "platform-settings"
+                  ]
+                },
+                "description": "Any admin. → { success, data: { service_fee_percent, tax_percent } }. Read by the superadmin settings screen; the user-site checkout does NOT need this — it reads the computed breakdown from POST /units/{id}/availability."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Service Fee % (SuperAdmin only)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/admin/platform-settings",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "platform-settings"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"service_fee_percent\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "SuperAdmin only (plain Admin → 403). Only service_fee_percent (0–100) is editable; including tax_percent → 422. Applies immediately to NEW availability quotes and bookings; existing bookings keep their frozen breakdown."
+              },
+              "response": []
+            }
+          ]
         }
       ]
     },
@@ -3578,7 +3646,7 @@
                 "description": "Creates a DRAFT (partial bodies allowed). Captures the new id into {{unit_id}}. city must be an enum slug; amenities are the 8 contract keys.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"وحدة من بوستمان\",\n  \"type\": \"apartment\",\n  \"pricePerNight\": 420,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"bathrooms\": 2,\n  \"city\": \"riyadh\",\n  \"district\": \"العليا\",\n  \"description\": \"وصف تجريبي لوحدة أنشئت من Postman لأغراض الاختبار.\",\n  \"amenities\": [\n    \"wifi\",\n    \"ac\",\n    \"kitchen\"\n  ],\n  \"checkIn\": \"15:00\",\n  \"checkOut\": \"12:00\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"address\": \"حي العليا، الرياض\",\n  \"tourismLicenseNumber\": \"TL-PM-0001\",\n  \"tourismLicenseFileId\": \"{{file_id}}\"\n}",
+                  "raw": "{\n  \"name\": \"وحدة من بوستمان\",\n  \"type\": \"apartment\",\n  \"pricePerNight\": 420,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"bathrooms\": 2,\n  \"city\": \"riyadh\",\n  \"district\": \"العليا\",\n  \"description\": \"وصف تجريبي لوحدة أنشئت من Postman لأغراض الاختبار.\",\n  \"amenities\": [\n    \"wifi\",\n    \"ac\",\n    \"kitchen\"\n  ],\n  \"checkIn\": \"15:00\",\n  \"checkOut\": \"12:00\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"address\": \"حي العليا، الرياض\",\n  \"tourismLicenseNumber\": \"TL-PM-0001\",\n  \"tourismLicenseFileId\": \"{{file_id}}\",\n  \"cleaningFee\": 150\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -3662,7 +3730,7 @@
                 "description": "Editing an APPROVED unit auto-reverts it to pending. Blocked (409) while pending.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"pricePerNight\": 460,\n  \"description\": \"وصف محدّث للوحدة التجريبية من Postman.\"\n}",
+                  "raw": "{\n  \"pricePerNight\": 460,\n  \"description\": \"وصف محدّث للوحدة التجريبية من Postman.\",\n  \"cleaningFee\": 150\n}",
                   "options": {
                     "raw": {
                       "language": "json"

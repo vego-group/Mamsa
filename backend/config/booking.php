@@ -7,18 +7,20 @@ return [
     |--------------------------------------------------------------------------
     | Rates used to itemise a booking total at creation time. The computed
     | line items are FROZEN onto the booking row, so changing these values
-    | later never re-prices an existing booking. Defaults mirror the design
-    | (subtotal 6000 → service 600 / cleaning 300 / tax 420 → total 7320).
+    | later never re-prices an existing booking.
+    |
+    | Cleaning fee is per-unit (units.cleaning_fee, partner-editable) since
+    | 2026-07-18 — there is no platform-wide cleaning fee anymore.
     */
 
-    // Service fee as a fraction of the nightly subtotal (10%).
+    // Fallback service fee as a fraction of the nightly subtotal. The live
+    // value is the platform_settings row (superadmin-editable, in percent);
+    // this only applies when that row is missing. See App\Support\Pricing.
     'service_fee_rate' => (float) env('BOOKING_SERVICE_FEE_RATE', 0.10),
 
-    // Flat cleaning fee in SAR, charged once per booking.
-    'cleaning_fee' => (float) env('BOOKING_CLEANING_FEE', 300),
-
-    // Tax as a fraction of the nightly subtotal (7%).
-    'tax_rate' => (float) env('BOOKING_TAX_RATE', 0.07),
+    // KSA VAT, applied to the full invoice (subtotal + cleaning + service).
+    // Legal rate — deliberately config-only, no admin edit surface.
+    'tax_rate' => (float) env('BOOKING_TAX_RATE', 0.15),
 
     // Mamsa's commission on partner rentals (2% of the nightly subtotal,
     // never on fees or taxes). Deducted from the partner's earnings —
