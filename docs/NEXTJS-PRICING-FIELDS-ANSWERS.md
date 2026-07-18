@@ -98,7 +98,7 @@ So the safe checkout order is: quote → `POST /bookings` → show the breakdown
 
 | Env | Status |
 |---|---|
-| `staging.mamsaa.com` | ✅ live now (everything above verified against it) |
-| `api.mamsaa.com` (prod) | code is merged; deploys with the next prod release — until then prod still returns the old shape |
+| `staging.mamsaa.com` | ✅ live (everything above verified against it) |
+| `api.mamsaa.com` (prod) | ✅ live since 2026-07-18 — same contract, verified (`service_fee_percent: 10`, `tax_percent: 15`) |
 
 Postman: collection updated — `02 → Check Availability` (new pricing block documented), `09 — Admin → Platform Settings` (GET + PATCH), unit create/update bodies now include the cleaning fee.
