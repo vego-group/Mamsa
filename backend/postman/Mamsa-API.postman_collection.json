@@ -1054,7 +1054,8 @@
                 "user",
                 "bookings"
               ]
-            }
+            },
+            "description": "Since 2026-07-18 the booking `pricing` block also carries the FROZEN applied rates: `service_fee_percent` + `tax_percent` (snake_case here; `serviceFeePercent`/`taxPercent` in the dashboard presenter). They reflect the rate in force at booking creation — later PATCHes to /admin/platform-settings never change them. Legacy bookings were backfilled by deriving fee ÷ base from the frozen amounts."
           },
           "response": []
         },
@@ -1417,7 +1418,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "Since 2026-07-18 the booking `pricing` block also carries the FROZEN applied rates: `service_fee_percent` + `tax_percent` (snake_case here; `serviceFeePercent`/`taxPercent` in the dashboard presenter). They reflect the rate in force at booking creation — later PATCHes to /admin/platform-settings never change them. Legacy bookings were backfilled by deriving fee ÷ base from the frozen amounts."
           },
           "response": [],
           "event": [
@@ -1454,7 +1456,7 @@
                 "{{booking_id}}"
               ]
             },
-            "description": "Returns the full booking incl. itemised \"pricing\" (nightly_rate, subtotal, service_fee, cleaning_fee, taxes, total) and, when cancelled, a \"cancellation\" block (reason, cancelled_by_label, refunded_amount). Powers the booking-detail page."
+            "description": "Returns the full booking incl. itemised \"pricing\" (nightly_rate, subtotal, service_fee, cleaning_fee, taxes, total) and, when cancelled, a \"cancellation\" block (reason, cancelled_by_label, refunded_amount). Powers the booking-detail page.\n\nSince 2026-07-18 the booking `pricing` block also carries the FROZEN applied rates: `service_fee_percent` + `tax_percent` (snake_case here; `serviceFeePercent`/`taxPercent` in the dashboard presenter). They reflect the rate in force at booking creation — later PATCHes to /admin/platform-settings never change them. Legacy bookings were backfilled by deriving fee ÷ base from the frozen amounts."
           },
           "response": []
         },
@@ -1894,7 +1896,8 @@
                 "partner",
                 "bookings"
               ]
-            }
+            },
+            "description": "Since 2026-07-18 the booking `pricing` block also carries the FROZEN applied rates: `service_fee_percent` + `tax_percent` (snake_case here; `serviceFeePercent`/`taxPercent` in the dashboard presenter). They reflect the rate in force at booking creation — later PATCHes to /admin/platform-settings never change them. Legacy bookings were backfilled by deriving fee ÷ base from the frozen amounts."
           },
           "response": []
         },
@@ -4185,7 +4188,7 @@
                 "auth": {
                   "type": "noauth"
                 },
-                "description": "Filters: status, unitId, from/to (date range), q (booking code). Paginated."
+                "description": "Filters: status, unitId, from/to (date range), q (booking code). Paginated.\n\nSince 2026-07-18 the booking `pricing` block also carries the FROZEN applied rates: `service_fee_percent` + `tax_percent` (snake_case here; `serviceFeePercent`/`taxPercent` in the dashboard presenter). They reflect the rate in force at booking creation — later PATCHes to /admin/platform-settings never change them. Legacy bookings were backfilled by deriving fee ÷ base from the frozen amounts."
               },
               "response": []
             },
@@ -4216,7 +4219,7 @@
                 "auth": {
                   "type": "noauth"
                 },
-                "description": ""
+                "description": "Since 2026-07-18 the response includes a camelCase `pricing` block (nightlyRate, nights, subtotal, serviceFee, serviceFeePercent, cleaningFee, taxes, taxPercent, total) — the guest-facing invoice lines FROZEN at booking time, alongside the existing partner-facing `financials`. Render invoices from it; the percents show the rate applied THEN, not the live setting."
               },
               "response": []
             },

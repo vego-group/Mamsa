@@ -39,6 +39,21 @@ class BookingPresenter
                 'commission'   => $commission,
                 'partnerShare' => round($total - $commission, 2),
             ],
+            // Guest-facing invoice lines, frozen at booking time (percent
+            // fields included so invoice screens can label "رسوم الخدمة 10%"
+            // with the rate that applied THEN, not the live setting). Legacy
+            // pre-breakdown rows fall back like the user-site resource does.
+            'pricing' => [
+                'nightlyRate'       => (float) ($booking->nightly_rate ?? ($booking->nights ? round($total / $booking->nights, 2) : 0)),
+                'nights'            => $booking->nights,
+                'subtotal'          => (float) ($booking->subtotal ?? $total),
+                'serviceFee'        => (float) $booking->service_fee,
+                'serviceFeePercent' => (float) ($booking->service_fee_percent ?? ($booking->subtotal > 0 ? round($booking->service_fee / $booking->subtotal * 100, 2) : 0)),
+                'cleaningFee'       => (float) $booking->cleaning_fee,
+                'taxes'             => (float) $booking->taxes,
+                'taxPercent'        => (float) ($booking->tax_percent ?? (($base = $booking->subtotal + $booking->cleaning_fee + $booking->service_fee) > 0 ? round($booking->taxes / $base * 100, 2) : 0)),
+                'total'             => $total,
+            ],
             'policySnapshot' => $booking->cancellation_snapshot ? [
                 'name'  => $booking->cancellation_snapshot['policy_key'] ?? null,
                 'rules' => $booking->cancellation_snapshot['policy_name'] ?? null,

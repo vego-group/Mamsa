@@ -116,8 +116,12 @@ class BookingController extends Controller
             'nightly_rate'      => $pricing['nightly_rate'],
             'subtotal'          => $pricing['subtotal'],
             'service_fee'       => $pricing['service_fee'],
+            // The applied rates, frozen alongside the amounts (invoice screens
+            // must show the % in force at booking time, not the live setting).
+            'service_fee_percent' => $pricing['service_fee_percent'],
             'cleaning_fee'      => $pricing['cleaning_fee'],
             'taxes'             => $pricing['taxes'],
+            'tax_percent'       => $pricing['tax_percent'],
             'commission_rate'   => $pricing['commission_rate'],
             'commission_amount' => $pricing['commission_amount'],
             'total_amount'      => $pricing['total'],

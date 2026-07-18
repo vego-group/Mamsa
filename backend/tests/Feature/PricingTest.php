@@ -112,6 +112,30 @@ class PricingTest extends TestCase
         $this->assertSame(402500, (int) round($total * 100));
     }
 
+    public function test_booking_freezes_percent_fields_against_later_setting_changes(): void
+    {
+        $unit  = $this->unit(price: 1000, cleaningFee: 200);
+        $guest = $this->guest();
+
+        $this->actingAs($guest)->postJson('/api/v1/bookings', [
+            'unit_id'    => $unit->id,
+            'start_date' => now()->addDays(10)->toDateString(),
+            'end_date'   => now()->addDays(13)->toDateString(),
+            'guests'     => 2,
+        ])->assertCreated()
+            ->assertJsonPath('pricing.service_fee_percent', 10)
+            ->assertJsonPath('pricing.tax_percent', 15);
+
+        // Superadmin raises the live rate — existing bookings keep showing 10.
+        Pricing::setServiceFeePercent(25);
+
+        $booking = \App\Models\Booking::where('unit_id', $unit->id)->firstOrFail();
+        $this->actingAs($guest)->getJson("/api/v1/bookings/{$booking->id}")
+            ->assertOk() // resource-wrapped: data.* (POST uses response()->json → unwrapped)
+            ->assertJsonPath('data.pricing.service_fee_percent', 10)
+            ->assertJsonPath('data.pricing.tax_percent', 15);
+    }
+
     public function test_cleaning_fee_defaults_to_zero_and_is_partner_editable(): void
     {
         $unit = $this->unit(cleaningFee: 0);

@@ -32,8 +32,12 @@ class BookingResource extends JsonResource
                 'nights'       => $this->nights,
                 'subtotal'     => (float) ($this->subtotal ?? $this->total_amount),
                 'service_fee'  => (float) $this->service_fee,
+                // Frozen applied rates. Null only on sqlite-era rows the
+                // migration backfill didn't reach — derive the same way it does.
+                'service_fee_percent' => (float) ($this->service_fee_percent ?? ($this->subtotal > 0 ? round($this->service_fee / $this->subtotal * 100, 2) : 0)),
                 'cleaning_fee' => (float) $this->cleaning_fee,
                 'taxes'        => (float) $this->taxes,
+                'tax_percent'  => (float) ($this->tax_percent ?? (($base = $this->subtotal + $this->cleaning_fee + $this->service_fee) > 0 ? round($this->taxes / $base * 100, 2) : 0)),
                 'total'        => (float) $this->total_amount,
             ],
             'status'       => $this->status,
