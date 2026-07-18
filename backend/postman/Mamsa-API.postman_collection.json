@@ -1481,7 +1481,7 @@
                 "cancellation-preview"
               ]
             },
-            "description": "FR-043/044 — read-only refund quote from the frozen snapshot."
+            "description": "FR-043/044 — read-only refund quote from the frozen snapshot.\n\nCancellation presets (2026-07-19): each unit carries ONE preset — flexible (100/75/50), moderate (100/50/25, the default), strict (75/25/0) — refund % by days-before-check-in (7+/3–7/<3; locked after check-in). The % table is DB data, frozen onto the booking as policy_snapshot at payment; refunds are computed server-side from the snapshot and executed as Moyasar PARTIAL refunds (exact halalas). The frontend never computes or sends a refund amount."
           },
           "response": []
         },
@@ -1510,7 +1510,7 @@
                 "cancel"
               ]
             },
-            "description": "FR-046/047 — runs the automatic refund/void. Optional \"reason\" (max 500) is stored and shown on the cancelled-booking card.",
+            "description": "FR-046/047 — runs the automatic refund/void. Optional \"reason\" (max 500) is stored and shown on the cancelled-booking card.\n\nCancellation presets (2026-07-19): each unit carries ONE preset — flexible (100/75/50), moderate (100/50/25, the default), strict (75/25/0) — refund % by days-before-check-in (7+/3–7/<3; locked after check-in). The % table is DB data, frozen onto the booking as policy_snapshot at payment; refunds are computed server-side from the snapshot and executed as Moyasar PARTIAL refunds (exact halalas). The frontend never computes or sends a refund amount.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"reason\": \"تغيير في خطط السفر\"\n}",
@@ -3612,7 +3612,7 @@
                 "description": "Creates a DRAFT (partial bodies allowed). Captures the new id into {{unit_id}}. city must be an enum slug; amenities are the 8 contract keys.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"وحدة من بوستمان\",\n  \"type\": \"apartment\",\n  \"pricePerNight\": 420,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"bathrooms\": 2,\n  \"city\": \"riyadh\",\n  \"district\": \"العليا\",\n  \"description\": \"وصف تجريبي لوحدة أنشئت من Postman لأغراض الاختبار.\",\n  \"amenities\": [\n    \"wifi\",\n    \"ac\",\n    \"kitchen\"\n  ],\n  \"checkIn\": \"15:00\",\n  \"checkOut\": \"12:00\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"address\": \"حي العليا، الرياض\",\n  \"tourismLicenseNumber\": \"TL-PM-0001\",\n  \"tourismLicenseFileId\": \"{{file_id}}\"\n}",
+                  "raw": "{\n  \"name\": \"وحدة من بوستمان\",\n  \"type\": \"apartment\",\n  \"pricePerNight\": 420,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"bathrooms\": 2,\n  \"city\": \"riyadh\",\n  \"district\": \"العليا\",\n  \"description\": \"وصف تجريبي لوحدة أنشئت من Postman لأغراض الاختبار.\",\n  \"amenities\": [\n    \"wifi\",\n    \"ac\",\n    \"kitchen\"\n  ],\n  \"checkIn\": \"15:00\",\n  \"checkOut\": \"12:00\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"address\": \"حي العليا، الرياض\",\n  \"tourismLicenseNumber\": \"TL-PM-0001\",\n  \"tourismLicenseFileId\": \"{{file_id}}\",\n  \"cancellationPolicy\": \"moderate\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -3696,7 +3696,7 @@
                 "description": "Editing an APPROVED unit auto-reverts it to pending. Blocked (409) while pending.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"pricePerNight\": 460,\n  \"description\": \"وصف محدّث للوحدة التجريبية من Postman.\"\n}",
+                  "raw": "{\n  \"pricePerNight\": 460,\n  \"description\": \"وصف محدّث للوحدة التجريبية من Postman.\",\n  \"cancellationPolicy\": \"moderate\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"

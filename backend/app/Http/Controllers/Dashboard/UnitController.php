@@ -29,7 +29,7 @@ class UnitController extends DashboardController
         [$page, $limit] = $this->pageArgs($request);
 
         $query = $request->user()->units()
-            ->with(['images', 'features'])
+            ->with(['images', 'features', 'cancellationPolicy'])
             ->withCount('reviews')
             ->withAvg('reviews', 'rating')
             ->latest();
@@ -73,7 +73,7 @@ class UnitController extends DashboardController
         $this->syncAmenities($unit, $data['amenities'] ?? null);
         $this->syncPhotos($request, $unit, $data);
 
-        return $this->ok(UnitPresenter::make($unit->fresh(['images', 'features'])), 201);
+        return $this->ok(UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])), 201);
     }
 
     public function update(Request $request, string $id): JsonResponse
@@ -103,7 +103,7 @@ class UnitController extends DashboardController
             $this->notifyAdmins($unit);
         }
 
-        return $this->ok(UnitPresenter::make($unit->fresh(['images', 'features'])));
+        return $this->ok(UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])));
     }
 
     public function destroy(Request $request, string $id): JsonResponse
@@ -134,7 +134,7 @@ class UnitController extends DashboardController
         $this->notifyAdmins($unit);
 
         return $this->ok([
-            'unit'    => UnitPresenter::make($unit->fresh(['images', 'features'])),
+            'unit'    => UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])),
             'message' => 'سيصلك إشعار خلال 24–48 ساعة',
         ]);
     }
@@ -151,6 +151,7 @@ class UnitController extends DashboardController
             'pricePerNight'        => [$req, 'numeric', 'gt:0'],
             // cleaningFee (abolished 2026-07-18) is deliberately absent: an
             // old client still sending it is silently ignored, not 422'd.
+            'cancellationPolicy'   => ['sometimes', 'in:flexible,moderate,strict'],
             'capacity'             => [$req, 'integer', 'min:1'],
             'bedrooms'             => ['sometimes', 'integer', 'min:0'],
             'bathrooms'            => ['sometimes', 'nullable', 'integer', 'min:0'],
@@ -181,6 +182,11 @@ class UnitController extends DashboardController
             'name'                 => fn ($v) => ['unit_name' => strip_tags($v)],
             'type'                 => fn ($v) => ['unit_type' => $v],
             'pricePerNight'        => fn ($v) => ['price' => $v],
+            // Preset slug → FK. Only affects FUTURE bookings: paid bookings
+            // carry a frozen snapshot the engine reads exclusively (FR-036).
+            'cancellationPolicy'   => fn ($v) => [
+                'cancellation_policy_id' => \App\Models\CancellationPolicy::where('key', $v)->value('id'),
+            ],
             'capacity'             => fn ($v) => ['capacity' => $v],
             'bedrooms'             => fn ($v) => ['bedrooms' => $v],
             'bathrooms'            => fn ($v) => ['bathrooms' => $v],

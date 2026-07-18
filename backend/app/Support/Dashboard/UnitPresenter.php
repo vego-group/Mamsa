@@ -32,6 +32,9 @@ class UnitPresenter
             'status'               => $unit->approval_status,
             // Draft fields can be null (partial body) — don't coerce to 0.
             'pricePerNight'        => $unit->price !== null ? (float) $unit->price : null,
+            // Preset slug; units that never chose one inherit the platform
+            // default (moderate) — echo what the engine would actually apply.
+            'cancellationPolicy'   => $unit->cancellationPolicy?->key ?? self::defaultPolicyKey(),
             'bedrooms'             => $unit->bedrooms !== null ? (int) $unit->bedrooms : null,
             'capacity'             => $unit->capacity !== null ? (int) $unit->capacity : null,
             'bathrooms'            => $unit->bathrooms !== null ? (int) $unit->bathrooms : null,
@@ -61,6 +64,15 @@ class UnitPresenter
                 : null,
             'updatedAt'            => $unit->updated_at?->toIso8601ZuluString(),
         ];
+    }
+
+    /** Per-request memo so unit lists don't re-query the default policy N times. */
+    private static ?string $defaultPolicyKey = null;
+
+    private static function defaultPolicyKey(): ?string
+    {
+        return self::$defaultPolicyKey ??= \App\Models\CancellationPolicy::query()
+            ->orderByDesc('is_default')->value('key');
     }
 
     private static function hm(mixed $time): ?string

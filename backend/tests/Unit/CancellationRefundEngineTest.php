@@ -36,9 +36,10 @@ class CancellationRefundEngineTest extends TestCase
     private function booking(string $template, float $total = 1000.0): Booking
     {
         $tierSets = [
-            'flexible' => [[168, 100], [72, 50], [0, 0]],
-            'moderate' => [[168, 100], [72, 25], [0, 0]],
-            'strict'   => [[168, 50],  [72, 0],  [0, 0]],
+            // Approved preset table 2026-07-18 (guest-friendly revision).
+            'flexible' => [[168, 100], [72, 75], [0, 50]],
+            'moderate' => [[168, 100], [72, 50], [0, 25]],
+            'strict'   => [[168, 75],  [72, 25], [0, 0]],
         ];
 
         $tiers = array_map(fn ($t) => [
@@ -71,10 +72,10 @@ class CancellationRefundEngineTest extends TestCase
 
         $this->assertSame(100, $this->service->quote($this->booking('flexible'), $when)->refundPercent);
         $this->assertSame(100, $this->service->quote($this->booking('moderate'), $when)->refundPercent);
-        $this->assertSame(50,  $this->service->quote($this->booking('strict'),   $when)->refundPercent);
+        $this->assertSame(75,  $this->service->quote($this->booking('strict'),   $when)->refundPercent);
 
         $this->assertEqualsWithDelta(1000.0, $this->service->quote($this->booking('flexible'), $when)->refundAmount, 0.001);
-        $this->assertEqualsWithDelta(500.0,  $this->service->quote($this->booking('strict'),   $when)->refundAmount, 0.001);
+        $this->assertEqualsWithDelta(750.0,  $this->service->quote($this->booking('strict'),   $when)->refundAmount, 0.001);
     }
 
     public function test_between_3_and_7_days_before_checkin(): void
@@ -82,24 +83,26 @@ class CancellationRefundEngineTest extends TestCase
         // 5 days before check-in (120h) → middle tier.
         $when = $this->at('2026-07-05T15:00:00+03:00');
 
-        $this->assertSame(50, $this->service->quote($this->booking('flexible'), $when)->refundPercent);
-        $this->assertSame(25, $this->service->quote($this->booking('moderate'), $when)->refundPercent);
-        $this->assertSame(0,  $this->service->quote($this->booking('strict'),   $when)->refundPercent);
+        $this->assertSame(75, $this->service->quote($this->booking('flexible'), $when)->refundPercent);
+        $this->assertSame(50, $this->service->quote($this->booking('moderate'), $when)->refundPercent);
+        $this->assertSame(25, $this->service->quote($this->booking('strict'),   $when)->refundPercent);
 
-        $this->assertEqualsWithDelta(500.0, $this->service->quote($this->booking('flexible'), $when)->refundAmount, 0.001);
-        $this->assertEqualsWithDelta(250.0, $this->service->quote($this->booking('moderate'), $when)->refundAmount, 0.001);
+        $this->assertEqualsWithDelta(750.0, $this->service->quote($this->booking('flexible'), $when)->refundAmount, 0.001);
+        $this->assertEqualsWithDelta(500.0, $this->service->quote($this->booking('moderate'), $when)->refundAmount, 0.001);
     }
 
-    public function test_less_than_48_hours_before_checkin(): void
+    public function test_less_than_3_days_before_checkin(): void
     {
-        // 24h before check-in → bottom tier, all 0%.
+        // 24h before check-in → bottom tier: 50 / 25 / 0.
         $when = $this->at('2026-07-09T15:00:00+03:00');
 
-        foreach (['flexible', 'moderate', 'strict'] as $template) {
+        $expected = ['flexible' => 50, 'moderate' => 25, 'strict' => 0];
+
+        foreach ($expected as $template => $percent) {
             $quote = $this->service->quote($this->booking($template), $when);
             $this->assertTrue($quote->cancellable);
-            $this->assertSame(0, $quote->refundPercent);
-            $this->assertEqualsWithDelta(0.0, $quote->refundAmount, 0.001);
+            $this->assertSame($percent, $quote->refundPercent);
+            $this->assertEqualsWithDelta($percent * 10.0, $quote->refundAmount, 0.001);
         }
     }
 
@@ -117,10 +120,10 @@ class CancellationRefundEngineTest extends TestCase
 
     public function test_refund_amount_scales_with_total(): void
     {
-        $when = $this->at('2026-07-05T15:00:00+03:00'); // 50% tier on flexible
+        $when = $this->at('2026-07-05T15:00:00+03:00'); // 75% tier on flexible
 
         $quote = $this->service->quote($this->booking('flexible', 2480.0), $when);
 
-        $this->assertEqualsWithDelta(1240.0, $quote->refundAmount, 0.001);
+        $this->assertEqualsWithDelta(1860.0, $quote->refundAmount, 0.001);
     }
 }
