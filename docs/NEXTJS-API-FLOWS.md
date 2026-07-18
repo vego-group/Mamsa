@@ -99,7 +99,10 @@ POST /bookings/{id}/cancel                ← executes; refund → gateway + wal
 ```
 
 Always render refund math from `policy_snapshot` / the preview — never from the unit's current policy
-(it may have changed since booking).
+(it may have changed since booking). Policies are 3 fixed presets chosen per unit by the partner —
+flexible 100/75/50, moderate 100/50/25 (default), strict 75/25/0 (% by 7+/3–7/<3 days before
+check-in; locked after check-in). Refunds execute as Moyasar PARTIAL refunds server-side
+(`NEXTJS-CANCELLATION-PRESETS.md`).
 
 ## 4. User account area (Bearer)
 
@@ -153,7 +156,9 @@ Reference docs: `NEXTJS-DASHBOARD-PRODUCTION.md` (wiring), `NEXTJS-DASHBOARD-DEV
 POST /uploads/presign { kind: unit_photo|license_pdf|company_doc, fileName, mimeType, size }
    → { fileId, uploadUrl }
 PUT  {uploadUrl}                          ← raw bytes (signed URL; magic-byte validated, ≤10MB)
-POST /units                               ← partial DRAFT ok (only drafts skip required fields)
+POST /units                               ← partial DRAFT ok (only drafts skip required fields);
+                                            accepts cancellationPolicy: flexible|moderate|strict
+                                            (echoed on every unit; unset ⇒ moderate)
 PATCH /units/{id}                         ← photoFileIds[] (ordered, authoritative replace),
                                             coverFileId, tourismLicenseFileId — photos echo fileId back
 POST /units/{id}/submit                   ← full validation here → status pending → admin review (flow 7)
