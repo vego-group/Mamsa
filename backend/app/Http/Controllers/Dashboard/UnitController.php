@@ -149,7 +149,8 @@ class UnitController extends DashboardController
             'name'                 => [$req, 'string', 'min:2', 'max:150'],
             'type'                 => [$req, 'in:apartment,studio,villa'],
             'pricePerNight'        => [$req, 'numeric', 'gt:0'],
-            'cleaningFee'          => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            // cleaningFee (abolished 2026-07-18) is deliberately absent: an
+            // old client still sending it is silently ignored, not 422'd.
             'capacity'             => [$req, 'integer', 'min:1'],
             'bedrooms'             => ['sometimes', 'integer', 'min:0'],
             'bathrooms'            => ['sometimes', 'nullable', 'integer', 'min:0'],
@@ -180,7 +181,6 @@ class UnitController extends DashboardController
             'name'                 => fn ($v) => ['unit_name' => strip_tags($v)],
             'type'                 => fn ($v) => ['unit_type' => $v],
             'pricePerNight'        => fn ($v) => ['price' => $v],
-            'cleaningFee'          => fn ($v) => ['cleaning_fee' => $v ?? 0],
             'capacity'             => fn ($v) => ['capacity' => $v],
             'bedrooms'             => fn ($v) => ['bedrooms' => $v],
             'bathrooms'            => fn ($v) => ['bathrooms' => $v],

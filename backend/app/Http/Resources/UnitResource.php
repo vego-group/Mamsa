@@ -15,8 +15,6 @@ class UnitResource extends JsonResource
             'type'                => $this->unit_type,
             'code'                => $this->code,
             'price'               => $this->price,
-            // Always present (column default 0) — checkout relies on it.
-            'cleaning_fee'        => (float) $this->cleaning_fee,
             'capacity'            => $this->capacity,
             'bedrooms'            => $this->bedrooms,
             'bathrooms'           => $this->bathrooms,

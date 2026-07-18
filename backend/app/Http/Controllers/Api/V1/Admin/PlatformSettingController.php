@@ -8,14 +8,12 @@ use App\Http\Controllers\Controller;
 use App\Support\Pricing;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 /**
- * Platform-wide pricing knobs (frontend contract 2026-07-18).
- * GET  — any admin (also what the superadmin settings screen renders).
- * PATCH — SuperAdmin only (route-level role gate); edits service_fee_percent
- * exclusively. tax_percent is the legal VAT rate: read-only everywhere,
- * `prohibited` here so an attempted edit fails loudly instead of silently.
+ * Owner decision 2026-07-18: cleaning/service fees abolished, so nothing here
+ * is editable anymore — the PATCH surface was removed entirely. Kept as a
+ * read-only endpoint (per the frontend's own suggestion) exposing the legal
+ * VAT rate for any future settings screen.
  */
 class PlatformSettingController extends Controller
 {
@@ -23,27 +21,8 @@ class PlatformSettingController extends Controller
 
     public function show(): JsonResponse
     {
-        return $this->success($this->payload());
-    }
-
-    public function update(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'service_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'tax_percent'         => ['prohibited'],
+        return $this->success([
+            'tax_percent' => Pricing::taxPercent(),
         ]);
-
-        Pricing::setServiceFeePercent((float) $data['service_fee_percent']);
-
-        return $this->success($this->payload(), 'تم تحديث الإعدادات');
-    }
-
-    /** @return array{service_fee_percent: float, tax_percent: float} */
-    private function payload(): array
-    {
-        return [
-            'service_fee_percent' => Pricing::serviceFeePercent(),
-            'tax_percent'         => Pricing::taxPercent(),
-        ];
     }
 }

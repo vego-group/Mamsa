@@ -22,7 +22,6 @@ class Unit extends Model
         'unit_type',
         'code',
         'price',
-        'cleaning_fee',
         'capacity',
         'bedrooms',
         'bathrooms',
@@ -49,7 +48,6 @@ class Unit extends Model
 
     protected $casts = [
         'price'        => 'float',
-        'cleaning_fee' => 'float',
         'lat'          => 'float',
         'lng'      => 'float',
         'capacity' => 'integer',

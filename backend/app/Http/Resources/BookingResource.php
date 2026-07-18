@@ -27,19 +27,7 @@ class BookingResource extends JsonResource
             'total_amount' => $this->total_amount,
             // Itemised price summary (ملخص السعر). Falls back gracefully for
             // legacy rows that predate the breakdown columns.
-            'pricing'      => [
-                'nightly_rate' => (float) ($this->nightly_rate ?? ($this->nights ? round($this->total_amount / $this->nights, 2) : 0)),
-                'nights'       => $this->nights,
-                'subtotal'     => (float) ($this->subtotal ?? $this->total_amount),
-                'service_fee'  => (float) $this->service_fee,
-                // Frozen applied rates. Null only on sqlite-era rows the
-                // migration backfill didn't reach — derive the same way it does.
-                'service_fee_percent' => (float) ($this->service_fee_percent ?? ($this->subtotal > 0 ? round($this->service_fee / $this->subtotal * 100, 2) : 0)),
-                'cleaning_fee' => (float) $this->cleaning_fee,
-                'taxes'        => (float) $this->taxes,
-                'tax_percent'  => (float) ($this->tax_percent ?? (($base = $this->subtotal + $this->cleaning_fee + $this->service_fee) > 0 ? round($this->taxes / $base * 100, 2) : 0)),
-                'total'        => (float) $this->total_amount,
-            ],
+            'pricing'      => $this->pricingBlock(),
             'status'       => $this->status,
             'status_label' => $this->statusLabel(),
             // FR-036 — the cancellation policy frozen at payment time. Refund
@@ -78,6 +66,39 @@ class BookingResource extends JsonResource
             ] : null),
             'created_at'   => $this->created_at?->toISOString(),
         ];
+    }
+
+    /**
+     * Fees were abolished 2026-07-18 — the standing shape is subtotal + VAT.
+     * Fee lines appear ONLY on historical bookings that actually charged them
+     * (62 prod rows, Jun 30 – Jul 6): omitting them there would make the
+     * lines stop summing to total_amount, which is frozen financial record.
+     *
+     * @return array<string, mixed>
+     */
+    private function pricingBlock(): array
+    {
+        $pricing = [
+            'nightly_rate' => (float) ($this->nightly_rate ?? ($this->nights ? round($this->total_amount / $this->nights, 2) : 0)),
+            'nights'       => $this->nights,
+            'subtotal'     => (float) ($this->subtotal ?? $this->total_amount),
+            'taxes'        => (float) $this->taxes,
+            // Frozen applied rate; derived (fee ÷ base, the fee-era formula)
+            // only for rows the migration backfill couldn't reach.
+            'tax_percent'  => (float) ($this->tax_percent ?? (($base = $this->subtotal + $this->cleaning_fee + $this->service_fee) > 0 ? round($this->taxes / $base * 100, 2) : 0)),
+            'total'        => (float) $this->total_amount,
+        ];
+
+        if ($this->service_fee > 0) {
+            $pricing['service_fee']         = (float) $this->service_fee;
+            $pricing['service_fee_percent'] = (float) ($this->service_fee_percent ?? ($this->subtotal > 0 ? round($this->service_fee / $this->subtotal * 100, 2) : 0));
+        }
+
+        if ($this->cleaning_fee > 0) {
+            $pricing['cleaning_fee'] = (float) $this->cleaning_fee;
+        }
+
+        return $pricing;
     }
 
     private function statusLabel(): string

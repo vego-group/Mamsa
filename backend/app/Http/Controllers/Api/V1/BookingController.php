@@ -105,7 +105,7 @@ class BookingController extends Controller
         }
 
         $nights  = (int) now()->parse($data['start_date'])->diffInDays($data['end_date']);
-        $pricing = Pricing::breakdown((float) $unit->price, $nights, (float) $unit->cleaning_fee);
+        $pricing = Pricing::breakdown((float) $unit->price, $nights);
 
         $booking = Booking::create([
             'unit_id'           => $unit->id,
@@ -115,11 +115,11 @@ class BookingController extends Controller
             'guests'            => $data['guests'],
             'nightly_rate'      => $pricing['nightly_rate'],
             'subtotal'          => $pricing['subtotal'],
-            'service_fee'       => $pricing['service_fee'],
-            // The applied rates, frozen alongside the amounts (invoice screens
-            // must show the % in force at booking time, not the live setting).
-            'service_fee_percent' => $pricing['service_fee_percent'],
-            'cleaning_fee'      => $pricing['cleaning_fee'],
+            // Fees abolished 2026-07-18 — stored as explicit 0 (not null) so
+            // the columns stay uniform next to the fee-era historical rows.
+            'service_fee'         => 0,
+            'service_fee_percent' => 0,
+            'cleaning_fee'        => 0,
             'taxes'             => $pricing['taxes'],
             'tax_percent'       => $pricing['tax_percent'],
             'commission_rate'   => $pricing['commission_rate'],

@@ -212,11 +212,9 @@ Route::prefix('v1')->group(function () {
             Route::get('bookings', [Admin\BookingController::class, 'index'])->name('bookings.index');
             Route::get('reports', [Admin\ReportController::class, 'index'])->name('reports');
 
-            // Platform pricing knobs — read: any admin; write: SuperAdmin ONLY
-            // (stacks on the group's Admin|SuperAdmin gate).
+            // Read-only since the 2026-07-18 fee revert (only the fixed VAT
+            // rate remains — there is nothing left to PATCH).
             Route::get('platform-settings', [Admin\PlatformSettingController::class, 'show'])->name('settings.show');
-            Route::patch('platform-settings', [Admin\PlatformSettingController::class, 'update'])
-                ->middleware('role:SuperAdmin')->name('settings.update');
 
             Route::prefix('notifications')->name('notifications.')->group(function () {
                 Route::get('/', [NotificationController::class, 'index'])->name('index');

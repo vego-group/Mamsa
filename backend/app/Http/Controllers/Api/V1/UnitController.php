@@ -247,7 +247,7 @@ class UnitController extends Controller
             $nights = (int) now()->parse($request->start_date)->diffInDays($request->end_date);
 
             $payload['pricing'] = \Illuminate\Support\Arr::except(
-                Pricing::breakdown((float) $unit->price, $nights, (float) $unit->cleaning_fee),
+                Pricing::breakdown((float) $unit->price, $nights),
                 ['commission_rate', 'commission_amount'],
             );
         }

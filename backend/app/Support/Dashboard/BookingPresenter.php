@@ -39,21 +39,11 @@ class BookingPresenter
                 'commission'   => $commission,
                 'partnerShare' => round($total - $commission, 2),
             ],
-            // Guest-facing invoice lines, frozen at booking time (percent
-            // fields included so invoice screens can label "رسوم الخدمة 10%"
-            // with the rate that applied THEN, not the live setting). Legacy
-            // pre-breakdown rows fall back like the user-site resource does.
-            'pricing' => [
-                'nightlyRate'       => (float) ($booking->nightly_rate ?? ($booking->nights ? round($total / $booking->nights, 2) : 0)),
-                'nights'            => $booking->nights,
-                'subtotal'          => (float) ($booking->subtotal ?? $total),
-                'serviceFee'        => (float) $booking->service_fee,
-                'serviceFeePercent' => (float) ($booking->service_fee_percent ?? ($booking->subtotal > 0 ? round($booking->service_fee / $booking->subtotal * 100, 2) : 0)),
-                'cleaningFee'       => (float) $booking->cleaning_fee,
-                'taxes'             => (float) $booking->taxes,
-                'taxPercent'        => (float) ($booking->tax_percent ?? (($base = $booking->subtotal + $booking->cleaning_fee + $booking->service_fee) > 0 ? round($booking->taxes / $base * 100, 2) : 0)),
-                'total'             => $total,
-            ],
+            // Guest-facing invoice lines, frozen at booking time. Standing
+            // shape (post 2026-07-18 fee revert) is subtotal + VAT; fee lines
+            // appear only on historical bookings that charged them, so those
+            // invoices still sum to total.
+            'pricing' => self::pricing($booking, $total),
             'policySnapshot' => $booking->cancellation_snapshot ? [
                 'name'  => $booking->cancellation_snapshot['policy_key'] ?? null,
                 'rules' => $booking->cancellation_snapshot['policy_name'] ?? null,
@@ -76,6 +66,30 @@ class BookingPresenter
         }
 
         return $data;
+    }
+
+    /** @return array<string, mixed> Same rules as BookingResource::pricingBlock, camelCase. */
+    private static function pricing(Booking $booking, float $total): array
+    {
+        $pricing = [
+            'nightlyRate' => (float) ($booking->nightly_rate ?? ($booking->nights ? round($total / $booking->nights, 2) : 0)),
+            'nights'      => $booking->nights,
+            'subtotal'    => (float) ($booking->subtotal ?? $total),
+            'taxes'       => (float) $booking->taxes,
+            'taxPercent'  => (float) ($booking->tax_percent ?? (($base = $booking->subtotal + $booking->cleaning_fee + $booking->service_fee) > 0 ? round($booking->taxes / $base * 100, 2) : 0)),
+            'total'       => $total,
+        ];
+
+        if ($booking->service_fee > 0) {
+            $pricing['serviceFee']        = (float) $booking->service_fee;
+            $pricing['serviceFeePercent'] = (float) ($booking->service_fee_percent ?? ($booking->subtotal > 0 ? round($booking->service_fee / $booking->subtotal * 100, 2) : 0));
+        }
+
+        if ($booking->cleaning_fee > 0) {
+            $pricing['cleaningFee'] = (float) $booking->cleaning_fee;
+        }
+
+        return $pricing;
     }
 
     private static function time(mixed $t, string $default): string

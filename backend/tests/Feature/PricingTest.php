@@ -4,19 +4,20 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Booking;
 use App\Models\PartnerDetail;
 use App\Models\Unit;
 use App\Models\User;
-use App\Support\Pricing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * Pricing contract (2026-07-18): per-unit cleaning fee, DB-backed service fee %,
- * VAT on the full invoice, and checkout/payment parity — the availability
- * preview, the frozen booking row, and amount_halalas must all agree.
+ * Pricing contract after the 2026-07-18 owner revert: the guest pays
+ * subtotal + 15% VAT — no cleaning fee, no service fee. Historical fee-era
+ * bookings keep their frozen lines (rendered only when non-zero, so old
+ * invoices still sum to total). Quote, frozen booking row and
+ * amount_halalas must all agree.
  */
 class PricingTest extends TestCase
 {
@@ -26,14 +27,12 @@ class PricingTest extends TestCase
     {
         parent::setUp();
 
-        Cache::flush(); // Pricing caches service_fee_percent forever
-
         foreach (['Individual', 'Company', 'Admin', 'SuperAdmin', 'User'] as $r) {
             Role::findOrCreate($r, 'web');
         }
     }
 
-    private function unit(float $price = 1000, float $cleaningFee = 200): Unit
+    private function unit(float $price = 1000): Unit
     {
         $owner = User::factory()->create();
         $owner->assignRole('Individual');
@@ -44,7 +43,6 @@ class PricingTest extends TestCase
             'unit_type'       => 'apartment',
             'code'            => 'MRN'.fake()->unique()->numerify('#####'),
             'price'           => $price,
-            'cleaning_fee'    => $cleaningFee,
             'capacity'        => 2,
             'bedrooms'        => 1,
             'approval_status' => 'approved',
@@ -61,137 +59,131 @@ class PricingTest extends TestCase
         return $user;
     }
 
-    /* ---- formula: tax on subtotal + cleaning + service (15%), migration seeds 10% service ---- */
+    /* ---- formula: subtotal + 15% VAT, nothing else ---- */
 
-    public function test_availability_returns_contract_breakdown(): void
+    public function test_availability_returns_subtotal_plus_vat_only(): void
     {
-        $unit = $this->unit(price: 1000, cleaningFee: 200);
+        $unit = $this->unit(price: 1000);
 
-        // 3 nights: subtotal 3000, service 300 (10%), tax 15% × 3500 = 525, total 4025.
+        // 3 nights: subtotal 3000, VAT 450, total 3450 — no fee lines at all.
         $this->postJson("/api/v1/units/{$unit->id}/availability", [
             'start_date' => now()->addDays(10)->toDateString(),
             'end_date'   => now()->addDays(13)->toDateString(),
         ])->assertOk()->assertJson([
             'available' => true,
             'pricing'   => [
-                'nights'              => 3,
-                'subtotal'            => 3000.0,
-                'service_fee'         => 300.0,
-                'service_fee_percent' => 10.0,
-                'cleaning_fee'        => 200.0,
-                'taxes'               => 525.0,
-                'tax_percent'         => 15.0,
-                'total'               => 4025.0,
+                'nights'       => 3,
+                'nightly_rate' => 1000.0,
+                'subtotal'     => 3000.0,
+                'taxes'        => 450.0,
+                'tax_percent'  => 15.0,
+                'total'        => 3450.0,
             ],
-        ])->assertJsonMissingPath('pricing.commission_amount'); // partner-facing, never public
+        ])->assertJsonMissingPath('pricing.service_fee')
+          ->assertJsonMissingPath('pricing.cleaning_fee')
+          ->assertJsonMissingPath('pricing.service_fee_percent')
+          ->assertJsonMissingPath('pricing.commission_amount');
     }
 
-    public function test_booking_freezes_same_breakdown_and_halalas_are_exact(): void
+    public function test_booking_freezes_breakdown_and_halalas_are_exact(): void
     {
-        $unit = $this->unit(price: 1000, cleaningFee: 200);
+        $unit = $this->unit(price: 1000);
 
         $this->actingAs($this->guest())->postJson('/api/v1/bookings', [
             'unit_id'    => $unit->id,
             'start_date' => now()->addDays(10)->toDateString(),
             'end_date'   => now()->addDays(13)->toDateString(),
             'guests'     => 2,
-        ])->assertCreated();
+        ])->assertCreated()
+            ->assertJsonPath('pricing.taxes', 450)
+            ->assertJsonPath('pricing.tax_percent', 15)
+            ->assertJsonPath('pricing.total', 3450)
+            ->assertJsonMissingPath('pricing.service_fee')
+            ->assertJsonMissingPath('pricing.cleaning_fee');
 
         $this->assertDatabaseHas('bookings', [
             'unit_id'      => $unit->id,
             'subtotal'     => 3000.00,
-            'service_fee'  => 300.00,
-            'cleaning_fee' => 200.00,
-            'taxes'        => 525.00,
-            'total_amount' => 4025.00,
+            'service_fee'  => 0,
+            'cleaning_fee' => 0,
+            'taxes'        => 450.00,
+            'tax_percent'  => 15.00,
+            'total_amount' => 3450.00,
         ]);
 
-        // Halalas parity: every line pre-rounded to 2dp → total × 100 is exact
+        // Halalas parity: lines pre-rounded to 2dp → total × 100 is exact
         // (this is the figure /payments/initiate sends to Moyasar).
-        $total = (float) \App\Models\Booking::where('unit_id', $unit->id)->value('total_amount');
-        $this->assertSame(402500, (int) round($total * 100));
+        $total = (float) Booking::where('unit_id', $unit->id)->value('total_amount');
+        $this->assertSame(345000, (int) round($total * 100));
     }
 
-    public function test_booking_freezes_percent_fields_against_later_setting_changes(): void
+    public function test_historical_fee_era_booking_still_shows_its_fee_lines(): void
     {
-        $unit  = $this->unit(price: 1000, cleaningFee: 200);
+        $unit  = $this->unit(price: 450);
         $guest = $this->guest();
 
-        $this->actingAs($guest)->postJson('/api/v1/bookings', [
-            'unit_id'    => $unit->id,
-            'start_date' => now()->addDays(10)->toDateString(),
-            'end_date'   => now()->addDays(13)->toDateString(),
-            'guests'     => 2,
-        ])->assertCreated()
-            ->assertJsonPath('pricing.service_fee_percent', 10)
-            ->assertJsonPath('pricing.tax_percent', 15);
+        // A frozen fee-era row (like the 62 real prod bookings from Jun 30 – Jul 6):
+        // 1350 + 135 service (10%) + 100 cleaning + 237.75 VAT (15% of 1585) = 1822.75.
+        $booking = Booking::create([
+            'unit_id' => $unit->id, 'user_id' => $guest->id,
+            'start_date' => now()->addDays(5)->toDateString(),
+            'end_date'   => now()->addDays(8)->toDateString(),
+            'guests' => 2, 'status' => 'confirmed',
+            'nightly_rate' => 450, 'subtotal' => 1350,
+            'service_fee' => 135, 'service_fee_percent' => 10,
+            'cleaning_fee' => 100,
+            'taxes' => 237.75, 'tax_percent' => 15,
+            'total_amount' => 1822.75,
+        ]);
 
-        // Superadmin raises the live rate — existing bookings keep showing 10.
-        Pricing::setServiceFeePercent(25);
-
-        $booking = \App\Models\Booking::where('unit_id', $unit->id)->firstOrFail();
-        $this->actingAs($guest)->getJson("/api/v1/bookings/{$booking->id}")
-            ->assertOk() // resource-wrapped: data.* (POST uses response()->json → unwrapped)
+        $res = $this->actingAs($guest)->getJson("/api/v1/bookings/{$booking->id}")
+            ->assertOk() // resource-wrapped: data.*
+            ->assertJsonPath('data.pricing.service_fee', 135)
             ->assertJsonPath('data.pricing.service_fee_percent', 10)
-            ->assertJsonPath('data.pricing.tax_percent', 15);
+            ->assertJsonPath('data.pricing.cleaning_fee', 100)
+            ->assertJsonPath('data.pricing.taxes', 237.75);
+
+        // The rendered lines must sum to the frozen total — that's WHY
+        // historical fee lines are kept.
+        $p = $res->json('data.pricing');
+        $this->assertSame(
+            round($p['subtotal'] + $p['service_fee'] + $p['cleaning_fee'] + $p['taxes'], 2),
+            $p['total'],
+        );
     }
 
-    public function test_cleaning_fee_defaults_to_zero_and_is_partner_editable(): void
+    public function test_cleaning_fee_in_unit_payloads_is_silently_ignored(): void
     {
-        $unit = $this->unit(cleaningFee: 0);
-        $this->assertSame(0.0, $unit->fresh()->cleaning_fee);
+        $unit = $this->unit();
 
+        // Old clients still sending the abolished field must not break (422)
+        // nor persist anything — the column is gone.
         $this->actingAs($unit->owner)->putJson("/api/v1/partner/units/{$unit->id}", [
+            'price'        => 500,
             'cleaning_fee' => 150,
         ])->assertOk();
 
-        $this->assertSame(150.0, $unit->fresh()->cleaning_fee);
+        $this->assertSame(500.0, $unit->fresh()->price);
+        $this->assertArrayNotHasKey('cleaning_fee', $unit->fresh()->getAttributes());
     }
 
-    /* ---- platform settings endpoint ---- */
+    /* ---- platform settings: read-only, VAT only ---- */
 
-    private function admin(string $role = 'Admin'): User
+    public function test_settings_endpoint_is_read_only_tax_only(): void
     {
-        $user = User::factory()->create();
-        $user->assignRole($role);
+        $admin = User::factory()->create();
+        $admin->assignRole('Admin');
 
-        return $user;
-    }
-
-    public function test_admin_can_read_settings(): void
-    {
-        $this->actingAs($this->admin())->getJson('/api/v1/admin/platform-settings')
+        $this->actingAs($admin)->getJson('/api/v1/admin/platform-settings')
             ->assertOk()
-            // Whole floats JSON-encode as ints (no PRESERVE_ZERO_FRACTION).
-            ->assertJsonPath('data.service_fee_percent', 10)
-            ->assertJsonPath('data.tax_percent', 15);
-    }
+            ->assertJsonPath('data.tax_percent', 15)
+            ->assertJsonMissingPath('data.service_fee_percent');
 
-    public function test_superadmin_patch_changes_live_pricing(): void
-    {
-        $this->actingAs($this->admin('SuperAdmin'))
-            ->patchJson('/api/v1/admin/platform-settings', ['service_fee_percent' => 12.5])
-            ->assertOk()
-            ->assertJsonPath('data.service_fee_percent', 12.5);
-
-        // New bookings pick the new rate up immediately (cache busted).
-        $this->assertSame(12.5, Pricing::serviceFeePercent());
-        $this->assertSame(375.0, Pricing::breakdown(1000, 3, 0)['service_fee']);
-    }
-
-    public function test_plain_admin_cannot_patch_settings(): void
-    {
-        $this->actingAs($this->admin('Admin'))
-            ->patchJson('/api/v1/admin/platform-settings', ['service_fee_percent' => 50])
-            ->assertStatus(403);
-    }
-
-    public function test_tax_percent_is_not_editable_by_anyone(): void
-    {
-        $this->actingAs($this->admin('SuperAdmin'))
-            ->patchJson('/api/v1/admin/platform-settings', [
-                'service_fee_percent' => 10,
-                'tax_percent'         => 5,
-            ])->assertStatus(422)->assertJsonValidationErrors('tax_percent');
+        // The PATCH surface is gone entirely — even for SuperAdmin.
+        $super = User::factory()->create();
+        $super->assignRole('SuperAdmin');
+        $this->actingAs($super)
+            ->patchJson('/api/v1/admin/platform-settings', ['service_fee_percent' => 10])
+            ->assertStatus(405);
     }
 }
