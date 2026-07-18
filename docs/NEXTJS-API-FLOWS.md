@@ -70,7 +70,10 @@ OTP policy everywhere: 6 digits, 5-min TTL, 3 attempts, 10 sends/phone/day.
 
 ```
 POST /units/{id}/availability            ← re-check right before booking
-POST /bookings                           ← creates PENDING booking + price freeze
+POST /bookings                           ← creates PENDING booking + price freeze; response embeds
+                                            the frozen `pricing` block: nightly_rate, subtotal,
+                                            service_fee + service_fee_percent, cleaning_fee,
+                                            taxes + tax_percent, total — re-render checkout from it
 GET  /payments/config                    ← publishable key, Apple Pay availability
 POST /payments/initiate                  ← { booking_id, ... } → payment intent
 POST /payments/pay                       ← charge (saved card / new card / Apple Pay token)
@@ -79,7 +82,9 @@ POST /payments/pay                       ← charge (saved card / new card / App
    ├─ Moyasar server webhook → POST /payments/callback (secret_token) — you never call this
 POST /payments/verify                    ← { payment_id } → final status (poll from your callback page)
 GET  /payments/{id}                      ← receipt/status
-GET  /bookings/{id}                      ← includes policy_snapshot (frozen tiers, FR-036) once paid
+GET  /bookings/{id}                      ← includes policy_snapshot (frozen tiers, FR-036) once paid,
+                                            + the frozen pricing block (percents show the rate applied
+                                            at booking time, not the live setting) — wrapped: data.*
 ```
 
 Booking lifecycle: `pending → confirmed (paid) → completed (after checkout, cron)`, or `cancelled`.
@@ -99,7 +104,8 @@ Always render refund math from `policy_snapshot` / the preview — never from th
 
 ```
 GET/PUT  /user/profile
-GET      /user/bookings                         ← list; rows include policy_snapshot
+GET      /user/bookings                         ← list; rows include policy_snapshot + frozen pricing
+                                                  (incl. service_fee_percent / tax_percent)
 POST     /user/change-phone → POST /user/change-phone/verify   (OTP on the NEW number)
 DELETE   /user/account
 GET      /user/favorites | POST/DELETE /user/favorites/{unitId}
@@ -172,7 +178,10 @@ GET  /units/{id}/ical/export                   ← { url } = public tokenised .i
 ### 6.3 Bookings, reports, notifications, profile
 
 ```
-GET  /bookings | GET /bookings/{id}
+GET  /bookings | GET /bookings/{id}   ← each booking: `financials` (partner cut) + guest-facing
+                                        `pricing` block (camelCase: nightlyRate, subtotal, serviceFee,
+                                        serviceFeePercent, cleaningFee, taxes, taxPercent, total —
+                                        frozen at booking time; build invoice screens from it)
 POST /bookings/{id}/host-cancel   ← body { reason }, header Idempotency-Key (retry-safe);
                                      100% refund to guest, dates auto-blocked, counts toward flagging
 GET  /overview                                    ← KPIs + 12-month series (partner-share revenue)
@@ -222,8 +231,10 @@ POST (dashboard) /webhooks/moyasar   ← dashboard-side Moyasar webhook
 - **Unit lifecycle:** `draft → (submit) pending → approved | rejected(reason)`; editing an approved
   unit re-enters `pending`. Only `approved` units are public/bookable.
 - **Money:** guest total = subtotal + cleaning_fee (per-unit, partner-set) + service_fee
-  (platform %, superadmin-set) + VAT 15% on all of it; frozen per booking at `POST /bookings`
-  (`NEXTJS-PRICING-FIELDS-ANSWERS.md`). Commission = 2% of rental subtotal, frozen per booking; Overview revenue = partner share,
+  (platform %, superadmin-set) + VAT 15% on all of it; frozen per booking at `POST /bookings` —
+  amounts AND the applied percents (`service_fee_percent`/`tax_percent`, backfilled on legacy rows,
+  never null) (`NEXTJS-PRICING-FIELDS-ANSWERS.md`, `NEXTJS-BOOKING-PERCENT-FIELDS.md`).
+  Commission = 2% of rental subtotal, frozen per booking; Overview revenue = partner share,
   Reports revenue = gross (see `NEXTJS-DASHBOARD-REPORTS.md` — don't reconcile 1:1). SAR, 2 decimals.
 - **IDs:** dashboard uses prefixed ids (`u_12`, `b_45`, `p_9`, `file_…`) — echo them back as received;
   user-site/admin use bare numeric ids.
