@@ -1,5 +1,7 @@
 # Backend answers — Pricing fields (Cleaning Fee / Service Fee / Tax)
 
+> ⚠️ **SUPERSEDED (2026-07-18 evening):** the owner abolished cleaning + service fees the same day. Parts of this doc describing them no longer apply — see `NEXTJS-REVERT-FEES.md` for the final contract (subtotal + 15% VAT only).
+
 **Date:** 2026-07-18 · **Status:** ✅ implemented, deployed to staging, all payloads below verified live against `https://staging.mamsaa.com`.
 
 Answers to the four questions in `Mamsa-Backend-Pricing-Fields.md`, in order — then one important upgrade you get for free (§5).

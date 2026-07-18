@@ -1,5 +1,7 @@
 # Backend update — 2026-07-18 (pricing wave)
 
+> ⚠️ **SUPERSEDED (2026-07-18 evening):** the owner abolished cleaning + service fees the same day. Parts of this doc describing them no longer apply — see `NEXTJS-REVERT-FEES.md` for the final contract (subtotal + 15% VAT only).
+
 One-page summary for the Next.js teams of everything that shipped today. **All of it is live on staging AND production.** Import the fresh Postman collection (`Mamsa-API.postman_collection.json`, 130 requests) — it carries all the changes below.
 
 ---

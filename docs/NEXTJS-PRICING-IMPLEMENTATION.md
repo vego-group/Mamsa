@@ -1,5 +1,7 @@
 # Frontend implementation guide — Pricing (Cleaning Fee / Service Fee / VAT)
 
+> ⚠️ **SUPERSEDED (2026-07-18 evening):** the owner abolished cleaning + service fees the same day. Parts of this doc describing them no longer apply — see `NEXTJS-REVERT-FEES.md` for the final contract (subtotal + 15% VAT only).
+
 **Date:** 2026-07-18 · **Backend status:** ✅ live on `https://staging.mamsaa.com` **and** `https://api.mamsaa.com` (prod, verified same-day) — every payload in this doc was captured from real responses. Build and test against staging.
 
 Companion docs: `NEXTJS-PRICING-FIELDS-ANSWERS.md` (the "why" — answers to your 4 questions), `NEXTJS-API-FLOWS.md` (where these calls sit in the full flows).

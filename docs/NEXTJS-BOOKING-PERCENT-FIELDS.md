@@ -1,5 +1,7 @@
 # Done — `service_fee_percent` / `tax_percent` frozen on every Booking
 
+> ⚠️ **SUPERSEDED (2026-07-18 evening):** the owner abolished cleaning + service fees the same day. Parts of this doc describing them no longer apply — see `NEXTJS-REVERT-FEES.md` for the final contract (subtotal + 15% VAT only).
+
 **Date:** 2026-07-18 · **Status:** ✅ implemented + deployed to **staging AND production** same day (it rode along with the pricing schema change, exactly as your doc suggested). Payloads below rendered from real staging bookings.
 
 Answer to `Mamsa-Backend-Booking-Percent-Fields.md` — implemented as requested, plus two upgrades you didn't ask for (§3, §4).

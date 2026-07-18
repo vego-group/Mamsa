@@ -38,9 +38,9 @@ GET /units/categories | /cities | /budgets   ← filter facets
 GET /units/{id}               ← detail; includes cancellation_policy_details {name, tiers[]} (FR-021)
 GET /units/{id}/reviews
 POST /units/{id}/availability ← { start_date, end_date } → { available, pricing }
-                                 pricing = full checkout breakdown (subtotal, service_fee,
-                                 cleaning_fee, taxes @15% VAT, total + the percents) —
-                                 render it verbatim, never compute money in JS
+                                 pricing = { nights, nightly_rate, subtotal, taxes,
+                                 tax_percent, total } — subtotal + 15% VAT ONLY (fees
+                                 abolished 2026-07-18); render verbatim, never compute in JS
 GET /offers                   ← active offers
 GET /testimonials
 POST /contact                 ← public contact form (throttled 5/min)
@@ -71,9 +71,10 @@ OTP policy everywhere: 6 digits, 5-min TTL, 3 attempts, 10 sends/phone/day.
 ```
 POST /units/{id}/availability            ← re-check right before booking
 POST /bookings                           ← creates PENDING booking + price freeze; response embeds
-                                            the frozen `pricing` block: nightly_rate, subtotal,
-                                            service_fee + service_fee_percent, cleaning_fee,
-                                            taxes + tax_percent, total — re-render checkout from it
+                                            the frozen `pricing` block: nightly_rate, nights,
+                                            subtotal, taxes + tax_percent, total — re-render
+                                            checkout from it (fee keys appear ONLY on historical
+                                            fee-era bookings; treat them as optional)
 GET  /payments/config                    ← publishable key, Apple Pay availability
 POST /payments/initiate                  ← { booking_id, ... } → payment intent
 POST /payments/pay                       ← charge (saved card / new card / Apple Pay token)
@@ -105,7 +106,7 @@ Always render refund math from `policy_snapshot` / the preview — never from th
 ```
 GET/PUT  /user/profile
 GET      /user/bookings                         ← list; rows include policy_snapshot + frozen pricing
-                                                  (incl. service_fee_percent / tax_percent)
+                                                  (incl. tax_percent; fee keys only on fee-era rows)
 POST     /user/change-phone → POST /user/change-phone/verify   (OTP on the NEW number)
 DELETE   /user/account
 GET      /user/favorites | POST/DELETE /user/favorites/{unitId}
@@ -179,9 +180,10 @@ GET  /units/{id}/ical/export                   ← { url } = public tokenised .i
 
 ```
 GET  /bookings | GET /bookings/{id}   ← each booking: `financials` (partner cut) + guest-facing
-                                        `pricing` block (camelCase: nightlyRate, subtotal, serviceFee,
-                                        serviceFeePercent, cleaningFee, taxes, taxPercent, total —
-                                        frozen at booking time; build invoice screens from it)
+                                        `pricing` block (camelCase: nightlyRate, nights, subtotal,
+                                        taxes, taxPercent, total — frozen at booking time; build
+                                        invoice screens from it; serviceFee/cleaningFee keys appear
+                                        only on historical fee-era bookings)
 POST /bookings/{id}/host-cancel   ← body { reason }, header Idempotency-Key (retry-safe);
                                      100% refund to guest, dates auto-blocked, counts toward flagging
 GET  /overview                                    ← KPIs + 12-month series (partner-share revenue)
@@ -208,9 +210,8 @@ Unit review:      GET /admin/requests → GET /admin/requests/{unitId}
                   POST /admin/requests/{unitId}/approve | /reject { reason }
 Users:            GET/POST /admin/users · PATCH /admin/users/{id}/status · DELETE /admin/users/{id}
 Read-only:        GET /admin/units · GET /admin/bookings · GET /admin/reports
-Pricing knobs:    GET /admin/platform-settings → { service_fee_percent, tax_percent }
-                  PATCH /admin/platform-settings { service_fee_percent }   ← SuperAdmin ONLY
-                  (tax_percent read-only everywhere: 15% KSA VAT; PATCHing it → 422)
+Pricing:          GET /admin/platform-settings → { tax_percent: 15 }   ← read-only since the
+                  2026-07-18 fee revert; the PATCH endpoint was removed (405) — nothing is editable
 Notifications:    same shape as partner block, under /admin/notifications
 ```
 
@@ -230,10 +231,9 @@ POST (dashboard) /webhooks/moyasar   ← dashboard-side Moyasar webhook
   role-gated; the dashboard adds the `approved` gate on top.
 - **Unit lifecycle:** `draft → (submit) pending → approved | rejected(reason)`; editing an approved
   unit re-enters `pending`. Only `approved` units are public/bookable.
-- **Money:** guest total = subtotal + cleaning_fee (per-unit, partner-set) + service_fee
-  (platform %, superadmin-set) + VAT 15% on all of it; frozen per booking at `POST /bookings` —
-  amounts AND the applied percents (`service_fee_percent`/`tax_percent`, backfilled on legacy rows,
-  never null) (`NEXTJS-PRICING-FIELDS-ANSWERS.md`, `NEXTJS-BOOKING-PERCENT-FIELDS.md`).
+- **Money:** guest total = subtotal + 15% VAT — nothing else (cleaning/service fees abolished
+  2026-07-18, `NEXTJS-REVERT-FEES.md`); amounts + `tax_percent` frozen per booking at
+  `POST /bookings`; historical fee-era bookings keep their frozen fee lines (optional keys).
   Commission = 2% of rental subtotal, frozen per booking; Overview revenue = partner share,
   Reports revenue = gross (see `NEXTJS-DASHBOARD-REPORTS.md` — don't reconcile 1:1). SAR, 2 decimals.
 - **IDs:** dashboard uses prefixed ids (`u_12`, `b_45`, `p_9`, `file_…`) — echo them back as received;
