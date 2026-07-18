@@ -37,7 +37,10 @@ GET /units/popular            ← home-page rail
 GET /units/categories | /cities | /budgets   ← filter facets
 GET /units/{id}               ← detail; includes cancellation_policy_details {name, tiers[]} (FR-021)
 GET /units/{id}/reviews
-POST /units/{id}/availability ← { start_date, end_date } → bookable? + price breakdown
+POST /units/{id}/availability ← { start_date, end_date } → { available, pricing }
+                                 pricing = full checkout breakdown (subtotal, service_fee,
+                                 cleaning_fee, taxes @15% VAT, total + the percents) —
+                                 render it verbatim, never compute money in JS
 GET /offers                   ← active offers
 GET /testimonials
 POST /contact                 ← public contact form (throttled 5/min)
@@ -196,6 +199,9 @@ Unit review:      GET /admin/requests → GET /admin/requests/{unitId}
                   POST /admin/requests/{unitId}/approve | /reject { reason }
 Users:            GET/POST /admin/users · PATCH /admin/users/{id}/status · DELETE /admin/users/{id}
 Read-only:        GET /admin/units · GET /admin/bookings · GET /admin/reports
+Pricing knobs:    GET /admin/platform-settings → { service_fee_percent, tax_percent }
+                  PATCH /admin/platform-settings { service_fee_percent }   ← SuperAdmin ONLY
+                  (tax_percent read-only everywhere: 15% KSA VAT; PATCHing it → 422)
 Notifications:    same shape as partner block, under /admin/notifications
 ```
 
@@ -215,7 +221,9 @@ POST (dashboard) /webhooks/moyasar   ← dashboard-side Moyasar webhook
   role-gated; the dashboard adds the `approved` gate on top.
 - **Unit lifecycle:** `draft → (submit) pending → approved | rejected(reason)`; editing an approved
   unit re-enters `pending`. Only `approved` units are public/bookable.
-- **Money:** commission = 2% of rental subtotal, frozen per booking; Overview revenue = partner share,
+- **Money:** guest total = subtotal + cleaning_fee (per-unit, partner-set) + service_fee
+  (platform %, superadmin-set) + VAT 15% on all of it; frozen per booking at `POST /bookings`
+  (`NEXTJS-PRICING-FIELDS-ANSWERS.md`). Commission = 2% of rental subtotal, frozen per booking; Overview revenue = partner share,
   Reports revenue = gross (see `NEXTJS-DASHBOARD-REPORTS.md` — don't reconcile 1:1). SAR, 2 decimals.
 - **IDs:** dashboard uses prefixed ids (`u_12`, `b_45`, `p_9`, `file_…`) — echo them back as received;
   user-site/admin use bare numeric ids.
