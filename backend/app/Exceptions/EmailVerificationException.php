@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace App\Exceptions;
 
 use Exception;
+use Illuminate\Contracts\Debug\ShouldntReport;
 use Illuminate\Http\JsonResponse;
 
 /**
  * Email-verification failures for the user-site API. Carries the machine code
  * the Next.js app branches on (email task doc §1) and renders the unified
  * `{ success:false, message, code }` envelope itself — controllers don't catch.
+ * ShouldntReport: these are expected 4xx rejections (wrong code, cooldown…),
+ * not incidents — they must not land in laravel.log as ERROR noise.
  */
-class EmailVerificationException extends Exception
+class EmailVerificationException extends Exception implements ShouldntReport
 {
     /** @param array<string, mixed> $meta extra top-level keys (e.g. retry_after) */
     public function __construct(
