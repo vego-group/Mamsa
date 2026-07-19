@@ -115,4 +115,11 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    // Global reply-to (MailManager applies it to every outgoing message).
+    // Locked template rule: sender no-reply@, replies go to info@ (doc §3).
+    'reply_to' => [
+        'address' => env('MAIL_REPLY_TO_ADDRESS', 'info@mamsaa.com'),
+        'name' => env('MAIL_REPLY_TO_NAME', env('APP_NAME', 'Mamsa')),
+    ],
+
 ];

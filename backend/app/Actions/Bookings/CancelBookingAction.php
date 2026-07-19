@@ -74,6 +74,7 @@ class CancelBookingAction
         });
 
         $this->notifyGuest($booking, $quote);
+        $this->notifyPartner($booking, $quote);
 
         return $quote;
     }
@@ -202,6 +203,18 @@ class CancelBookingAction
         try {
             $booking->loadMissing('user', 'unit');
             $booking->user?->notify(new BookingCancelled($booking, $quote->refundAmount));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    private function notifyPartner(Booking $booking, RefundQuote $quote): void
+    {
+        try {
+            $booking->loadMissing('unit.owner');
+            $booking->unit?->owner?->notify(
+                new \App\Notifications\GuestCancelledBooking($booking, $quote->refundAmount),
+            );
         } catch (\Throwable $e) {
             report($e);
         }

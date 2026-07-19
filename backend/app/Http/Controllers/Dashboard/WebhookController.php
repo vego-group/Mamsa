@@ -37,11 +37,24 @@ class WebhookController extends Controller
 
         $payment = Payment::where('moyasar_id', $moyasarId)->first();
         if ($payment) {
-            $payment->refunds()
+            // Snapshot the rows being flipped so the settlement email fires
+            // once per refund — a replayed webhook finds nothing processing.
+            $settledAmount = (float) $payment->refunds()->where('status', 'processing')->sum('amount');
+
+            $flipped = $payment->refunds()
                 ->where('status', 'processing')
                 ->update(['status' => 'succeeded']);
 
             Log::info('Moyasar refund webhook settled', ['payment_id' => $payment->id, 'type' => $type]);
+
+            if ($flipped > 0 && $settledAmount > 0) {
+                try {
+                    $booking = $payment->booking?->loadMissing('user', 'unit');
+                    $booking?->user?->notify(new \App\Notifications\RefundProcessed($booking, $settledAmount));
+                } catch (\Throwable $e) {
+                    report($e); // a mail failure must never 500 a webhook
+                }
+            }
         }
 
         return response()->json(['ok' => true]);

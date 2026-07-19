@@ -111,6 +111,11 @@ GET/PUT  /user/profile
 GET      /user/bookings                         ← list; rows include policy_snapshot + frozen pricing
                                                   (incl. tax_percent; fee keys only on fee-era rows)
 POST     /user/change-phone → POST /user/change-phone/verify   (OTP on the NEW number)
+POST     /user/email → /user/email/verify → /user/email/resend  ← verified email channel
+                                                  (NEXTJS-EMAIL-VERIFICATION.md — machine codes
+                                                  EMAIL_*/OTP_*/RATE_LIMITED; 300s OTP, 60s cooldown;
+                                                  booking gate 422 EMAIL_VERIFICATION_REQUIRED on
+                                                  POST /bookings — ON staging / OFF prod for now)
 DELETE   /user/account
 GET      /user/favorites | POST/DELETE /user/favorites/{unitId}
 GET      /user/cards | POST /user/cards/from-token | DELETE /user/cards/{id} | POST /user/cards/{id}/default

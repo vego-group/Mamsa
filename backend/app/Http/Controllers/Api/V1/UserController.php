@@ -26,12 +26,20 @@ class UserController extends Controller
 
     public function updateProfile(Request $request): JsonResponse
     {
+        $user = $request->user();
+
         $data = $request->validate([
             'name'  => ['sometimes', 'string', 'max:100'],
-            'email' => ['sometimes', 'email', 'max:150'],
+            'email' => ['sometimes', 'email', 'max:150', 'unique:users,email,'.$user->id],
         ]);
 
-        $request->user()->update($data);
+        // A changed email drops back to unverified — it must re-pass the
+        // /user/email OTP flow before it counts as a trusted channel.
+        if (array_key_exists('email', $data) && strtolower((string) $data['email']) !== strtolower((string) $user->email)) {
+            $data['email_verified_at'] = null;
+        }
+
+        $user->forceFill($data)->save();
 
         return response()->json($request->user()->fresh());
     }

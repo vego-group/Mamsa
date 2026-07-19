@@ -30,6 +30,21 @@ class NewBooking extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
+        // The unit's partner gets the RTL template with their net share
+        // (email task doc §3): total − the commission frozen on the booking.
+        if (! $notifiable->hasAnyRole(['Admin', 'SuperAdmin'])) {
+            $total      = (float) $this->booking->total_amount;
+            $commission = (float) ($this->booking->commission_amount ?? round($total * 0.02, 2));
+
+            return (new MailMessage())
+                ->subject('حجز جديد مؤكد BK-'.$this->booking->id.' — مَمسَى')
+                ->view('emails.booking-confirmed-partner', [
+                    'booking'      => $this->booking->loadMissing('unit', 'user'),
+                    'partnerName'  => (string) $notifiable->name,
+                    'partnerShare' => round($total - $commission, 2),
+                ]);
+        }
+
         return (new MailMessage())
             ->subject('حجز جديد مؤكد')
             ->greeting('مرحباً ' . $notifiable->name)

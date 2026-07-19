@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\TestimonialController;
 use App\Http\Controllers\Api\V1\UnitController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\User\CardController;
+use App\Http\Controllers\Api\V1\User\EmailController as UserEmailController;
 use App\Http\Controllers\Api\V1\User\FavoriteController;
 use App\Http\Controllers\Api\V1\User\TransactionController;
 use App\Http\Controllers\Api\V1\Partner;
@@ -108,6 +109,15 @@ Route::prefix('v1')->group(function () {
             Route::post('change-phone/verify', [UserController::class, 'verifyChangePhone'])
                 ->middleware('throttle:10,1')->name('change-phone.verify');
             Route::delete('account', [UserController::class, 'deleteAccount'])->name('account.delete');
+
+            // Verified email as a contact channel (email task doc §1) — login
+            // stays phone-OTP only. Machine-coded errors for the Next.js app.
+            Route::post('email', [UserEmailController::class, 'store'])
+                ->middleware('throttle:5,1')->name('email.store');
+            Route::post('email/verify', [UserEmailController::class, 'verifyCode'])
+                ->middleware('throttle:10,1')->name('email.verify');
+            Route::post('email/resend', [UserEmailController::class, 'resend'])
+                ->middleware('throttle:5,1')->name('email.resend');
 
             // Saved cards (#4) — metadata only, tokenised via Moyasar.
             Route::get('cards', [CardController::class, 'index'])->name('cards.index');

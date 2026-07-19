@@ -20,6 +20,12 @@ Schedule::command('bookings:complete')->dailyAt('00:30')->withoutOverlapping()->
 // >24h old, no bookings). Rides the same system cron as above.
 Schedule::command('model:prune')->dailyAt('01:00')->withoutOverlapping()->appendOutputTo($scheduleLog);
 
+// Day-before check-in reminder emails (email task doc §3). 10:00 Riyadh —
+// idempotent via bookings.checkin_reminder_sent_at, safe to re-run.
+Schedule::command('bookings:checkin-reminders')
+    ->dailyAt('10:00')->timezone('Asia/Riyadh')
+    ->withoutOverlapping()->appendOutputTo($scheduleLog);
+
 // Anti double-booking: mirror external platform calendars (Booking, Airbnb…)
 // into unit blocked dates. 15 min = the industry-standard iCal sync window.
 Schedule::command('calendar:sync')->everyFifteenMinutes()->withoutOverlapping()->appendOutputTo($scheduleLog);

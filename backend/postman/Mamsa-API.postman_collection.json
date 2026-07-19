@@ -1135,6 +1135,110 @@
           "response": []
         },
         {
+          "name": "Add / Change Email (send OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/email",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"guest@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Email task 2026-07-19 §1 — stores the email UNVERIFIED and sends a 6-digit OTP to it. Changing an existing email always drops it back to verified=false. 200 → data { email, verified:false, resend_available_in:60 }. Machine-coded errors: EMAIL_INVALID / EMAIL_ALREADY_IN_USE (422), RATE_LIMITED (429, + retry_after). OTP validity 300s, same policy as the phone OTP. Staging fixed code = 111222 (NOT 123456); fixed codes never work in production. Login stays phone-OTP only — email is a verified contact channel."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/email/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "email",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"111222\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "6-digit code, 5 wrong attempts kill the code (request a new one). 200 → data { email, verified:true }. Errors: OTP_INVALID (+ remaining_attempts), OTP_EXPIRED, OTP_MAX_ATTEMPTS — all 422 with the machine code in `code`. After success GET /auth/me shows email_verified:true."
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Email OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/email/resend",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "email",
+                "resend"
+              ]
+            },
+            "description": "60s cooldown. 429 RATE_LIMITED with retry_after (seconds) when called early. 200 → same shape as Add Email."
+          },
+          "response": []
+        },
+        {
           "name": "Delete Account",
           "request": {
             "method": "DELETE",
@@ -1419,7 +1523,7 @@
                 }
               }
             },
-            "description": "Pricing (2026-07-18 owner revert, FINAL): booking `pricing` = { nightly_rate, nights, subtotal, taxes, tax_percent, total } — subtotal + 15% VAT only. `tax_percent` is FROZEN at booking creation. Historical fee-era bookings (62 prod rows, Jun 30 – Jul 6) additionally include their frozen `service_fee`(+percent)/`cleaning_fee` lines so the invoice still sums to total — treat those keys as optional."
+            "description": "Pricing (2026-07-18 owner revert, FINAL): booking `pricing` = { nightly_rate, nights, subtotal, taxes, tax_percent, total } — subtotal + 15% VAT only. `tax_percent` is FROZEN at booking creation. Historical fee-era bookings (62 prod rows, Jun 30 – Jul 6) additionally include their frozen `service_fee`(+percent)/`cleaning_fee` lines so the invoice still sums to total — treat those keys as optional.\n\n**Email gate (2026-07-19):** when BOOKING_REQUIRE_VERIFIED_EMAIL is on (staging: ON, prod: OFF until the Next.js user site ships), a guest without a verified email gets 422 { code: \"EMAIL_VERIFICATION_REQUIRED\" } — route the user to POST /user/email → /verify, then retry."
           },
           "response": [],
           "event": [

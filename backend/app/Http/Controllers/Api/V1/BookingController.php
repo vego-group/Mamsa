@@ -65,6 +65,20 @@ class BookingController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        // Email task doc §2 — a verified email is required before booking so
+        // confirmations/refund notices have a trusted channel. The frontend
+        // branches on the machine code and routes to the /user/email flow.
+        if (config('booking.require_verified_email')) {
+            $user = $request->user();
+            if (blank($user->email) || ! $user->email_verified_at) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'يجب توثيق بريدك الإلكتروني قبل إتمام الحجز.',
+                    'code'    => 'EMAIL_VERIFICATION_REQUIRED',
+                ], 422);
+            }
+        }
+
         $data = $request->validate([
             'unit_id'    => ['required', 'exists:units,id'],
             'start_date' => ['required', 'date', 'after_or_equal:today'],

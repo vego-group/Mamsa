@@ -146,7 +146,7 @@ class HostCancelBookingAction
     {
         try {
             $booking->loadMissing('user', 'unit');
-            $booking->user?->notify(new \App\Notifications\BookingCancelled($booking, $refund));
+            $booking->user?->notify(new \App\Notifications\BookingCancelled($booking, $refund, byHost: true));
         } catch (\Throwable $e) {
             report($e);
         }

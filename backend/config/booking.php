@@ -22,4 +22,11 @@ return [
     // never on taxes). Deducted from the partner's earnings — it does not
     // change what the guest pays.
     'commission_rate' => (float) env('BOOKING_COMMISSION_RATE', 0.02),
+
+    // Email task doc §2 — POST /bookings refuses guests without a verified
+    // email (EMAIL_VERIFICATION_REQUIRED). Env-flagged per environment: ON
+    // for the Next.js user site (staging), OFF on prod until the live
+    // frontend ships the verification screen — flipping it earlier would
+    // block every existing phone-only guest from booking.
+    'require_verified_email' => (bool) env('BOOKING_REQUIRE_VERIFIED_EMAIL', false),
 ];
