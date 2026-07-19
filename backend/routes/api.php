@@ -136,6 +136,19 @@ Route::prefix('v1')->group(function () {
             Route::delete('favorites/{unit}', [FavoriteController::class, 'destroy'])->name('favorites.destroy');
         });
 
+        /* Aliases matching the frontend email task doc's /account/* naming
+           verbatim (their app shipped against these paths). Same controllers —
+           /user/email* stays the canonical form in Postman/docs. */
+        Route::prefix('account')->name('api.account.')->group(function () {
+            Route::get('/', [OtpAuthController::class, 'me'])->name('show');
+            Route::post('email', [UserEmailController::class, 'store'])
+                ->middleware('throttle:5,1')->name('email.store');
+            Route::post('email/verify', [UserEmailController::class, 'verifyCode'])
+                ->middleware('throttle:10,1')->name('email.verify');
+            Route::post('email/resend', [UserEmailController::class, 'resend'])
+                ->middleware('throttle:5,1')->name('email.resend');
+        });
+
         /* Bookings */
         Route::prefix('bookings')->name('api.bookings.')->group(function () {
             Route::post('/', [BookingController::class, 'store'])->name('store');

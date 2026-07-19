@@ -160,6 +160,33 @@ class EmailVerificationFlowTest extends TestCase
             ->assertJsonPath('data.email_verified', true);
     }
 
+    public function test_account_aliases_serve_the_same_flow(): void
+    {
+        Mail::fake();
+        $user = $this->guest(['email' => null]);
+
+        // The frontend shipped against the task doc's /account/* paths —
+        // they must behave identically to the canonical /user/email*.
+        $this->actingAs($user)
+            ->postJson('/api/v1/account/email', ['email' => 'alias@m.com'])
+            ->assertOk()
+            ->assertJsonPath('data.verified', false);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/account/email/verify', ['code' => '111222'])
+            ->assertOk()
+            ->assertJsonPath('data.verified', true);
+
+        $this->actingAs($user)->getJson('/api/v1/account')
+            ->assertOk()
+            ->assertJsonPath('data.email', 'alias@m.com')
+            ->assertJsonPath('data.email_verified', true);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/account/email/resend')
+            ->assertStatus(422); // already verified → no pending email
+    }
+
     public function test_changing_email_resets_verification_and_profile_change_too(): void
     {
         Mail::fake();
