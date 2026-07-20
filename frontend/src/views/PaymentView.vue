@@ -177,7 +177,7 @@
                 <span class="text-on-surface font-numeric-data">{{ formatMoney(booking.cleaning_fee) }} ر.س</span>
               </div>
               <div v-if="booking.taxes" class="flex items-center justify-between">
-                <span class="text-on-surface-variant">الضرائب</span>
+                <span class="text-on-surface-variant">ضريبة القيمة المضافة{{ booking.tax_percent ? ` (${booking.tax_percent}%)` : '' }}</span>
                 <span class="text-on-surface font-numeric-data">{{ formatMoney(booking.taxes) }} ر.س</span>
               </div>
             </div>

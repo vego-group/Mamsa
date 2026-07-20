@@ -32,8 +32,28 @@
               <input v-model="form.name" class="field" placeholder="محمد عبدالله" required />
             </div>
             <div>
-              <label class="block text-body-sm font-bold text-on-surface mb-1.5">البريد الإلكتروني</label>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-body-sm font-bold text-on-surface">البريد الإلكتروني</label>
+                <span
+                  v-if="form.email"
+                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold"
+                  :class="emailVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"
+                >
+                  <span class="material-symbols-outlined text-[13px]">{{ emailVerified ? 'verified' : 'error' }}</span>
+                  {{ emailVerified ? 'موثّق' : 'غير موثّق' }}
+                </span>
+              </div>
               <input v-model="form.email" type="email" class="field" dir="ltr" placeholder="example@email.com" />
+              <button
+                v-if="!emailVerified"
+                type="button"
+                class="mt-2 text-primary text-body-sm font-bold hover:underline flex items-center gap-1"
+                @click="emailModalOpen = true"
+              >
+                <span class="material-symbols-outlined text-[16px]">mark_email_read</span>
+                توثيق البريد الإلكتروني
+              </button>
+              <p v-else class="text-[11px] text-on-surface-variant mt-1">تغيير البريد يتطلب إعادة التوثيق</p>
             </div>
             <div>
               <label class="block text-body-sm font-bold text-on-surface mb-1.5">رقم الجوال</label>
@@ -62,6 +82,8 @@
         {{ toast.msg }}
       </div>
     </Transition>
+
+    <EmailVerifyModal :open="emailModalOpen" @close="emailModalOpen = false" @verified="onEmailVerified" />
   </div>
 </template>
 
@@ -70,6 +92,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import PublicHeader from '@/components/public/PublicHeader.vue'
 import AccountNav from '@/components/user/AccountNav.vue'
+import EmailVerifyModal from '@/components/user/EmailVerifyModal.vue'
 import { userApi } from '@/api/user'
 import { useAuthStore } from '@/stores/auth'
 
@@ -80,6 +103,14 @@ const saving = ref(false)
 const toast = ref(null)
 
 const form = ref({ name: '', email: '' })
+const emailVerified = ref(false)
+const emailModalOpen = ref(false)
+
+function onEmailVerified() {
+  emailVerified.value = true
+  form.value.email = auth.user?.email || form.value.email
+  showToast('تم توثيق البريد الإلكتروني')
+}
 
 const initials = computed(() => {
   const n = form.value.name || ''
@@ -96,9 +127,11 @@ onMounted(async () => {
     const { data } = await userApi.getProfile()
     const u = data.data ?? data
     form.value = { name: u.name || '', email: u.email || '' }
+    emailVerified.value = !!(u.email_verified_at ?? u.email_verified)
   } catch (e) {
     // fall back to store data
     form.value = { name: auth.user?.name || '', email: auth.user?.email || '' }
+    emailVerified.value = !!auth.user?.email_verified
   } finally {
     loading.value = false
   }
@@ -107,10 +140,18 @@ onMounted(async () => {
 async function save() {
   saving.value = true
   try {
+    const emailChanged = (form.value.email || '') !== (auth.user?.email || '')
     const { data } = await userApi.updateProfile({ name: form.value.name.trim(), email: form.value.email || undefined })
     const u = data.data ?? data
     auth.setUser({ ...auth.user, name: u.name, email: u.email })
-    showToast('تم حفظ التغييرات')
+    // Server rule: a changed email always drops back to unverified.
+    if (emailChanged && form.value.email) {
+      emailVerified.value = false
+      showToast('تم الحفظ — وثّق بريدك الجديد')
+      emailModalOpen.value = true
+    } else {
+      showToast('تم حفظ التغييرات')
+    }
   } catch (e) {
     showToast(e.response?.data?.message || 'تعذّر الحفظ', 'error')
   } finally {

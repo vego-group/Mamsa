@@ -138,16 +138,17 @@
                   <dt class="text-on-surface-variant">{{ formatMoney(pricing.nightly_rate) }} ر.س × {{ pricing.nights }} ليالٍ</dt>
                   <dd class="text-on-surface font-medium">{{ formatMoney(pricing.subtotal) }} ر.س</dd>
                 </div>
-                <div class="flex items-center justify-between">
+                <!-- Fees abolished 2026-07-18 — lines render only on fee-era bookings -->
+                <div v-if="Number(pricing.service_fee) > 0" class="flex items-center justify-between">
                   <dt class="text-on-surface-variant">رسوم الخدمة</dt>
                   <dd class="text-on-surface font-medium">{{ formatMoney(pricing.service_fee) }} ر.س</dd>
                 </div>
-                <div class="flex items-center justify-between">
+                <div v-if="Number(pricing.cleaning_fee) > 0" class="flex items-center justify-between">
                   <dt class="text-on-surface-variant">رسوم التنظيف</dt>
                   <dd class="text-on-surface font-medium">{{ formatMoney(pricing.cleaning_fee) }} ر.س</dd>
                 </div>
                 <div class="flex items-center justify-between">
-                  <dt class="text-on-surface-variant">الضرائب</dt>
+                  <dt class="text-on-surface-variant">ضريبة القيمة المضافة{{ pricing.tax_percent ? ` (${pricing.tax_percent}%)` : '' }}</dt>
                   <dd class="text-on-surface font-medium">{{ formatMoney(pricing.taxes) }} ر.س</dd>
                 </div>
               </dl>
@@ -219,7 +220,7 @@
                   v-if="['new', 'active'].includes(st.key)"
                   class="w-full h-11 flex items-center justify-center gap-2 bg-white border border-error text-error rounded-xl font-bold hover:bg-error-container transition-colors disabled:opacity-50"
                   :disabled="cancelBusy"
-                  @click="cancelOpen = true"
+                  @click="openCancel"
                 >
                   <span class="material-symbols-outlined text-[20px]">cancel</span>
                   إلغاء الحجز
@@ -245,8 +246,25 @@
           </div>
           <p class="text-body-sm text-on-surface-variant mb-4">
             سيتم إلغاء حجز <span class="font-bold text-on-surface">{{ unit?.name }}</span>.
-            قد تختلف قيمة الاسترداد حسب سياسة الإلغاء.
           </p>
+
+          <!-- Server refund quote NOW (FR-036) — never computed client-side -->
+          <div v-if="preview" class="rounded-xl p-3.5 mb-4"
+            :class="preview.cancellable ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'">
+            <template v-if="preview.cancellable">
+              <div class="flex items-center justify-between text-body-sm">
+                <span class="text-on-surface-variant">المبلغ المسترد الآن ({{ preview.refund_percent }}%)</span>
+                <span class="font-bold text-emerald-700 font-numeric-data">{{ formatMoney(preview.refund_amount) }} ر.س</span>
+              </div>
+              <p v-if="preview.tier_label" class="text-[12px] text-on-surface-variant mt-1">الشريحة المطبّقة: {{ preview.tier_label }}</p>
+            </template>
+            <p v-else class="text-body-sm text-red-700">{{ preview.reason || 'لا يمكن إلغاء هذا الحجز.' }}</p>
+          </div>
+          <div v-else-if="previewBusy" class="flex items-center gap-2 text-body-sm text-on-surface-variant mb-4">
+            <span class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+            جارٍ حساب قيمة الاسترداد…
+          </div>
+
           <!-- FR-036: the frozen snapshot — matches exactly what the refund engine applies. -->
           <div v-if="booking?.policy_snapshot?.tiers?.length" class="bg-surface-container-low rounded-xl p-3.5 mb-4">
             <CancellationPolicyTiers :policy="booking.policy_snapshot" />
@@ -268,7 +286,7 @@
             <button class="flex-1 h-11 bg-white border border-outline-variant text-on-surface rounded-xl font-bold hover:bg-surface-container transition-colors" @click="cancelOpen = false">تراجع</button>
             <button
               class="flex-1 h-11 bg-error text-white rounded-xl font-bold hover:bg-error/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              :disabled="cancelBusy" @click="confirmCancel"
+              :disabled="cancelBusy || (preview && !preview.cancellable)" @click="confirmCancel"
             >
               <span v-if="cancelBusy" class="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
               تأكيد الإلغاء
@@ -437,6 +455,23 @@ const cancelOpen = ref(false)
 const cancelReason = ref('')
 const cancelBusy = ref(false)
 const cancelReasons = ['تغيير في خطط السفر', 'وجدت خياراً أفضل', 'ظرف طارئ', 'خطأ في الحجز']
+
+// Exact refund preview from the server, fetched when the dialog opens.
+const preview = ref(null)
+const previewBusy = ref(false)
+async function openCancel() {
+  cancelOpen.value = true
+  preview.value = null
+  previewBusy.value = true
+  try {
+    const { data } = await userApi.cancellationPreview(booking.value.id)
+    preview.value = data.data ?? data
+  } catch {
+    preview.value = null // dialog still works — the server re-checks on confirm
+  } finally {
+    previewBusy.value = false
+  }
+}
 
 async function confirmCancel() {
   cancelBusy.value = true

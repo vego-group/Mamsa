@@ -191,15 +191,19 @@
                 </div>
               </div>
 
-              <!-- Price summary -->
+              <!-- Price summary — server-quoted (subtotal + VAT), never client math -->
               <div v-if="nights > 0" class="py-3 border-t border-outline-variant space-y-2 mb-4">
                 <div class="flex justify-between text-body-sm text-on-surface-variant">
                   <span class="font-numeric-data">{{ formatMoney(unit.price) }} × {{ nights }} ليالٍ</span>
-                  <span class="font-numeric-data">{{ formatMoney(totalAmount) }} ر.س</span>
+                  <span class="font-numeric-data">{{ formatMoney(quote?.subtotal ?? totalAmount) }} ر.س</span>
+                </div>
+                <div v-if="quote" class="flex justify-between text-body-sm text-on-surface-variant">
+                  <span>ضريبة القيمة المضافة ({{ quote.tax_percent }}%)</span>
+                  <span class="font-numeric-data">{{ formatMoney(quote.taxes) }} ر.س</span>
                 </div>
                 <div class="flex justify-between font-bold text-on-surface pt-2 border-t border-outline-variant">
-                  <span>الإجمالي</span>
-                  <span class="font-numeric-data text-primary">{{ formatMoney(totalAmount) }} ر.س</span>
+                  <span>{{ quote ? 'الإجمالي شامل الضريبة' : 'الإجمالي قبل الضريبة' }}</span>
+                  <span class="font-numeric-data text-primary">{{ formatMoney(quote?.total ?? totalAmount) }} ر.س</span>
                 </div>
               </div>
 
@@ -240,15 +244,18 @@
         <span class="absolute bottom-5 text-white/80 text-body-sm font-numeric-data">{{ activeImg + 1 }} / {{ images.length }}</span>
       </div>
     </Transition>
+
+    <EmailVerifyModal :open="emailModalOpen" @close="emailModalOpen = false" @verified="onEmailVerified" />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PublicHeader from '@/components/public/PublicHeader.vue'
 import PublicFooter from '@/components/public/PublicFooter.vue'
 import CancellationPolicyTiers from '@/components/public/CancellationPolicyTiers.vue'
+import EmailVerifyModal from '@/components/user/EmailVerifyModal.vue'
 import { publicApi, bookingApi } from '@/api/public'
 import { useAuthStore } from '@/stores/auth'
 
@@ -270,6 +277,20 @@ const today = new Date().toISOString().slice(0, 10)
 const booking = reactive({ start_date: '', end_date: '', guests: 1 })
 
 const images = computed(() => (unit.value?.images || []).map((i) => i.url))
+
+// Server-computed price quote (subtotal + VAT + total) — the availability
+// endpoint returns it when the range is free. Client math is display-fallback only.
+const quote = ref(null)
+watch(() => [booking.start_date, booking.end_date], async () => {
+  quote.value = null
+  if (!unit.value || !booking.start_date || !booking.end_date || nights.value <= 0) return
+  try {
+    const { data: avail } = await publicApi.checkAvailability(unit.value.id, booking.start_date, booking.end_date)
+    if (avail.available && avail.pricing) quote.value = avail.pricing
+  } catch {
+    /* quote is cosmetic here — booking still re-checks availability */
+  }
+})
 
 const nights = computed(() => {
   if (!booking.start_date || !booking.end_date) return 0
@@ -370,11 +391,26 @@ async function handleBook() {
     bookMsg.value = 'تم إنشاء الحجز! يتم تحويلك إلى الدفع...'
     setTimeout(() => router.push({ name: 'payment', params: { id: created.id } }), 800)
   } catch (e) {
+    // Server-side booking gate: verified email required before paying —
+    // open the OTP flow, then retry the same booking on success.
+    if (e.response?.data?.code === 'EMAIL_VERIFICATION_REQUIRED') {
+      emailModalOpen.value = true
+      bookError.value = true
+      bookMsg.value = 'وثّق بريدك الإلكتروني أولاً لإتمام الحجز'
+      return
+    }
     bookError.value = true
     bookMsg.value = e.response?.data?.message || 'تعذّر إتمام الحجز، حاول مجدداً'
   } finally {
     booking_busy.value = false
   }
+}
+
+const emailModalOpen = ref(false)
+function onEmailVerified() {
+  bookMsg.value = ''
+  bookError.value = false
+  handleBook()
 }
 
 onMounted(async () => {
