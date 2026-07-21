@@ -28,6 +28,10 @@ class UserResource extends JsonResource
             'is_partner'       => $this->isPartner(),
             // Partner application review state (pending/approved/rejected).
             'partner_status'   => $this->when($this->isPartner(), fn () => $this->partnerDetail?->status),
+            // individual | company — distinguishes the two partner kinds.
+            'partner_type'     => $this->when($this->isPartner(), fn () => $this->partnerDetail?->type),
+            // No avatar storage yet — null so the UI keeps its initials fallback.
+            'avatar_url'       => null,
             'profile_complete' => ! blank($this->name),
         ];
     }

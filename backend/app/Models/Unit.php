@@ -39,6 +39,7 @@ class Unit extends Model
         'approval_status',
         'rejection_reason',
         'status',
+        'is_featured',
         'cancellation_policy',
         'cancellation_policy_id',
         'checkin_time',
@@ -55,6 +56,7 @@ class Unit extends Model
         'bedrooms' => 'integer',
         'beds'     => 'integer',
         'bathrooms' => 'integer',
+        'is_featured' => 'boolean',
     ];
 
     public function owner(): BelongsTo

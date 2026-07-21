@@ -40,6 +40,10 @@ class UnitResource extends JsonResource
                 fn () => $this->policyDetails(),
             ),
             'status'              => $this->status,
+            'is_featured'         => (bool) $this->is_featured,
+            // Uniform KSA VAT rate applied to every unit (15%). Exposed so the
+            // storefront never hardcodes it.
+            'tax_percent'         => \App\Support\Pricing::taxPercent(),
             'approval_status'     => $this->approval_status,
             'rejection_reason'    => $this->when(
                 in_array($this->approval_status, ['rejected']),
@@ -66,14 +70,24 @@ class UnitResource extends JsonResource
                     'is_main' => true,
                 ]];
             }),
+            // Legacy Arabic-string list (kept for existing consumers)…
             'features'            => $this->whenLoaded('features', fn () =>
                 $this->features->pluck('name')
+            ),
+            // …and the structured form: stable `key` (null → generic icon) + label.
+            'amenities'           => $this->whenLoaded('features', fn () =>
+                \App\Support\Dashboard\Maps::amenityPairs($this->features->pluck('name'))
             ),
             'avg_rating'          => round((float) $this->reviews()->avg('rating'), 1),
             'reviews_count'       => $this->reviews()->count(),
             'owner'               => $this->whenLoaded('owner', fn () => [
-                'id'   => $this->owner->id,
-                'name' => $this->owner->name,
+                'id'          => $this->owner->id,
+                'name'        => $this->owner->name,
+                // individual | company — companies were showing as "مالك فردي".
+                'type'        => $this->owner->partnerDetail?->type ?? 'individual',
+                'is_verified' => $this->owner->partnerDetail?->status === \App\Models\PartnerDetail::STATUS_APPROVED,
+                // No avatar storage yet — null so the UI keeps its initials fallback.
+                'avatar_url'  => null,
             ]),
         ];
     }

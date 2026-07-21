@@ -15,6 +15,10 @@ class BookingResource extends JsonResource
             // Stable per booking, no extra column required (used in UI + SMS).
             'reference'    => $this->reference(),
             'unit'         => $this->whenLoaded('unit', fn () => new UnitResource($this->unit)),
+            // Always-present scalar (column) so the partner dashboard need not
+            // rely on the eager-loaded `user` object.
+            'user_id'      => $this->user_id,
+            'guest_name'   => $this->whenLoaded('user', fn () => $this->user?->name),
             'user'         => $this->whenLoaded('user', fn () => [
                 'id'    => $this->user?->id,
                 'name'  => $this->user?->name,
@@ -23,7 +27,12 @@ class BookingResource extends JsonResource
             'start_date'   => $this->start_date?->toDateString(),
             'end_date'     => $this->end_date?->toDateString(),
             'nights'       => $this->nights,
+            // Total guest count (unchanged) + the adults/children split.
             'guests'       => $this->guests,
+            'guests_detail' => [
+                'adults'   => max(0, (int) $this->guests - (int) $this->children),
+                'children' => (int) $this->children,
+            ],
             'total_amount' => $this->total_amount,
             // Itemised price summary (ملخص السعر). Falls back gracefully for
             // legacy rows that predate the breakdown columns.
@@ -60,9 +69,12 @@ class BookingResource extends JsonResource
                 'paid_at'         => $this->payment?->paid_at?->toISOString(),
             ]),
             'review'       => $this->whenLoaded('review', fn () => $this->review ? [
-                'id'      => $this->review->id,
-                'rating'  => $this->review->rating,
-                'comment' => $this->review->comment,
+                'id'              => $this->review->id,
+                'rating'          => $this->review->rating,
+                'comment'         => $this->review->comment,
+                'created_at'      => $this->review->created_at?->toISOString(),
+                // No avatar storage yet — null keeps the UI's initials fallback.
+                'user_avatar_url' => null,
             ] : null),
             'created_at'   => $this->created_at?->toISOString(),
         ];

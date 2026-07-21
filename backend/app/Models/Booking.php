@@ -20,6 +20,7 @@ class Booking extends Model
         'start_date',
         'end_date',
         'guests',
+        'children',
         'nightly_rate',
         'subtotal',
         'service_fee',

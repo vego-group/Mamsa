@@ -1516,7 +1516,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"unit_id\": \"{{unit_id}}\",\n  \"start_date\": \"2026-07-10\",\n  \"end_date\": \"2026-07-12\",\n  \"guests\": 2,\n  \"notes\": \"وصول متأخر\"\n}",
+              "raw": "{\n  \"unit_id\": \"{{unit_id}}\",\n  \"start_date\": \"2026-07-10\",\n  \"end_date\": \"2026-07-12\",\n  \"guests\": 2,\n  \"children\": 1,\n  \"notes\": \"وصول متأخر\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

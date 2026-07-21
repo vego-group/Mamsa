@@ -60,6 +60,10 @@ class UnitController extends Controller
         if ($request->filled('type')) {
             $query->where('unit_type', $request->type);
         }
+        // Home "وحدات مميزة" section (§2.1): ?featured=1.
+        if ($request->boolean('featured')) {
+            $query->where('is_featured', true);
+        }
         // Destination-category filter (maps a category key to its unit types).
         if ($request->filled('category')) {
             $category = collect(self::CATEGORIES)->firstWhere('key', $request->category);
@@ -208,7 +212,7 @@ class UnitController extends Controller
             return response()->json(['message' => 'الوحدة غير متاحة'], 404);
         }
 
-        $unit->load(['images', 'features', 'owner', 'reviews.user', 'cancellationPolicy.tiers']);
+        $unit->load(['images', 'features', 'owner.partnerDetail', 'reviews.user', 'cancellationPolicy.tiers']);
 
         return new UnitResource($unit);
     }

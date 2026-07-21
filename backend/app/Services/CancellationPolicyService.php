@@ -62,14 +62,16 @@ class CancellationPolicyService
         $checkinAt   = Carbon::parse($snapshot['checkin_at']);
         $hoursBefore = $this->signedHoursBetween($at, $checkinAt);
 
+        $total = (float) $booking->total_amount;
+
         // FR-045: no cancellation once check-in has started.
         if ($hoursBefore <= 0) {
-            return RefundQuote::blocked($hoursBefore, 'لا يمكن الإلغاء بعد موعد تسجيل الدخول');
+            return RefundQuote::blocked($hoursBefore, 'لا يمكن الإلغاء بعد موعد تسجيل الدخول', $total);
         }
 
         $tier    = $this->matchTier($snapshot['tiers'] ?? [], $hoursBefore);
         $percent = (int) ($tier['refund_percent'] ?? 0);
-        $amount  = round($booking->total_amount * $percent / 100, 2);
+        $amount  = round($total * $percent / 100, 2);
 
         return new RefundQuote(
             cancellable: true,
@@ -77,6 +79,12 @@ class CancellationPolicyService
             refundPercent: $percent,
             tierLabel: $tier['label'] ?? null,
             hoursBeforeCheckin: $hoursBefore,
+            totalAmount: $total,
+            tier: $tier !== null ? [
+                'min_hours_before_checkin' => (int) $tier['min_hours_before_checkin'],
+                'refund_percent'           => (int) $tier['refund_percent'],
+                'label'                    => $tier['label'] ?? null,
+            ] : null,
         );
     }
 

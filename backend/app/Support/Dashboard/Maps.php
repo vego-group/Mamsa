@@ -51,6 +51,28 @@ class Maps
         'security'        => 'حراسة أمنية',
         'self_checkin'    => 'تسجيل دخول ذاتي',
         'family_friendly' => 'مناسب للعائلات',
+        // Extended vocabulary (frontend field-gap task 2026-07-21) so the
+        // storefront can pick a stable icon per amenity instead of matching
+        // Arabic text.
+        'smart_tv'        => 'شاشة ذكية',
+        'garden'          => 'حديقة',
+        'bbq'             => 'شواء',
+        'elevator'        => 'مصعد',
+        'washer'          => 'غسالة',
+        'private_beach'   => 'شاطئ خاص',
+        'event_hall'      => 'قاعة مناسبات',
+    ];
+
+    /**
+     * Spelling variants → canonical Arabic label in AMENITIES, so a unit
+     * tagged "مكيف" still resolves to the `ac` slug. Add aliases here rather
+     * than duplicating slugs.
+     */
+    public const AMENITY_VARIANTS = [
+        'مكيف'    => 'تكييف',
+        'واي-فاي' => 'واي فاي',
+        'حراسة'   => 'حراسة أمنية',
+        'شاشة'    => 'شاشة ذكية',
     ];
 
     public static function cityToArabic(string $slug): ?string
@@ -72,6 +94,39 @@ class Maps
     public static function amenityToArabic(string $key): ?string
     {
         return self::AMENITIES[$key] ?? null;
+    }
+
+    /** Resolve one Arabic amenity name to its stable slug (variants included). */
+    public static function amenityKey(string $arabic): ?string
+    {
+        $name    = trim($arabic);
+        $reverse = array_flip(self::AMENITIES);
+
+        if (isset($reverse[$name])) {
+            return $reverse[$name];
+        }
+
+        $canonical = self::AMENITY_VARIANTS[$name] ?? null;
+
+        return $canonical !== null ? ($reverse[$canonical] ?? null) : null;
+    }
+
+    /**
+     * Map amenity names to the public `{ key, label }` shape. `key` is the
+     * stable slug (null for anything outside the vocabulary → generic icon);
+     * `label` is the display text as stored.
+     *
+     * @param  iterable<int, string>  $arabicNames
+     * @return list<array{key: ?string, label: string}>
+     */
+    public static function amenityPairs(iterable $arabicNames): array
+    {
+        $pairs = [];
+        foreach ($arabicNames as $name) {
+            $pairs[] = ['key' => self::amenityKey($name), 'label' => trim((string) $name)];
+        }
+
+        return $pairs;
     }
 
     /** @param  iterable<int, string>  $arabicNames  @return list<string> */

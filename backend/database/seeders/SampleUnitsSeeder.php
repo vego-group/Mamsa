@@ -33,7 +33,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $individual,
                 'unit_name' => 'شقة مودرن بإطلالة على الواجهة',
                 'unit_type' => 'apartment',
-                'price' => 450, 'capacity' => 4, 'bedrooms' => 2, 'beds' => 2, 'bathrooms' => 2, 'area' => 120,
+                'price' => 450, 'capacity' => 4, 'bedrooms' => 2, 'beds' => 2, 'bathrooms' => 2, 'area' => 120, 'is_featured' => true,
                 'city' => 'الرياض', 'district' => 'حي الملقا',
                 'lat' => 24.7743, 'lng' => 46.6086,
                 'description' => 'شقة عصرية مفروشة بالكامل في قلب حي الملقا، قريبة من المطاعم والمقاهي، مثالية للعائلات الصغيرة ورجال الأعمال.',
@@ -47,7 +47,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'فيلا فاخرة مع مسبح خاص',
                 'unit_type' => 'villa',
-                'price' => 2400, 'capacity' => 10, 'bedrooms' => 5, 'beds' => 6, 'bathrooms' => 5, 'area' => 450,
+                'price' => 2400, 'capacity' => 10, 'bedrooms' => 5, 'beds' => 6, 'bathrooms' => 5, 'area' => 450, 'is_featured' => true,
                 'city' => 'الرياض', 'district' => 'حي حطين',
                 'lat' => 24.7580, 'lng' => 46.6250,
                 'description' => 'فيلا واسعة بتصميم راقٍ، مسبح خاص وحديقة، مناسبة للمناسبات والتجمعات العائلية الكبيرة.',
@@ -103,7 +103,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'شقة بإطلالة بحرية مباشرة',
                 'unit_type' => 'apartment',
-                'price' => 900, 'capacity' => 4, 'bedrooms' => 2, 'beds' => 2, 'bathrooms' => 2, 'area' => 140,
+                'price' => 900, 'capacity' => 4, 'bedrooms' => 2, 'beds' => 2, 'bathrooms' => 2, 'area' => 140, 'is_featured' => true,
                 'city' => 'الدمام', 'district' => 'الكورنيش',
                 'lat' => 26.4360, 'lng' => 50.1030,
                 'description' => 'شقة راقية بإطلالة بانورامية على البحر، تشطيبات فاخرة وموقع متميز.',
@@ -198,6 +198,7 @@ class SampleUnitsSeeder extends Seeder
                     'description'         => $data['description'],
                     'approval_status'     => 'approved',
                     'status'              => 'available',
+                    'is_featured'         => $data['is_featured'] ?? false,
                     'cancellation_policy' => '48_hours',
                     'checkin_time'        => '15:00',
                     'checkout_time'       => '12:00',
@@ -215,6 +216,10 @@ class SampleUnitsSeeder extends Seeder
             $fill = [];
             if ($unit->beds === null)      $fill['beds'] = $data['beds'];
             if ($unit->bathrooms === null) $fill['bathrooms'] = $data['bathrooms'];
+            // Apply the featured flag to existing seeded rows too (editorial).
+            if (($data['is_featured'] ?? false) && ! $unit->is_featured) {
+                $fill['is_featured'] = true;
+            }
             if ($fill) {
                 $unit->update($fill);
             }

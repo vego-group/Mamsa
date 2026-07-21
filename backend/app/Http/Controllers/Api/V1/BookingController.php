@@ -84,6 +84,10 @@ class BookingController extends Controller
             'start_date' => ['required', 'date', 'after_or_equal:today'],
             'end_date'   => ['required', 'date', 'after:start_date'],
             'guests'     => ['required', 'integer', 'min:1'],
+            // Split counts (§2.3). `guests` stays the TOTAL; children is a
+            // subset of it. Optional so older clients sending only `guests`
+            // keep working (children defaults to 0).
+            'children'   => ['sometimes', 'integer', 'min:0', 'lte:guests'],
             'notes'      => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -127,6 +131,7 @@ class BookingController extends Controller
             'start_date'        => $data['start_date'],
             'end_date'          => $data['end_date'],
             'guests'            => $data['guests'],
+            'children'          => $data['children'] ?? 0,
             'nightly_rate'      => $pricing['nightly_rate'],
             'subtotal'          => $pricing['subtotal'],
             // Fees abolished 2026-07-18 — stored as explicit 0 (not null) so
