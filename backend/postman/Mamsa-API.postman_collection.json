@@ -2057,7 +2057,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"unit_name\": \"شقة فاخرة بإطلالة\",\n  \"unit_type\": \"apartment\",\n  \"price\": 450,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"city\": \"الرياض\",\n  \"district\": \"النخيل\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"description\": \"شقة مفروشة بالكامل\",\n  \"tourism_permit_no\": \"TP-12345\",\n  \"company_license_no\": null,\n  \"cancellation_policy\": \"48_hours\",\n  \"checkin_time\": \"15:00\",\n  \"checkout_time\": \"12:00\",\n  \"features\": [\n    \"wifi\",\n    \"parking\",\n    \"pool\"\n  ]\n}",
+                  "raw": "{\n  \"unit_name\": \"شقة فاخرة بإطلالة\",\n  \"unit_type\": \"apartment\",\n  \"price\": 450,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"beds\": 2,\n  \"bathrooms\": 2,\n  \"city\": \"الرياض\",\n  \"district\": \"النخيل\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"description\": \"شقة مفروشة بالكامل\",\n  \"tourism_permit_no\": \"TP-12345\",\n  \"company_license_no\": null,\n  \"cancellation_policy\": \"48_hours\",\n  \"checkin_time\": \"15:00\",\n  \"checkout_time\": \"12:00\",\n  \"features\": [\n    \"wifi\",\n    \"parking\",\n    \"pool\"\n  ]\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2131,7 +2131,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"unit_name\": \"شقة فاخرة بإطلالة\",\n  \"unit_type\": \"apartment\",\n  \"price\": 450,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"city\": \"الرياض\",\n  \"district\": \"النخيل\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"description\": \"شقة مفروشة بالكامل\",\n  \"tourism_permit_no\": \"TP-12345\",\n  \"company_license_no\": null,\n  \"cancellation_policy\": \"48_hours\",\n  \"checkin_time\": \"15:00\",\n  \"checkout_time\": \"12:00\",\n  \"features\": [\n    \"wifi\",\n    \"parking\",\n    \"pool\"\n  ]\n}",
+                  "raw": "{\n  \"unit_name\": \"شقة فاخرة بإطلالة\",\n  \"unit_type\": \"apartment\",\n  \"price\": 450,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"beds\": 2,\n  \"bathrooms\": 2,\n  \"city\": \"الرياض\",\n  \"district\": \"النخيل\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"description\": \"شقة مفروشة بالكامل\",\n  \"tourism_permit_no\": \"TP-12345\",\n  \"company_license_no\": null,\n  \"cancellation_policy\": \"48_hours\",\n  \"checkin_time\": \"15:00\",\n  \"checkout_time\": \"12:00\",\n  \"features\": [\n    \"wifi\",\n    \"parking\",\n    \"pool\"\n  ]\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -3716,7 +3716,7 @@
                 "description": "Creates a DRAFT (partial bodies allowed). Captures the new id into {{unit_id}}. city must be an enum slug; amenities are the 8 contract keys.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"وحدة من بوستمان\",\n  \"type\": \"apartment\",\n  \"pricePerNight\": 420,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"bathrooms\": 2,\n  \"city\": \"riyadh\",\n  \"district\": \"العليا\",\n  \"description\": \"وصف تجريبي لوحدة أنشئت من Postman لأغراض الاختبار.\",\n  \"amenities\": [\n    \"wifi\",\n    \"ac\",\n    \"kitchen\"\n  ],\n  \"checkIn\": \"15:00\",\n  \"checkOut\": \"12:00\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"address\": \"حي العليا، الرياض\",\n  \"tourismLicenseNumber\": \"TL-PM-0001\",\n  \"tourismLicenseFileId\": \"{{file_id}}\",\n  \"cancellationPolicy\": \"moderate\"\n}",
+                  "raw": "{\n  \"name\": \"وحدة من بوستمان\",\n  \"type\": \"apartment\",\n  \"pricePerNight\": 420,\n  \"capacity\": 4,\n  \"bedrooms\": 2,\n  \"beds\": 2,\n  \"bathrooms\": 2,\n  \"city\": \"riyadh\",\n  \"district\": \"العليا\",\n  \"description\": \"وصف تجريبي لوحدة أنشئت من Postman لأغراض الاختبار.\",\n  \"amenities\": [\n    \"wifi\",\n    \"ac\",\n    \"kitchen\"\n  ],\n  \"checkIn\": \"15:00\",\n  \"checkOut\": \"12:00\",\n  \"lat\": 24.7136,\n  \"lng\": 46.6753,\n  \"address\": \"حي العليا، الرياض\",\n  \"tourismLicenseNumber\": \"TL-PM-0001\",\n  \"tourismLicenseFileId\": \"{{file_id}}\",\n  \"cancellationPolicy\": \"moderate\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"

@@ -154,6 +154,8 @@ class UnitController extends DashboardController
             'cancellationPolicy'   => ['sometimes', 'in:flexible,moderate,strict'],
             'capacity'             => [$req, 'integer', 'min:1'],
             'bedrooms'             => ['sometimes', 'integer', 'min:0'],
+            // Number of beds (عدد الأسرّة) — separate from bedrooms.
+            'beds'                 => ['sometimes', 'nullable', 'integer', 'min:0', 'max:255'],
             'bathrooms'            => ['sometimes', 'nullable', 'integer', 'min:0'],
             'city'                 => [$req, 'string', 'in:'.implode(',', array_keys(Maps::CITIES))],
             'district'             => ['sometimes', 'nullable', 'string', 'max:150'],
@@ -189,6 +191,7 @@ class UnitController extends DashboardController
             ],
             'capacity'             => fn ($v) => ['capacity' => $v],
             'bedrooms'             => fn ($v) => ['bedrooms' => $v],
+            'beds'                 => fn ($v) => ['beds' => $v],
             'bathrooms'            => fn ($v) => ['bathrooms' => $v],
             'city'                 => fn ($v) => ['city' => Maps::cityToArabic($v) ?? $v],
             'district'             => fn ($v) => ['district' => $v === null ? null : strip_tags($v)],

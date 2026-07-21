@@ -173,6 +173,34 @@ class PartnerDashboardTest extends TestCase
             ->assertJsonPath('pricePerNight', null);
     }
 
+    public function test_beds_and_bathrooms_are_settable_and_returned(): void
+    {
+        $partner = $this->partner();
+
+        // Create with beds + bathrooms → echoed back on the contract shape.
+        $created = $this->actingAs($partner, 'dashboard')
+            ->postJson('/units', ['name' => 'وحدة أسرّة', 'beds' => 2, 'bathrooms' => 2, 'bedrooms' => 1])
+            ->assertStatus(201)
+            ->assertJsonPath('beds', 2)
+            ->assertJsonPath('bathrooms', 2)
+            ->assertJsonPath('bedrooms', 1)
+            ->json('id');
+
+        $id = (int) str_replace('u_', '', $created);
+        $this->assertDatabaseHas('units', ['id' => $id, 'beds' => 2, 'bathrooms' => 2]);
+
+        // Patch beds alone.
+        $this->actingAs($partner, 'dashboard')
+            ->patchJson('/units/'.$id, ['beds' => 4])
+            ->assertOk()
+            ->assertJsonPath('beds', 4);
+
+        // Invalid beds → dashboard VALIDATION envelope (400), not silent.
+        $this->actingAs($partner, 'dashboard')
+            ->patchJson('/units/'.$id, ['beds' => -1])
+            ->assertStatus(400);
+    }
+
     /* ---- photo/license attach via presign fileIds (wizard §1) ---- */
 
     public function test_attach_photos_and_cover_by_file_ids(): void

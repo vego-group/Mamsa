@@ -24,6 +24,7 @@ class Unit extends Model
         'price',
         'capacity',
         'bedrooms',
+        'beds',
         'bathrooms',
         'area',
         'city',
@@ -52,6 +53,8 @@ class Unit extends Model
         'lng'      => 'float',
         'capacity' => 'integer',
         'bedrooms' => 'integer',
+        'beds'     => 'integer',
+        'bathrooms' => 'integer',
     ];
 
     public function owner(): BelongsTo

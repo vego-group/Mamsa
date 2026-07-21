@@ -36,6 +36,8 @@ class UnitPresenter
             // default (moderate) — echo what the engine would actually apply.
             'cancellationPolicy'   => $unit->cancellationPolicy?->key ?? self::defaultPolicyKey(),
             'bedrooms'             => $unit->bedrooms !== null ? (int) $unit->bedrooms : null,
+            // Number of beds (عدد الأسرّة) — distinct from bedrooms.
+            'beds'                 => $unit->beds !== null ? (int) $unit->beds : null,
             'capacity'             => $unit->capacity !== null ? (int) $unit->capacity : null,
             'bathrooms'            => $unit->bathrooms !== null ? (int) $unit->bathrooms : null,
             'rating'               => $reviewsCount > 0 ? round((float) $avgRating, 1) : null,

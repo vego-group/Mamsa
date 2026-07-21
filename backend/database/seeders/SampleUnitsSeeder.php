@@ -33,7 +33,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $individual,
                 'unit_name' => 'شقة مودرن بإطلالة على الواجهة',
                 'unit_type' => 'apartment',
-                'price' => 450, 'capacity' => 4, 'bedrooms' => 2, 'bathrooms' => 2, 'area' => 120,
+                'price' => 450, 'capacity' => 4, 'bedrooms' => 2, 'beds' => 2, 'bathrooms' => 2, 'area' => 120,
                 'city' => 'الرياض', 'district' => 'حي الملقا',
                 'lat' => 24.7743, 'lng' => 46.6086,
                 'description' => 'شقة عصرية مفروشة بالكامل في قلب حي الملقا، قريبة من المطاعم والمقاهي، مثالية للعائلات الصغيرة ورجال الأعمال.',
@@ -47,7 +47,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'فيلا فاخرة مع مسبح خاص',
                 'unit_type' => 'villa',
-                'price' => 2400, 'capacity' => 10, 'bedrooms' => 5, 'bathrooms' => 5, 'area' => 450,
+                'price' => 2400, 'capacity' => 10, 'bedrooms' => 5, 'beds' => 6, 'bathrooms' => 5, 'area' => 450,
                 'city' => 'الرياض', 'district' => 'حي حطين',
                 'lat' => 24.7580, 'lng' => 46.6250,
                 'description' => 'فيلا واسعة بتصميم راقٍ، مسبح خاص وحديقة، مناسبة للمناسبات والتجمعات العائلية الكبيرة.',
@@ -61,7 +61,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $individual,
                 'unit_name' => 'استوديو أنيق قرب الكورنيش',
                 'unit_type' => 'studio',
-                'price' => 320, 'capacity' => 2, 'bedrooms' => 1, 'bathrooms' => 1, 'area' => 45,
+                'price' => 320, 'capacity' => 2, 'bedrooms' => 1, 'beds' => 2, 'bathrooms' => 1, 'area' => 45,
                 'city' => 'جدة', 'district' => 'حي الشاطئ',
                 'lat' => 21.6000, 'lng' => 39.1050,
                 'description' => 'استوديو مريح على بعد دقائق من الكورنيش، مثالي للأزواج والرحلات القصيرة.',
@@ -75,7 +75,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'شقة عائلية واسعة',
                 'unit_type' => 'apartment',
-                'price' => 680, 'capacity' => 6, 'bedrooms' => 3, 'bathrooms' => 3, 'area' => 160,
+                'price' => 680, 'capacity' => 6, 'bedrooms' => 3, 'beds' => 4, 'bathrooms' => 3, 'area' => 160,
                 'city' => 'مكة المكرمة', 'district' => 'العزيزية',
                 'lat' => 21.4100, 'lng' => 39.8300,
                 'description' => 'شقة رحبة قريبة من الحرم، تتسع لعائلة كبيرة مع جميع وسائل الراحة.',
@@ -89,7 +89,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $individual,
                 'unit_name' => 'فيلا هادئة بإطلالة على الدرعية',
                 'unit_type' => 'villa',
-                'price' => 1500, 'capacity' => 8, 'bedrooms' => 4, 'bathrooms' => 4, 'area' => 380,
+                'price' => 1500, 'capacity' => 8, 'bedrooms' => 4, 'beds' => 5, 'bathrooms' => 4, 'area' => 380,
                 'city' => 'الرياض', 'district' => 'الدرعية',
                 'lat' => 24.7370, 'lng' => 46.5750,
                 'description' => 'فيلا بتصميم تراثي عصري، أجواء هادئة بعيدة عن صخب المدينة مع جلسات خارجية.',
@@ -103,7 +103,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'شقة بإطلالة بحرية مباشرة',
                 'unit_type' => 'apartment',
-                'price' => 900, 'capacity' => 4, 'bedrooms' => 2, 'bathrooms' => 2, 'area' => 140,
+                'price' => 900, 'capacity' => 4, 'bedrooms' => 2, 'beds' => 2, 'bathrooms' => 2, 'area' => 140,
                 'city' => 'الدمام', 'district' => 'الكورنيش',
                 'lat' => 26.4360, 'lng' => 50.1030,
                 'description' => 'شقة راقية بإطلالة بانورامية على البحر، تشطيبات فاخرة وموقع متميز.',
@@ -119,7 +119,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $individual,
                 'unit_name' => 'استوديو عصري في العليا',
                 'unit_type' => 'studio',
-                'price' => 380, 'capacity' => 2, 'bedrooms' => 1, 'bathrooms' => 1, 'area' => 50,
+                'price' => 380, 'capacity' => 2, 'bedrooms' => 1, 'beds' => 2, 'bathrooms' => 1, 'area' => 50,
                 'city' => 'الرياض', 'district' => 'حي العليا',
                 'lat' => 24.6900, 'lng' => 46.6850,
                 'description' => 'استوديو أنيق في قلب العليا، قريب من مراكز الأعمال والمطاعم، مثالي للإقامات القصيرة.',
@@ -133,7 +133,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'شقة أنيقة قرب أبها',
                 'unit_type' => 'apartment',
-                'price' => 520, 'capacity' => 5, 'bedrooms' => 2, 'bathrooms' => 2, 'area' => 130,
+                'price' => 520, 'capacity' => 5, 'bedrooms' => 2, 'beds' => 3, 'bathrooms' => 2, 'area' => 130,
                 'city' => 'أبها', 'district' => 'حي الموظفين',
                 'lat' => 18.2160, 'lng' => 42.5050,
                 'description' => 'شقة مريحة بأجواء الجنوب الباردة، قريبة من المتنزهات والمطلات السياحية.',
@@ -149,7 +149,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $company,
                 'unit_name' => 'فيلا فاخرة مع إطلالة على البحر',
                 'unit_type' => 'villa',
-                'price' => 3500, 'capacity' => 12, 'bedrooms' => 6, 'bathrooms' => 7, 'area' => 650,
+                'price' => 3500, 'capacity' => 12, 'bedrooms' => 6, 'beds' => 8, 'bathrooms' => 7, 'area' => 650,
                 'city' => 'جدة', 'district' => 'حي الشاطئ',
                 'lat' => 21.5900, 'lng' => 39.1000,
                 'description' => 'فيلا فخمة على الواجهة البحرية بمسبح لا متناهٍ وشاطئ خاص، تشطيبات راقية وخدمة كاملة للمناسبات المميزة.',
@@ -163,7 +163,7 @@ class SampleUnitsSeeder extends Seeder
                 'owner' => $individual,
                 'unit_name' => 'قصر ريفي للمناسبات الكبرى',
                 'unit_type' => 'villa',
-                'price' => 4800, 'capacity' => 30, 'bedrooms' => 10, 'bathrooms' => 12, 'area' => 1200,
+                'price' => 4800, 'capacity' => 30, 'bedrooms' => 10, 'beds' => 14, 'bathrooms' => 12, 'area' => 1200,
                 'city' => 'الرياض', 'district' => 'الدرعية',
                 'lat' => 24.7320, 'lng' => 46.5810,
                 'description' => 'قصر ريفي واسع بقاعات احتفالات ومجالس فخمة وحدائق غنّاء، مثالي للأعراس والمناسبات الكبيرة.',
@@ -188,6 +188,7 @@ class SampleUnitsSeeder extends Seeder
                     'price'               => $data['price'],
                     'capacity'            => $data['capacity'],
                     'bedrooms'            => $data['bedrooms'],
+                    'beds'                => $data['beds'],
                     'bathrooms'           => $data['bathrooms'],
                     'area'                => $data['area'],
                     'city'                => $data['city'],
@@ -207,6 +208,15 @@ class SampleUnitsSeeder extends Seeder
             // Backfill coordinates on rows seeded before lat/lng existed (#1).
             if ($unit->lat === null || $unit->lng === null) {
                 $unit->update(['lat' => $data['lat'], 'lng' => $data['lng']]);
+            }
+
+            // Backfill beds/bathrooms on rows seeded before those fields — so
+            // the public unit display always has real counts to show.
+            $fill = [];
+            if ($unit->beds === null)      $fill['beds'] = $data['beds'];
+            if ($unit->bathrooms === null) $fill['bathrooms'] = $data['bathrooms'];
+            if ($fill) {
+                $unit->update($fill);
             }
 
             // Only attach features/images for freshly created units.
