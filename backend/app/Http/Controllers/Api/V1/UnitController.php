@@ -94,10 +94,13 @@ class UnitController extends Controller
         }
 
         // Amenities filter (المرافق): AND semantics — a unit must have EVERY
-        // selected feature, so each value adds its own whereHas constraint.
+        // selected amenity. Accepts stable SLUGS (wifi, ac, …) and expands
+        // each to all stored spellings (تكييف/مكيف) so slug filtering returns
+        // the right set; raw labels still work as a fallback.
         if ($request->filled('features')) {
             foreach ((array) $request->features as $feature) {
-                $query->whereHas('features', fn ($q) => $q->where('name', $feature));
+                $labels = \App\Support\Dashboard\Maps::filterLabels((string) $feature);
+                $query->whereHas('features', fn ($q) => $q->whereIn('name', $labels));
             }
         }
 

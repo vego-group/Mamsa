@@ -29,19 +29,25 @@ class UserController extends Controller
         $user = $request->user();
 
         $data = $request->validate([
-            'name'  => ['sometimes', 'string', 'max:100'],
-            'email' => ['sometimes', 'email', 'max:150', 'unique:users,email,'.$user->id],
+            'name'       => ['sometimes', 'string', 'max:100'],
+            'first_name' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'last_name'  => ['sometimes', 'nullable', 'string', 'max:100'],
+            'email'      => ['sometimes', 'email', 'max:150', 'unique:users,email,'.$user->id],
         ]);
 
         // A changed email drops back to unverified — it must re-pass the
         // /user/email OTP flow before it counts as a trusted channel.
         if (array_key_exists('email', $data) && strtolower((string) $data['email']) !== strtolower((string) $user->email)) {
-            $data['email_verified_at'] = null;
+            $user->email_verified_at = null;
         }
 
-        $user->forceFill($data)->save();
+        if (array_key_exists('email', $data)) {
+            $user->email = $data['email'];
+        }
+        $user->fillNameParts($data);
+        $user->save();
 
-        return response()->json($request->user()->fresh());
+        return response()->json($user->fresh()->load('partnerDetail'));
     }
 
     public function bookings(Request $request): JsonResponse

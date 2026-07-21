@@ -12,6 +12,10 @@ class UserResource extends JsonResource
         return [
             'id'               => $this->id,
             'name'             => $this->name,
+            // Authoritative split (frontend collects two inputs); `name` stays
+            // the concatenation for anything that reads it.
+            'first_name'       => $this->first_name,
+            'last_name'        => $this->last_name,
             'phone'            => $this->phone,
             'email'            => $this->email,
             'email_verified'   => ! is_null($this->email_verified_at),

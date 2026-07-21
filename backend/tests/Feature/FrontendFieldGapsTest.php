@@ -174,6 +174,75 @@ class FrontendFieldGapsTest extends TestCase
         $this->assertSame(50, $q['tier']['refund_percent']);
     }
 
+    public function test_amenity_filter_accepts_slugs_and_matches_spelling_variants(): void
+    {
+        $guest = User::factory()->create();
+        $guest->assignRole('User');
+        $owner = User::factory()->create();
+        $owner->assignRole('Individual');
+        $owner->partnerDetail()->create(['type' => 'individual', 'status' => PartnerDetail::STATUS_APPROVED]);
+
+        $mk = function (array $features) use ($owner) {
+            $u = $owner->units()->create([
+                'unit_name' => 'و'.fake()->unique()->numerify('##'), 'unit_type' => 'apartment',
+                'code' => 'MRN'.fake()->unique()->numerify('#####'),
+                'price' => 400, 'capacity' => 2, 'bedrooms' => 1,
+                'approval_status' => 'approved', 'status' => 'available',
+                'calendar_token' => str()->random(60),
+            ]);
+            $u->features()->sync(collect($features)->map(fn ($n) => Feature::firstOrCreate(['name' => $n])->id));
+
+            return $u;
+        };
+
+        $acVariant = $mk(['مكيف', 'واي فاي']); // ac (variant spelling) + wifi
+        $acCanon   = $mk(['تكييف']);            // ac (canonical spelling)
+        $poolOnly  = $mk(['مسبح']);             // neither
+
+        // Slug "ac" matches BOTH stored spellings (the reported bug).
+        $ids = collect($this->actingAs($guest)->getJson('/api/v1/units?features[]=ac')->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($acVariant->id));
+        $this->assertTrue($ids->contains($acCanon->id));
+        $this->assertFalse($ids->contains($poolOnly->id));
+
+        // AND semantics preserved: ac + wifi → only the unit with both.
+        $ids2 = collect($this->actingAs($guest)->getJson('/api/v1/units?features[]=ac&features[]=wifi')->json('data'))->pluck('id');
+        $this->assertTrue($ids2->contains($acVariant->id));
+        $this->assertFalse($ids2->contains($acCanon->id));
+
+        // Raw-label fallback still works.
+        $ids3 = collect($this->actingAs($guest)->getJson('/api/v1/units?features[]='.urlencode('مسبح'))->json('data'))->pluck('id');
+        $this->assertTrue($ids3->contains($poolOnly->id));
+    }
+
+    public function test_first_last_name_round_trip_preserves_compound_names(): void
+    {
+        $user = User::factory()->create(['name' => 'قديم', 'first_name' => null, 'last_name' => null]);
+        $user->assignRole('User');
+
+        // Parts are authoritative — a compound first name is NOT re-split.
+        $this->actingAs($user)
+            ->postJson('/api/v1/auth/complete-profile', ['first_name' => 'عبد الله', 'last_name' => 'محمد'])
+            ->assertOk()
+            ->assertJsonPath('data.first_name', 'عبد الله')
+            ->assertJsonPath('data.last_name', 'محمد')
+            ->assertJsonPath('data.name', 'عبد الله محمد');
+
+        $this->actingAs($user)->getJson('/api/v1/auth/me')
+            ->assertJsonPath('data.first_name', 'عبد الله')
+            ->assertJsonPath('data.last_name', 'محمد');
+
+        // PUT /user/profile updates the parts + keeps name in sync.
+        $this->actingAs($user)->putJson('/api/v1/user/profile', ['first_name' => 'سارة', 'last_name' => 'أحمد'])->assertOk();
+        $this->assertSame('سارة أحمد', $user->fresh()->name);
+        $this->assertSame('سارة', $user->fresh()->first_name);
+
+        // Name-only update naively splits (kept in sync for old clients).
+        $this->actingAs($user)->putJson('/api/v1/user/profile', ['name' => 'خالد العتيبي'])->assertOk();
+        $this->assertSame('خالد', $user->fresh()->first_name);
+        $this->assertSame('العتيبي', $user->fresh()->last_name);
+    }
+
     public function test_me_returns_partner_type_and_avatar(): void
     {
         $owner = User::factory()->create();

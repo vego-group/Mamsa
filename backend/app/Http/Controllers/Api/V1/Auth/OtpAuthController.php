@@ -120,11 +120,23 @@ class OtpAuthController extends Controller
         $user = $request->user();
 
         $validated = $request->validate([
-            'name'  => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'unique:users,email,'.$user->id],
+            // `name` (joined) OR first_name/last_name — at least one path must
+            // resolve to a name (enforced below).
+            'name'       => ['sometimes', 'string', 'max:255'],
+            'first_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'last_name'  => ['sometimes', 'nullable', 'string', 'max:255'],
+            'email'      => ['nullable', 'email', 'unique:users,email,'.$user->id],
         ]);
 
-        $user->update($validated);
+        if (blank($validated['name'] ?? null) && blank($validated['first_name'] ?? null)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['name' => ['الاسم مطلوب']]);
+        }
+
+        if (array_key_exists('email', $validated)) {
+            $user->email = $validated['email'];
+        }
+        $user->fillNameParts($validated);
+        $user->save();
 
         return $this->success(
             new UserResource($user->load('roles')),

@@ -69,10 +69,11 @@ class Maps
      * than duplicating slugs.
      */
     public const AMENITY_VARIANTS = [
-        'مكيف'    => 'تكييف',
-        'واي-فاي' => 'واي فاي',
-        'حراسة'   => 'حراسة أمنية',
-        'شاشة'    => 'شاشة ذكية',
+        'مكيف'        => 'تكييف',
+        'واي-فاي'     => 'واي فاي',
+        'حراسة'       => 'حراسة أمنية',
+        'شاشة'        => 'شاشة ذكية',
+        'تلفزيون ذكي' => 'شاشة ذكية',
     ];
 
     public static function cityToArabic(string $slug): ?string
@@ -94,6 +95,45 @@ class Maps
     public static function amenityToArabic(string $key): ?string
     {
         return self::AMENITIES[$key] ?? null;
+    }
+
+    /**
+     * Every stored Arabic label that maps to a slug — the canonical AMENITIES
+     * label plus each spelling variant. Used to filter units by slug while
+     * still matching the messy stored spellings (تكييف / مكيف …).
+     *
+     * @return list<string>
+     */
+    public static function labelsForSlug(string $slug): array
+    {
+        $canonical = self::AMENITIES[$slug] ?? null;
+        if ($canonical === null) {
+            return [];
+        }
+
+        $labels = [$canonical];
+        foreach (self::AMENITY_VARIANTS as $variant => $canon) {
+            if ($canon === $canonical) {
+                $labels[] = $variant;
+            }
+        }
+
+        return array_values(array_unique($labels));
+    }
+
+    /**
+     * Resolve a units filter value (slug OR raw label) to the set of stored
+     * labels to match. A known slug expands to all its spellings; anything
+     * else falls back to the raw value (backward-compatible label filtering).
+     *
+     * @return list<string>
+     */
+    public static function filterLabels(string $value): array
+    {
+        $value = trim($value);
+        $slug  = isset(self::AMENITIES[$value]) ? $value : self::amenityKey($value);
+
+        return $slug !== null ? self::labelsForSlug($slug) : [$value];
     }
 
     /** Resolve one Arabic amenity name to its stable slug (variants included). */

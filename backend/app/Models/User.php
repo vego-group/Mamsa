@@ -19,6 +19,8 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name',
+        'first_name',
+        'last_name',
         'phone',
         'email',
         'password',
@@ -38,6 +40,41 @@ class User extends Authenticatable
             'password'          => 'hashed',
             'is_active'         => 'boolean',
         ];
+    }
+
+    /* ===================== Name parts ===================== */
+
+    /**
+     * Reconcile `name` with `first_name`/`last_name` from a request payload.
+     * Parts win when present (name = "first last"); otherwise a bare `name`
+     * is naively split so the columns never drift. Nothing set → no-op.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function fillNameParts(array $data): void
+    {
+        $hasFirst = array_key_exists('first_name', $data);
+        $hasLast  = array_key_exists('last_name', $data);
+
+        if ($hasFirst || $hasLast) {
+            $first = trim((string) ($hasFirst ? $data['first_name'] : $this->first_name));
+            $last  = trim((string) ($hasLast ? $data['last_name'] : $this->last_name));
+
+            $this->first_name = $first !== '' ? $first : null;
+            $this->last_name  = $last !== '' ? $last : null;
+            $this->name       = trim($first.' '.$last) ?: $this->name;
+
+            return;
+        }
+
+        if (array_key_exists('name', $data) && filled($data['name'])) {
+            $name  = trim((string) $data['name']);
+            $parts = preg_split('/\s+/', $name, 2) ?: [$name];
+
+            $this->name       = $name;
+            $this->first_name = $parts[0] ?? null;
+            $this->last_name  = $parts[1] ?? null;
+        }
     }
 
     /* ===================== Relations ===================== */
