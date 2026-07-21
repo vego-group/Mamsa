@@ -154,9 +154,11 @@ class UnitController extends DashboardController
             'cancellationPolicy'   => ['sometimes', 'in:flexible,moderate,strict'],
             'capacity'             => [$req, 'integer', 'min:1'],
             'bedrooms'             => ['sometimes', 'integer', 'min:0'],
-            // Number of beds (عدد الأسرّة) — separate from bedrooms.
-            'beds'                 => ['sometimes', 'nullable', 'integer', 'min:0', 'max:255'],
-            'bathrooms'            => ['sometimes', 'nullable', 'integer', 'min:0'],
+            // beds (عدد الأسرّة) / bathrooms (دورات المياه) — optional on
+            // draft, required at submit (assertSubmittable). Ranges per the
+            // frontend contract (2026-07-21).
+            'beds'                 => ['sometimes', 'nullable', 'integer', 'min:1', 'max:20'],
+            'bathrooms'            => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10'],
             'city'                 => [$req, 'string', 'in:'.implode(',', array_keys(Maps::CITIES))],
             'district'             => ['sometimes', 'nullable', 'string', 'max:150'],
             'description'          => ['sometimes', 'nullable', 'string', 'max:500'],
@@ -224,6 +226,8 @@ class UnitController extends DashboardController
         if (! in_array($unit->unit_type, Unit::SUPPORTED_TYPES, true))  $fields['type'] = 'نوع الوحدة غير صالح';
         if ((float) $unit->price <= 0)                                  $fields['pricePerNight'] = 'السعر يجب أن يكون أكبر من صفر';
         if ((int) $unit->capacity < 1)                                  $fields['capacity'] = 'السعة مطلوبة';
+        if ((int) $unit->beds < 1)                                      $fields['beds'] = 'عدد السراير مطلوب';
+        if ((int) $unit->bathrooms < 1)                                 $fields['bathrooms'] = 'عدد دورات المياه مطلوب';
         if (! Maps::cityToSlug($unit->city) || ! in_array(Maps::cityToSlug($unit->city), array_keys(Maps::CITIES), true)) {
             $fields['city'] = 'المدينة يجب أن تكون ضمن المدن المعتمدة';
         }

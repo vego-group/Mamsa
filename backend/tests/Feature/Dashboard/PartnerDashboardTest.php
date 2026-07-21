@@ -195,10 +195,46 @@ class PartnerDashboardTest extends TestCase
             ->assertOk()
             ->assertJsonPath('beds', 4);
 
-        // Invalid beds → dashboard VALIDATION envelope (400), not silent.
+        // Out-of-range beds → dashboard VALIDATION envelope (400).
         $this->actingAs($partner, 'dashboard')
-            ->patchJson('/units/'.$id, ['beds' => -1])
+            ->patchJson('/units/'.$id, ['beds' => 21])  // max 20
             ->assertStatus(400);
+        $this->actingAs($partner, 'dashboard')
+            ->patchJson('/units/'.$id, ['bathrooms' => 11]) // max 10
+            ->assertStatus(400);
+    }
+
+    public function test_submit_requires_beds_and_bathrooms(): void
+    {
+        $partner = $this->partner();
+
+        // Otherwise-complete draft, but missing beds + bathrooms → submit 400
+        // with both fields flagged (same VALIDATION envelope as other fields).
+        $draft = $this->unit($partner, [
+            'approval_status'     => 'draft',
+            'beds'                => null,
+            'bathrooms'           => null,
+            'description'         => 'وصف كافٍ للوحدة يزيد عن عشرة أحرف بوضوح',
+            'address'             => 'الرياض، حي العليا',
+            'lat'                 => 24.7136,
+            'lng'                 => 46.6753,
+            'tourism_permit_no'   => 'TL-12345',
+            'tourism_permit_file' => 'file_x',
+        ]);
+        $draft->images()->create(['path' => 'units/x.jpg', 'is_main' => true]);
+
+        $this->actingAs($partner, 'dashboard')->postJson('/units/'.$draft->id.'/submit')
+            ->assertStatus(400)
+            ->assertJsonPath('error.code', 'VALIDATION')
+            ->assertJsonPath('error.fields.beds', 'عدد السراير مطلوب')
+            ->assertJsonPath('error.fields.bathrooms', 'عدد دورات المياه مطلوب');
+
+        // With both set, those two no longer block submission.
+        $draft->update(['beds' => 2, 'bathrooms' => 1]);
+        $res = $this->actingAs($partner, 'dashboard')->postJson('/units/'.$draft->id.'/submit');
+        $fields = $res->json('error.fields') ?? [];
+        $this->assertArrayNotHasKey('beds', $fields);
+        $this->assertArrayNotHasKey('bathrooms', $fields);
     }
 
     /* ---- photo/license attach via presign fileIds (wizard §1) ---- */
