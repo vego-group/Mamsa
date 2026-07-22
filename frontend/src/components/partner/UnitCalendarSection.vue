@@ -63,8 +63,8 @@
       <div class="mb-4">
         <label class="block text-body-sm font-bold text-on-surface mb-2">إغلاق تواريخ يدوياً</label>
         <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1.2fr_auto] gap-2">
-          <input v-model="block.start_date" type="date" dir="ltr" :min="today" class="input-field text-body-sm" />
-          <input v-model="block.end_date" type="date" dir="ltr" :min="block.start_date || today" class="input-field text-body-sm" />
+          <GregorianDatePicker v-model="block.start_date" :min="today" placeholder="من تاريخ" />
+          <GregorianDatePicker v-model="block.end_date" :min="block.start_date || today" placeholder="إلى تاريخ" />
           <input v-model="block.note" type="text" placeholder="السبب (اختياري) — صيانة، حجز خارجي…" class="input-field text-body-sm" />
           <button type="button" class="px-4 rounded-lg bg-primary text-on-primary text-body-sm font-bold hover:bg-primary-container transition-colors disabled:opacity-50 h-full min-h-[46px]" :disabled="!block.start_date || !block.end_date || addingBlock" @click="addBlock">
             إغلاق
@@ -96,6 +96,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { partnerApi } from '@/api/partner'
 import AvailabilityCalendar from '@/components/partner/AvailabilityCalendar.vue'
+import GregorianDatePicker from '@/components/public/GregorianDatePicker.vue'
 
 const props = defineProps({
   unitId: { type: [Number, String], required: true },
