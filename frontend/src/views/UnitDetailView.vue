@@ -178,13 +178,13 @@
                 <div class="grid grid-cols-2 gap-2">
                   <div>
                     <label class="block text-[12px] font-bold text-on-surface-variant mb-1.5">تسجيل الوصول</label>
-                    <!-- lang forces the native date-picker calendar to Gregorian
-                         (the OS/Safari Arabic locale otherwise shows Hijri). -->
-                    <input v-model="booking.start_date" type="date" :min="today" class="field" dir="ltr" lang="en-GB" />
+                    <!-- Custom Gregorian picker: the native date input follows the
+                         macOS calendar setting (Hijri for ar-SA) which no attribute overrides. -->
+                    <GregorianDatePicker v-model="booking.start_date" :min="today" />
                   </div>
                   <div>
                     <label class="block text-[12px] font-bold text-on-surface-variant mb-1.5">تسجيل المغادرة</label>
-                    <input v-model="booking.end_date" type="date" :min="booking.start_date || today" class="field" dir="ltr" lang="en-GB" />
+                    <GregorianDatePicker v-model="booking.end_date" :min="booking.start_date || today" />
                   </div>
                 </div>
                 <div>
@@ -257,6 +257,7 @@ import { useRoute, useRouter } from 'vue-router'
 import PublicHeader from '@/components/public/PublicHeader.vue'
 import PublicFooter from '@/components/public/PublicFooter.vue'
 import CancellationPolicyTiers from '@/components/public/CancellationPolicyTiers.vue'
+import GregorianDatePicker from '@/components/public/GregorianDatePicker.vue'
 import EmailVerifyModal from '@/components/user/EmailVerifyModal.vue'
 import { publicApi, bookingApi } from '@/api/public'
 import { useAuthStore } from '@/stores/auth'
@@ -282,6 +283,11 @@ const images = computed(() => (unit.value?.images || []).map((i) => i.url))
 
 // Server-computed price quote (subtotal + VAT + total) — the availability
 // endpoint returns it when the range is free. Client math is display-fallback only.
+// Changing check-in clears a now-invalid check-out (ISO strings compare chronologically).
+watch(() => booking.start_date, (start) => {
+  if (start && booking.end_date && booking.end_date <= start) booking.end_date = ''
+})
+
 const quote = ref(null)
 watch(() => [booking.start_date, booking.end_date], async () => {
   quote.value = null
