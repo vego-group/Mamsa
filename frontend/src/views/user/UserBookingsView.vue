@@ -73,6 +73,7 @@
                 <div>
                   <p class="text-on-surface-variant text-[11px] mb-0.5">تسجيل الوصول</p>
                   <p class="text-on-surface font-medium">{{ hijri(b.start_date) }}</p>
+                  <p class="text-on-surface-variant text-[11px] font-numeric-data">{{ gregorian(b.start_date) }}</p>
                 </div>
                 <div>
                   <p class="text-on-surface-variant text-[11px] mb-0.5">الضيوف</p>
@@ -145,6 +146,7 @@
               <div class="text-right">
                 <p class="text-on-surface-variant text-[11px] mb-0.5">تسجيل المغادرة</p>
                 <p class="text-on-surface font-medium text-body-sm">{{ hijri(b.end_date) }}</p>
+                <p class="text-on-surface-variant text-[11px] font-numeric-data">{{ gregorian(b.end_date) }}</p>
               </div>
               <div class="text-right">
                 <p class="text-on-surface-variant text-[11px] mb-0.5">رمز التأكيد</p>
@@ -355,6 +357,18 @@ function hijri(dateStr) {
     return hijriFmt.format(new Date(dateStr))
   } catch {
     return dateStr
+  }
+}
+// Gregorian twin, Latin digits DD/MM/YYYY (project date convention).
+const gregorianFmt = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit', month: '2-digit', year: 'numeric',
+})
+function gregorian(dateStr) {
+  if (!dateStr) return ''
+  try {
+    return gregorianFmt.format(new Date(dateStr)) + ' م'
+  } catch {
+    return ''
   }
 }
 function showToast(msg, type = 'success') {

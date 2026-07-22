@@ -83,12 +83,12 @@
             <section class="bg-white rounded-2xl border border-outline-variant p-5">
               <h2 class="font-title-sm text-title-sm text-on-surface mb-4 text-right">تفاصيل الحجز</h2>
               <dl class="divide-y divide-outline-variant/60">
-                <Row icon="login" label="تاريخ الوصول" :value="hijri(booking.start_date)" />
-                <Row icon="logout" label="تاريخ المغادرة" :value="hijri(booking.end_date)" />
+                <Row icon="login" label="تاريخ الوصول" :value="hijri(booking.start_date)" :sub="gregorian(booking.start_date)" />
+                <Row icon="logout" label="تاريخ المغادرة" :value="hijri(booking.end_date)" :sub="gregorian(booking.end_date)" />
                 <Row icon="dark_mode" label="عدد الليالي" :value="`${booking.nights} ليالٍ`" />
                 <Row icon="group" label="الضيوف" :value="`${booking.guests} ضيوف`" />
                 <Row icon="confirmation_number" label="رمز الحجز" :value="booking.reference" mono />
-                <Row icon="event" label="تاريخ الحجز" :value="hijri(booking.created_at)" />
+                <Row icon="event" label="تاريخ الحجز" :value="hijri(booking.created_at)" :sub="gregorian(booking.created_at)" />
               </dl>
             </section>
 
@@ -349,9 +349,12 @@ const Row = (props) =>
       h('span', { class: 'material-symbols-outlined text-[18px] text-primary' }, props.icon),
       props.label,
     ]),
-    h('dd', { class: `text-body-sm text-on-surface font-medium${props.mono ? ' font-numeric-data tracking-wider' : ''}`, dir: props.mono ? 'ltr' : undefined }, props.value),
+    h('dd', { class: 'text-left' }, [
+      h('div', { class: `text-body-sm text-on-surface font-medium${props.mono ? ' font-numeric-data tracking-wider' : ''}`, dir: props.mono ? 'ltr' : undefined }, props.value),
+      props.sub ? h('div', { class: 'text-[11px] text-on-surface-variant font-numeric-data mt-0.5' }, props.sub) : null,
+    ]),
   ])
-Row.props = ['icon', 'label', 'value', 'mono']
+Row.props = ['icon', 'label', 'value', 'mono', 'sub']
 
 const route = useRoute()
 const loading = ref(true)
@@ -407,6 +410,12 @@ const hijriFmt = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { weekda
 function hijri(dateStr) {
   if (!dateStr) return '—'
   try { return hijriFmt.format(new Date(dateStr)) } catch { return dateStr }
+}
+// Gregorian twin, Latin digits DD/MM/YYYY (project date convention).
+const gregorianFmt = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+function gregorian(dateStr) {
+  if (!dateStr) return ''
+  try { return gregorianFmt.format(new Date(dateStr)) + ' م' } catch { return '' }
 }
 function cancellationText(policy) {
   const map = { flexible: 'مرنة', moderate: 'متوسطة', strict: 'صارمة' }
