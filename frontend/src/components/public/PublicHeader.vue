@@ -27,6 +27,15 @@
       <!-- Actions (left in RTL) -->
       <div class="flex items-center gap-2 shrink-0">
         <template v-if="auth.isAuthenticated">
+          <!-- Partners' "حسابي" opens their dashboard, so give them a direct
+               link to the guest reservations they made as a user. -->
+          <RouterLink
+            v-if="auth.isPartner"
+            :to="{ name: 'account' }"
+            class="px-4 py-2 rounded-lg text-body-sm font-bold text-on-surface hover:bg-surface-container transition-colors"
+          >
+            حجوزاتي
+          </RouterLink>
           <RouterLink :to="dashboardRoute" class="px-4 py-2 rounded-lg text-body-sm font-bold text-primary hover:bg-surface-container transition-colors">
             حسابي
           </RouterLink>
