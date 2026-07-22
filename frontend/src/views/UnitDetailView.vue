@@ -178,11 +178,13 @@
                 <div class="grid grid-cols-2 gap-2">
                   <div>
                     <label class="block text-[12px] font-bold text-on-surface-variant mb-1.5">تسجيل الوصول</label>
-                    <input v-model="booking.start_date" type="date" :min="today" class="field" dir="ltr" />
+                    <!-- lang forces the native date-picker calendar to Gregorian
+                         (the OS/Safari Arabic locale otherwise shows Hijri). -->
+                    <input v-model="booking.start_date" type="date" :min="today" class="field" dir="ltr" lang="en-GB" />
                   </div>
                   <div>
                     <label class="block text-[12px] font-bold text-on-surface-variant mb-1.5">تسجيل المغادرة</label>
-                    <input v-model="booking.end_date" type="date" :min="booking.start_date || today" class="field" dir="ltr" />
+                    <input v-model="booking.end_date" type="date" :min="booking.start_date || today" class="field" dir="ltr" lang="en-GB" />
                   </div>
                 </div>
                 <div>
