@@ -34,6 +34,8 @@ class BookingResource extends JsonResource
                 'children' => (int) $this->children,
             ],
             'total_amount' => $this->total_amount,
+            // Mamsa's frozen 2% cut — surfaced for the admin bookings table.
+            'commission_amount' => (float) $this->commission_amount,
             // Itemised price summary (ملخص السعر). Falls back gracefully for
             // legacy rows that predate the breakdown columns.
             'pricing'      => $this->pricingBlock(),

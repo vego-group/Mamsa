@@ -54,12 +54,18 @@ class BookingController extends Controller
             ->groupBy('status')
             ->pluck('c', 'status');
 
+        $confirmed = Booking::where('status', 'confirmed');
+        $revenue = round((float) (clone $confirmed)->sum('total_amount'), 2);
+        $confirmedCount = (int) ($counts['confirmed'] ?? 0);
+
         return [
-            'total'     => (int) $counts->sum(),
-            'confirmed' => (int) ($counts['confirmed'] ?? 0),
-            'pending'   => (int) ($counts['pending'] ?? 0),
-            'cancelled' => (int) ($counts['cancelled'] ?? 0),
-            'revenue'   => round((float) Booking::where('status', 'confirmed')->sum('total_amount'), 2),
+            'total'      => (int) $counts->sum(),
+            'confirmed'  => $confirmedCount,
+            'pending'    => (int) ($counts['pending'] ?? 0),
+            'cancelled'  => (int) ($counts['cancelled'] ?? 0),
+            'revenue'    => $revenue,
+            'commission' => round((float) (clone $confirmed)->sum('commission_amount'), 2),
+            'avg_value'  => $confirmedCount > 0 ? round($revenue / $confirmedCount, 2) : 0.0,
         ];
     }
 }

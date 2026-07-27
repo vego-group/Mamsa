@@ -1,224 +1,313 @@
 <template>
   <AdminLayout>
-    <!-- Breadcrumb -->
-    <nav class="flex items-center gap-2 text-body-sm text-on-surface-variant mb-6">
-      <RouterLink :to="{ name: 'admin-requests' }" class="hover:text-primary transition-colors">الطلبات</RouterLink>
-      <span class="material-symbols-outlined text-[16px]">chevron_left</span>
-      <span class="text-primary font-bold">{{ request.code }}</span>
-    </nav>
-
     <!-- Header -->
-    <div class="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-      <div>
-        <div class="flex items-center gap-3 mb-2">
-          <h1 class="font-display-lg text-display-lg text-primary">{{ request.unitName }}</h1>
-          <span class="px-3 py-1 rounded-full text-sm font-bold" :class="statusClass(request.status)">{{ request.statusLabel }}</span>
-        </div>
-        <p class="text-on-surface-variant text-body-md">مقدم الطلب: <strong>{{ request.ownerName }}</strong> • {{ request.ownerType === 'Company' ? 'شركة' : 'فرد' }}</p>
-      </div>
-      <div v-if="request.status === 'pending'" class="flex gap-3">
-        <button class="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2" @click="approve">
-          <span class="material-symbols-outlined text-[18px]">check_circle</span>
-          موافقة
-        </button>
-        <button class="px-6 py-3 border-2 border-error text-error rounded-xl font-bold hover:bg-error-container transition-colors flex items-center gap-2" @click="showRejectModal = true">
-          <span class="material-symbols-outlined text-[18px]">cancel</span>
-          رفض
-        </button>
-      </div>
+    <div class="flex items-center gap-3 mb-6">
+      <RouterLink :to="{ name: 'admin-requests' }" class="inline-flex items-center gap-1 text-[14px] font-semibold text-gray-500 hover:text-gray-800">
+        <span class="material-symbols-outlined text-[20px]">{{ dir === 'rtl' ? 'arrow_forward' : 'arrow_back' }}</span>{{ t('approvals.back') }}
+      </RouterLink>
+      <span class="text-gray-300">/</span>
+      <span class="text-[14px] font-bold text-gray-900 tabular-nums">{{ unit?.code || `APR-${routeId}` }}</span>
+      <span v-if="unit" class="inline-flex items-center gap-1 text-[13px] font-semibold" :class="priorityMeta.text">
+        <span class="w-1.5 h-1.5 rounded-full" :class="priorityMeta.dot"></span>{{ priorityMeta.label }}
+      </span>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- Main info -->
-      <div class="lg:col-span-2 space-y-6">
-        <!-- Unit details card -->
-        <div class="bg-white rounded-2xl border border-outline-variant shadow-sm p-6">
-          <h2 class="font-title-sm text-title-sm text-primary mb-4 pb-3 border-b border-outline-variant">تفاصيل الوحدة</h2>
-          <div class="grid grid-cols-2 gap-4">
-            <div v-for="detail in unitDetails" :key="detail.label">
-              <p class="font-label-caps text-label-caps text-on-surface-variant mb-1">{{ detail.label }}</p>
-              <p class="font-body-md text-on-surface">{{ detail.value }}</p>
+    <div v-if="loading" class="flex items-center justify-center py-24 text-gray-400">
+      <span class="material-symbols-outlined animate-spin text-3xl">progress_activity</span>
+    </div>
+
+    <div v-else-if="!unit" class="py-16 text-center text-gray-400 text-[13px] bg-white rounded-2xl border border-gray-200">{{ t('approvals.notFound') }}</div>
+
+    <div v-else class="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-4 pb-24">
+      <!-- Left column -->
+      <div class="space-y-4">
+        <!-- Pricing -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2">{{ t('approvals.pricing') }}</p>
+          <p class="text-[26px] font-bold text-gray-900 leading-none tabular-nums">{{ int(unit.price) }} <span class="text-[13px] font-normal text-gray-400">{{ t('approvals.perNight') }}</span></p>
+          <p class="text-[12px] text-gray-400 mt-1">{{ t('approvals.basedOnGuests', { n: unit.capacity }) }}</p>
+        </div>
+
+        <!-- Partner -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-3">{{ t('approvals.partner') }}</p>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-10 h-10 rounded-full bg-primary/85 flex items-center justify-center text-white font-bold text-[13px]">{{ partnerInitials }}</div>
+            <div class="min-w-0">
+              <p class="text-[14px] font-bold text-gray-900 truncate">{{ partner.name }}</p>
+              <p class="text-[12px] text-gray-400">{{ partner.type === 'company' ? t('approvals.company') : t('approvals.individual') }} · {{ partner.city }}</p>
             </div>
           </div>
-        </div>
-
-        <!-- Images placeholder -->
-        <div class="bg-white rounded-2xl border border-outline-variant shadow-sm p-6">
-          <h2 class="font-title-sm text-title-sm text-primary mb-4 pb-3 border-b border-outline-variant">صور الوحدة</h2>
-          <div class="grid grid-cols-3 gap-3">
-            <div v-for="i in 6" :key="i" class="aspect-square rounded-xl bg-surface-container flex items-center justify-center">
-              <span class="material-symbols-outlined text-3xl text-on-surface-variant">image</span>
-            </div>
+          <div class="flex items-center gap-3 text-[12px] mb-3">
+            <span v-if="partner.is_verified" class="inline-flex items-center gap-1 text-emerald-600 font-semibold"><span class="material-symbols-outlined text-[15px]">verified</span>{{ t('approvals.verified') }}</span>
+            <span v-if="partner.rating != null" class="inline-flex items-center gap-0.5 text-amber-500 font-semibold"><span class="material-symbols-outlined text-[15px]" style="font-variation-settings:'FILL' 1">star</span>{{ partner.rating }}</span>
+          </div>
+          <div class="space-y-2 text-[13px] border-t border-gray-100 pt-3">
+            <div class="flex items-center justify-between"><span class="text-gray-400">{{ t('approvals.submitted') }}</span><span class="font-semibold text-gray-800 tabular-nums">{{ date(submittedAt) }}</span></div>
+            <div class="flex items-center justify-between"><span class="text-gray-400">{{ t('approvals.priority') }}</span><span class="font-semibold" :class="priorityMeta.text">{{ priorityMeta.short }}</span></div>
           </div>
         </div>
 
-        <!-- Description -->
-        <div class="bg-white rounded-2xl border border-outline-variant shadow-sm p-6">
-          <h2 class="font-title-sm text-title-sm text-primary mb-4 pb-3 border-b border-outline-variant">وصف الوحدة</h2>
-          <p class="text-body-md text-on-surface leading-relaxed">{{ request.description }}</p>
-        </div>
-
-        <!-- Features -->
-        <div class="bg-white rounded-2xl border border-outline-variant shadow-sm p-6">
-          <h2 class="font-title-sm text-title-sm text-primary mb-4 pb-3 border-b border-outline-variant">المميزات</h2>
-          <div class="flex flex-wrap gap-2">
-            <span v-for="feat in request.features" :key="feat" class="px-3 py-1.5 bg-surface-container rounded-lg text-body-sm text-on-surface font-medium flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[14px] text-primary">check_circle</span>
-              {{ feat }}
-            </span>
-          </div>
+        <!-- Review checklist -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-3">{{ t('approvals.checklist') }}</p>
+          <ul class="space-y-2.5">
+            <li v-for="c in checklist" :key="c.key">
+              <button class="flex items-center gap-2.5 text-[13px] w-full text-start" @click="c.done = !c.done">
+                <span class="material-symbols-outlined text-[20px]" :class="c.done ? 'text-emerald-500' : 'text-gray-300'" :style="c.done ? `font-variation-settings:'FILL' 1` : ''">{{ c.done ? 'check_circle' : 'radio_button_unchecked' }}</span>
+                <span :class="c.done ? 'text-gray-400 line-through' : 'text-gray-700'">{{ t(`approvals.${c.key}`) }}</span>
+              </button>
+            </li>
+          </ul>
         </div>
       </div>
 
-      <!-- Sidebar info -->
-      <div class="space-y-6">
-        <!-- Owner card -->
-        <div class="bg-white rounded-2xl border border-outline-variant shadow-sm p-6">
-          <h2 class="font-title-sm text-title-sm text-primary mb-4 pb-3 border-b border-outline-variant">
-            {{ request.ownerType === 'Company' ? 'بيانات الشركة' : 'بيانات المالك' }}
-          </h2>
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-12 h-12 rounded-xl bg-secondary-container flex items-center justify-center text-primary font-bold">
-              {{ request.ownerType === 'Company' ? '🏢' : initials(request.ownerName) }}
-            </div>
-            <div>
-              <p class="font-title-sm text-title-sm text-on-surface">{{ request.ownerName }}</p>
-              <p class="text-body-sm text-on-surface-variant">{{ request.ownerType === 'Company' ? 'شركة' : 'فرد' }}</p>
-            </div>
+      <!-- Right column -->
+      <div class="space-y-4">
+        <!-- Gallery -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-3">
+          <div class="relative h-[360px] rounded-xl overflow-hidden bg-gray-100">
+            <img :src="images[gallery]?.url" class="w-full h-full object-cover" :alt="unit.name" />
+            <span class="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 rounded-md bg-black/50 text-white text-[12px] font-semibold tabular-nums"><span class="material-symbols-outlined text-[14px]">photo_library</span>{{ gallery + 1 }} / {{ images.length }}</span>
+            <button v-if="images.length > 1" class="absolute top-1/2 -translate-y-1/2 left-3 w-9 h-9 grid place-items-center rounded-full bg-white/85 hover:bg-white text-gray-700 shadow" @click="prevImg"><span class="material-symbols-outlined text-[20px]">chevron_left</span></button>
+            <button v-if="images.length > 1" class="absolute top-1/2 -translate-y-1/2 right-3 w-9 h-9 grid place-items-center rounded-full bg-white/85 hover:bg-white text-gray-700 shadow" @click="nextImg"><span class="material-symbols-outlined text-[20px]">chevron_right</span></button>
           </div>
-          <div class="space-y-3">
-            <div v-for="info in ownerInfo" :key="info.label" class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-[18px] text-on-surface-variant flex-shrink-0">{{ info.icon }}</span>
-              <div>
-                <p class="font-label-caps text-[11px] text-on-surface-variant">{{ info.label }}</p>
-                <p class="text-body-sm text-on-surface" :dir="info.ltr ? 'ltr' : 'rtl'">{{ info.value }}</p>
+          <div v-if="images.length > 1" class="flex gap-2 mt-3 overflow-x-auto pb-1">
+            <button v-for="(img, i) in images" :key="img.id ?? i" class="w-20 h-16 rounded-lg overflow-hidden flex-shrink-0 border-2 transition-colors" :class="i === gallery ? 'border-primary' : 'border-transparent opacity-70 hover:opacity-100'" @click="gallery = i">
+              <img :src="img.url" class="w-full h-full object-cover" />
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabbed info -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-5">
+          <div class="flex items-center gap-1 bg-gray-50 rounded-lg p-1 mb-5 w-fit">
+            <button v-for="tb in tabs" :key="tb.key" class="px-3 py-1.5 rounded-md text-[13px] font-semibold transition-colors" :class="tab === tb.key ? 'bg-white text-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'" @click="tab = tb.key">{{ tb.label }}</button>
+          </div>
+
+          <!-- Property Info -->
+          <div v-if="tab === 'property'">
+            <h3 class="text-[18px] font-bold text-gray-900 text-end">{{ unit.name }}</h3>
+            <p class="text-[13px] text-gray-400 flex items-center gap-1 justify-end mb-3"><span class="material-symbols-outlined text-[16px]">location_on</span>{{ [unit.district, unit.city].filter(Boolean).join(', ') }}</p>
+            <p v-if="unit.description" class="text-[14px] text-gray-600 leading-relaxed text-end mb-5">{{ unit.description }}</p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div v-for="tile in tiles" :key="tile.key" class="bg-gray-50 rounded-xl p-3 text-center">
+                <span class="material-symbols-outlined text-[20px] text-gray-400 mb-1 inline-block">{{ tile.icon }}</span>
+                <p class="text-[15px] font-bold text-gray-900 tabular-nums">{{ tile.value }}</p>
+                <p class="text-[11px] text-gray-400">{{ tile.label }}</p>
               </div>
             </div>
+            <div class="bg-gray-50 rounded-xl py-8 text-center">
+              <span class="material-symbols-outlined text-[28px] text-gray-400">location_on</span>
+              <p class="text-[13px] font-semibold text-gray-600 mt-1">{{ [unit.district, unit.city].filter(Boolean).join(', ') }}</p>
+              <p class="text-[11px] text-gray-400">{{ t('approvals.mapPreview') }}</p>
+            </div>
           </div>
-        </div>
 
-        <!-- Request metadata -->
-        <div class="bg-white rounded-2xl border border-outline-variant shadow-sm p-6">
-          <h2 class="font-title-sm text-title-sm text-primary mb-4 pb-3 border-b border-outline-variant">معلومات الطلب</h2>
-          <div class="space-y-3">
-            <div class="flex justify-between">
-              <span class="text-body-sm text-on-surface-variant">كود الطلب</span>
-              <span class="font-numeric-data text-body-sm font-bold text-primary">{{ request.code }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-body-sm text-on-surface-variant">تاريخ التقديم</span>
-              <span class="font-numeric-data text-body-sm text-on-surface" dir="ltr">{{ request.submittedAt }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-body-sm text-on-surface-variant">نوع الطلب</span>
-              <span class="px-2 py-0.5 rounded-full text-[11px] font-bold" :class="request.ownerType === 'Company' ? 'bg-blue-100 text-blue-700' : 'bg-secondary-container text-on-secondary-container'">
-                {{ request.ownerType === 'Company' ? 'شركة' : 'فرد' }}
+          <!-- Amenities -->
+          <div v-else-if="tab === 'amenities'">
+            <div v-if="amenities.length" class="flex flex-wrap gap-2">
+              <span v-for="(a, i) in amenities" :key="i" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-100 text-[13px] text-gray-700">
+                <span class="material-symbols-outlined text-[16px] text-primary">check</span>{{ a }}
               </span>
             </div>
-            <div class="flex justify-between">
-              <span class="text-body-sm text-on-surface-variant">السعر / ليلة</span>
-              <span class="font-numeric-data text-body-sm font-bold text-on-surface">{{ request.price }} ر.س</span>
-            </div>
+            <p v-else class="text-[13px] text-gray-400 py-6 text-center">{{ t('approvals.noAmenities') }}</p>
           </div>
-        </div>
 
-        <!-- Admin notes -->
-        <div class="bg-white rounded-2xl border border-outline-variant shadow-sm p-6">
-          <h2 class="font-title-sm text-title-sm text-primary mb-4">ملاحظات المراجعة</h2>
-          <textarea
-            v-model="adminNote"
-            class="w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-xl text-body-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-            rows="4"
-            placeholder="اكتب ملاحظاتك هنا..."
-          />
+          <!-- Documents -->
+          <div v-else-if="tab === 'documents'">
+            <ul v-if="documents.length" class="space-y-2">
+              <li v-for="doc in documents" :key="doc.key" class="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-3">
+                <span class="material-symbols-outlined text-[18px] text-gray-400">description</span>
+                <span class="flex-1 text-[13px] text-gray-700">{{ docLabel(doc.key) }}</span>
+                <span class="text-[12px] font-semibold" :class="docMeta(doc.status).cls">{{ docMeta(doc.status).label }}</span>
+              </li>
+            </ul>
+            <p v-else class="text-[13px] text-gray-400 py-6 text-center">{{ t('approvals.noDocuments') }}</p>
+          </div>
+
+          <!-- Timeline -->
+          <div v-else-if="tab === 'timeline'">
+            <ul class="space-y-4">
+              <li v-for="(ev, i) in timeline" :key="i" class="flex gap-3">
+                <div class="flex flex-col items-center">
+                  <span class="w-2.5 h-2.5 rounded-full bg-primary mt-1"></span>
+                  <span v-if="i < timeline.length - 1" class="w-px flex-1 bg-gray-200 my-1"></span>
+                </div>
+                <div class="pb-2">
+                  <p class="text-[13px] font-semibold text-gray-800">{{ timelineLabel(ev.type) }}</p>
+                  <p class="text-[11px] text-gray-400 tabular-nums">{{ date(ev.date, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</p>
+                </div>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Reject Modal -->
+    <!-- Sticky decision bar -->
+    <div v-if="unit && unit.approval_status === 'pending'" class="fixed bottom-0 inset-x-0 lg:pl-[240px] bg-white border-t border-gray-200 z-30" :class="dir === 'rtl' ? 'lg:pr-[240px] lg:pl-0' : ''">
+      <div class="px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-[13px] text-gray-400 flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">info</span>{{ t('approvals.reviewNote') }}</p>
+        <div class="flex items-center gap-2">
+          <RouterLink :to="{ name: 'admin-requests' }" class="h-10 px-4 grid place-items-center rounded-lg text-[13px] font-semibold text-gray-600 hover:bg-gray-100">{{ t('approvals.backToList') }}</RouterLink>
+          <button class="inline-flex items-center gap-1.5 h-10 px-5 rounded-lg bg-red-600 text-white text-[13px] font-semibold hover:bg-red-700 disabled:opacity-50" :disabled="busy" @click="showReject = true">
+            <span class="material-symbols-outlined text-[18px]">cancel</span>{{ t('approvals.reject') }}
+          </button>
+          <button class="inline-flex items-center gap-1.5 h-10 px-5 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 disabled:opacity-50" :disabled="busy" @click="approve">
+            <span class="material-symbols-outlined text-[18px]">check_circle</span>{{ t('approvals.approveListing') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reject modal -->
     <Teleport to="body">
-      <div v-if="showRejectModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl border border-outline-variant shadow-xl w-full max-w-md p-6" dir="rtl">
-          <h2 class="font-headline-md text-headline-md text-on-surface mb-2">سبب الرفض</h2>
-          <p class="text-body-sm text-on-surface-variant mb-4">سيتم إرسال هذا السبب للشريك عبر الإشعارات.</p>
-          <textarea
-            v-model="rejectReason"
-            class="w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-xl text-body-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none mb-4"
-            rows="4"
-            placeholder="اذكر سبب الرفض..."
-          />
-          <div class="flex gap-3">
-            <button class="flex-1 py-3 bg-error text-on-error rounded-xl font-bold hover:opacity-90 transition-opacity" @click="reject">رفض الطلب</button>
-            <button class="flex-1 py-3 border border-outline-variant rounded-xl font-bold text-on-surface hover:bg-surface-container transition-colors" @click="showRejectModal = false">إلغاء</button>
+      <div v-if="showReject" class="fixed inset-0 bg-black/40 z-[80] flex items-center justify-center p-4" :dir="dir">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <h3 class="text-[17px] font-bold text-gray-900 mb-3">{{ t('approvals.rejectTitle') }}</h3>
+          <label class="block text-[13px] font-semibold text-gray-700 mb-1.5">{{ t('approvals.rejectReason') }}</label>
+          <textarea v-model="rejectReason" rows="3" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-[14px] outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/40" :placeholder="t('approvals.rejectPlaceholder')"></textarea>
+          <div class="flex gap-3 mt-4">
+            <button class="flex-1 h-11 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50" @click="showReject = false">{{ t('approvals.cancel') }}</button>
+            <button class="flex-1 h-11 rounded-xl bg-red-600 text-white text-[13px] font-semibold hover:bg-red-700 disabled:opacity-50" :disabled="busy || !rejectReason.trim()" @click="reject">{{ t('approvals.reject') }}</button>
           </div>
         </div>
       </div>
     </Teleport>
+
+    <transition name="fade">
+      <div v-if="toast" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-[90] px-5 py-3 rounded-xl shadow-lg text-white font-semibold text-[13px]" :class="toast.type === 'error' ? 'bg-red-600' : 'bg-primary'">{{ toast.msg }}</div>
+    </transition>
   </AdminLayout>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AdminLayout from '@/layouts/AdminLayout.vue'
+import { adminApi } from '@/api/admin'
+import { useAdminI18n } from '@/i18n/admin'
+import { useAdminFormat } from '@/composables/useAdminFormat'
+import { useAdminBadges } from '@/composables/useAdminBadges'
 
 const route = useRoute()
 const router = useRouter()
+const { t, dir } = useAdminI18n()
+const { int, date } = useAdminFormat()
+const { load: reloadBadges } = useAdminBadges()
 
-const showRejectModal = ref(false)
-const adminNote = ref('')
+const routeId = route.params.id
+const loading = ref(true)
+const busy = ref(false)
+const unit = ref(null)
+const partner = ref({ name: '—', type: 'individual', city: '', is_verified: false, rating: null, documents: [] })
+const submittedAt = ref(null)
+const timeline = ref([])
+const gallery = ref(0)
+const tab = ref('property')
+const showReject = ref(false)
 const rejectReason = ref('')
+const toast = ref(null)
 
-// Mock data — in production this would be fetched via API using route.params.id
-const request = ref({
-  id: Number(route.params.id),
-  code: 'C7HKHYA4',
-  unitName: 'فيلا الياسمين - النموذج أ',
-  ownerName: 'محمد الفهد',
-  ownerType: 'Individual',
-  status: 'pending',
-  statusLabel: 'قيد المراجعة',
-  price: '4,500.00',
-  submittedAt: '2026-06-15',
-  description: 'فيلا فاخرة تقع في حي الملقا بالرياض، تتميز بتصميم عصري وإطلالة رائعة على الحديقة الداخلية. مجهزة بالكامل بأثاث فاخر وتضم 4 غرف نوم وصالة كبيرة ومسبح خاص.',
-  features: ['مسبح خاص', 'واي فاي', 'موقف سيارات', 'مطبخ كامل', 'غرفة تجميز', 'شاشة ذكية', 'مكيف مركزي', 'باحة خارجية'],
+const checklist = ref([
+  { key: 'chkPhotos', done: false },
+  { key: 'chkDocuments', done: false },
+  { key: 'chkPricing', done: false },
+  { key: 'chkLocation', done: false },
+  { key: 'chkAmenities', done: false },
+])
+
+const tabs = computed(() => [
+  { key: 'amenities', label: t('approvals.tabAmenities') },
+  { key: 'documents', label: t('approvals.tabDocuments') },
+  { key: 'timeline', label: t('approvals.tabTimeline') },
+  { key: 'property', label: t('approvals.tabProperty') },
+])
+
+const images = computed(() => unit.value?.images ?? [])
+const documents = computed(() => partner.value?.documents ?? [])
+const amenities = computed(() => (unit.value?.amenities ?? unit.value?.features ?? []).map((a) => a?.label || a?.name || a).filter(Boolean))
+
+const tiles = computed(() => [
+  { key: 'bed', icon: 'bed', value: unit.value?.bedrooms ?? unit.value?.beds ?? '—', label: t('approvals.bedrooms') },
+  { key: 'bath', icon: 'bathtub', value: unit.value?.bathrooms ?? '—', label: t('approvals.bathrooms') },
+  { key: 'cap', icon: 'group', value: t('approvals.guests', { n: unit.value?.capacity ?? 0 }), label: t('approvals.capacity') },
+  { key: 'area', icon: 'straighten', value: unit.value?.area ? `${unit.value.area} m²` : '—', label: t('approvals.size') },
+])
+
+const partnerInitials = computed(() => (partner.value?.name || '?').split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase())
+
+const priorityMeta = computed(() => {
+  const days = submittedAt.value ? (Date.now() - new Date(submittedAt.value).getTime()) / 86400000 : 0
+  if (days >= 5) return { label: t('approvals.prioHigh'), short: t('approvals.prioHighShort'), text: 'text-red-500', dot: 'bg-red-500' }
+  if (days >= 2) return { label: t('approvals.prioNormal'), short: t('approvals.prioNormalShort'), text: 'text-emerald-600', dot: 'bg-emerald-500' }
+  return { label: t('approvals.prioLow'), short: t('approvals.prioLowShort'), text: 'text-gray-400', dot: 'bg-gray-400' }
 })
 
-const unitDetails = [
-  { label: 'نوع الوحدة',    value: 'فيلا' },
-  { label: 'المدينة',       value: 'الرياض' },
-  { label: 'الحي',          value: 'حي الملقا' },
-  { label: 'عدد الغرف',     value: '4 غرف نوم' },
-  { label: 'السعة',         value: '10 أشخاص' },
-  { label: 'الحد الأدنى',   value: 'ليلتان' },
-]
+const docLabels = { identity: 'docIdentity', bank: 'docBank', ownership: 'docOwnership' }
+const docLabel = (k) => t(`approvals.${docLabels[k] || 'docIdentity'}`)
+function docMeta(status) {
+  if (status === 'verified') return { label: t('approvals.docVerified'), cls: 'text-emerald-600' }
+  if (status === 'pending') return { label: t('approvals.docPending'), cls: 'text-amber-600' }
+  return { label: t('approvals.docMissing'), cls: 'text-gray-400' }
+}
+const tlLabels = { submitted: 'tlSubmitted', approved: 'tlApproved', rejected: 'tlRejected' }
+const timelineLabel = (ty) => t(`approvals.${tlLabels[ty] || 'tlSubmitted'}`)
 
-const ownerInfo = [
-  { label: 'رقم الجوال',    icon: 'phone',     value: '+966501234567', ltr: true },
-  { label: 'رقم الهوية',    icon: 'badge',     value: '1023456789',    ltr: true },
-  { label: 'تاريخ التسجيل', icon: 'calendar_today', value: '2026-05-20', ltr: true },
-]
+function prevImg() { gallery.value = (gallery.value - 1 + images.value.length) % images.value.length }
+function nextImg() { gallery.value = (gallery.value + 1) % images.value.length }
+function showToast(msg, type = 'success') { toast.value = { msg, type }; setTimeout(() => (toast.value = null), 2400) }
 
-function initials(name) {
-  return name.split(' ').slice(0, 2).map(w => w[0]).join('')
+async function load() {
+  loading.value = true
+  try {
+    const { data } = await adminApi.getRequest(routeId)
+    const d = data.data ?? data
+    unit.value = d.unit?.data ?? d.unit
+    partner.value = d.partner ?? partner.value
+    submittedAt.value = d.submitted_at
+    timeline.value = d.timeline ?? []
+  } catch {
+    unit.value = null
+  } finally {
+    loading.value = false
+  }
 }
 
-function statusClass(status) {
-  return {
-    pending:  'bg-amber-100 text-amber-700',
-    approved: 'bg-emerald-100 text-emerald-700',
-    rejected: 'bg-red-100 text-red-700',
-  }[status]
+async function approve() {
+  busy.value = true
+  try {
+    await adminApi.approveRequest(routeId)
+    showToast(t('approvals.approved'))
+    reloadBadges(true)
+    setTimeout(() => router.push({ name: 'admin-requests' }), 800)
+  } catch {
+    showToast(t('approvals.actionError'), 'error')
+  } finally {
+    busy.value = false
+  }
+}
+async function reject() {
+  if (!rejectReason.value.trim()) return
+  busy.value = true
+  try {
+    await adminApi.rejectRequest(routeId, rejectReason.value.trim())
+    showReject.value = false
+    showToast(t('approvals.rejected'))
+    reloadBadges(true)
+    setTimeout(() => router.push({ name: 'admin-requests' }), 800)
+  } catch {
+    showToast(t('approvals.actionError'), 'error')
+  } finally {
+    busy.value = false
+  }
 }
 
-function approve() {
-  request.value.status = 'approved'
-  request.value.statusLabel = 'مقبول'
-}
-
-function reject() {
-  request.value.status = 'rejected'
-  request.value.statusLabel = 'مرفوض'
-  showRejectModal.value = false
-}
+onMounted(load)
 </script>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

@@ -22,6 +22,8 @@ class ReportController extends Controller
             'monthly_revenue'  => $this->monthlyRevenue(),
             'units_by_status'  => $this->unitsByStatus(),
             'bookings_by_city' => $this->bookingsByCity(),
+            'revenue_by_city'  => $this->revenueByCity(),
+            'booking_status'   => $this->bookingStatus(),
             'top_units'        => $this->topUnits(),
         ]);
     }
@@ -35,10 +37,14 @@ class ReportController extends Controller
             ->selectRaw('AVG(DATEDIFF(end_date, start_date)) as a')
             ->value('a');
 
+        $totalRevenue = round((float) (clone $confirmed)->sum('total_amount'), 2);
+
         return [
-            'total_revenue'    => round((float) (clone $confirmed)->sum('total_amount'), 2),
+            'total_revenue'    => $totalRevenue,
             // Mamsa's 2% cut of partner rentals (frozen per booking).
             'total_commission' => round((float) (clone $confirmed)->sum('commission_amount'), 2),
+            'total_bookings'   => Booking::count(),
+            'avg_monthly_revenue' => round($totalRevenue / 12, 2),
             'occupancy_rate'   => $this->occupancyRate(),
             'avg_nights'       => round($avgNights, 1),
             'avg_rating'       => round((float) Review::avg('rating'), 1),
@@ -62,28 +68,59 @@ class ReportController extends Controller
         return (int) round(($occupied / $approved) * 100);
     }
 
-    /** @return array<int, array{month: string, label: string, total: float}> */
+    /** @return array<int, array{month: string, label: string, total: float, commission: float}> */
     private function monthlyRevenue(): array
     {
         $rows = Booking::where('status', 'confirmed')
-            ->where('created_at', '>=', now()->subMonths(5)->startOfMonth())
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, SUM(total_amount) as total")
+            ->where('created_at', '>=', now()->subMonths(11)->startOfMonth())
+            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, SUM(total_amount) as total, SUM(commission_amount) as commission")
             ->groupBy('ym')
-            ->pluck('total', 'ym');
+            ->get()
+            ->keyBy('ym');
 
         $months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
         $series = [];
-        for ($i = 5; $i >= 0; $i--) {
+        for ($i = 11; $i >= 0; $i--) {
             $date = now()->subMonths($i);
+            $key = $date->format('Y-m');
             $series[] = [
-                'month' => $date->format('Y-m'),
-                'label' => $months[$date->month - 1],
-                'total' => round((float) ($rows[$date->format('Y-m')] ?? 0), 2),
+                'month'      => $key,
+                'label'      => $months[$date->month - 1],
+                'total'      => round((float) ($rows[$key]->total ?? 0), 2),
+                'commission' => round((float) ($rows[$key]->commission ?? 0), 2),
             ];
         }
 
         return $series;
+    }
+
+    /** @return array<int, array{city: string, total: float}> */
+    private function revenueByCity(): array
+    {
+        return Booking::query()
+            ->where('bookings.status', 'confirmed')
+            ->join('units', 'units.id', '=', 'bookings.unit_id')
+            ->whereNotNull('units.city')
+            ->selectRaw('units.city as city, SUM(bookings.total_amount) as total')
+            ->groupBy('units.city')
+            ->orderByDesc('total')
+            ->limit(6)
+            ->get()
+            ->map(fn ($r) => ['city' => $r->city, 'total' => round((float) $r->total, 2)])
+            ->all();
+    }
+
+    /** @return array<string, int> */
+    private function bookingStatus(): array
+    {
+        $c = Booking::query()->selectRaw('status, COUNT(*) as c')->groupBy('status')->pluck('c', 'status');
+
+        return [
+            'confirmed' => (int) ($c['confirmed'] ?? 0),
+            'pending'   => (int) ($c['pending'] ?? 0),
+            'cancelled' => (int) ($c['cancelled'] ?? 0),
+        ];
     }
 
     /** @return array<string, int> */

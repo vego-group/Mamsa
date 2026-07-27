@@ -204,6 +204,21 @@ const router = createRouter({
           name: 'admin-settings',
           component: () => import('@/views/admin/AdminSettingsView.vue'),
         },
+        {
+          path: 'cancellations',
+          name: 'admin-cancellations',
+          component: () => import('@/views/admin/AdminCancellationsView.vue'),
+        },
+        {
+          path: 'notifications',
+          name: 'admin-notifications',
+          component: () => import('@/views/admin/AdminNotificationsView.vue'),
+        },
+        {
+          path: 'profile',
+          name: 'admin-profile',
+          component: () => import('@/views/admin/AdminProfileView.vue'),
+        },
       ],
     },
   ],

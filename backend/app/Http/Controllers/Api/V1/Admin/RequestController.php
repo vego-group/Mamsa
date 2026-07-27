@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
+use App\Models\PartnerDetail;
 use App\Models\Unit;
 use App\Notifications\UnitReviewResult;
 use App\Traits\ApiResponse;
@@ -66,9 +67,51 @@ class RequestController extends Controller
         ]);
     }
 
-    public function show(Unit $unit): UnitResource
+    public function show(Unit $unit): JsonResponse
     {
-        return new UnitResource($unit->load(['images', 'features', 'owner.partnerDetail']));
+        $unit->load(['images', 'features', 'owner.partnerDetail']);
+        $owner = $unit->owner;
+        $detail = $owner?->partnerDetail;
+
+        $rating = $owner ? $owner->unitReviews()->avg('rating') : null;
+
+        $timeline = [
+            ['type' => 'submitted', 'date' => $unit->created_at?->toIso8601String()],
+        ];
+        if ($unit->approval_status !== 'pending') {
+            $timeline[] = ['type' => $unit->approval_status, 'date' => $unit->updated_at?->toIso8601String()];
+        }
+
+        return $this->success([
+            'unit'         => new UnitResource($unit),
+            'partner'      => [
+                'id'          => $owner?->id,
+                'name'        => $owner?->name ?? '—',
+                'type'        => $detail?->type ?? 'individual',
+                'city'        => $unit->city,
+                'is_verified' => $detail?->status === PartnerDetail::STATUS_APPROVED,
+                'rating'      => $rating !== null ? round((float) $rating, 1) : null,
+                'documents'   => $this->partnerDocuments($detail),
+            ],
+            'submitted_at' => $unit->created_at?->toIso8601String(),
+            'timeline'     => $timeline,
+        ]);
+    }
+
+    /** @return array<int, array{key: string, status: string}> */
+    private function partnerDocuments(?PartnerDetail $d): array
+    {
+        if (! $d) {
+            return [];
+        }
+        $verified = $d->status === PartnerDetail::STATUS_APPROVED;
+        $state = fn (bool $has) => ! $has ? 'missing' : ($verified ? 'verified' : 'pending');
+
+        return [
+            ['key' => 'identity',  'status' => $state((bool) ($d->national_id || $d->cr_number))],
+            ['key' => 'bank',      'status' => $state((bool) $d->iban)],
+            ['key' => 'ownership', 'status' => $state((bool) ($d->authorization_letter_file || $d->vat_certificate_file || $d->operator_license_file))],
+        ];
     }
 
     public function approve(Unit $unit): JsonResponse
@@ -117,7 +160,7 @@ class RequestController extends Controller
         }
     }
 
-    /** @return array<string,int> */
+    /** @return array<string, int|float> */
     private function stats(): array
     {
         $byStatus = Unit::query()
@@ -126,11 +169,23 @@ class RequestController extends Controller
             ->groupBy('approval_status')
             ->pluck('c', 'approval_status');
 
+        // updated_at is the review timestamp proxy (units carry no reviewed_at).
+        $reviewedToday = fn (string $status) => Unit::where('approval_status', $status)
+            ->whereDate('updated_at', today())->count();
+
+        // Avg hours from submission → review, for units already actioned.
+        $avgHours = (float) Unit::whereIn('approval_status', ['approved', 'rejected'])
+            ->selectRaw('AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as h')
+            ->value('h');
+
         return [
-            'total'    => (int) $byStatus->sum(),
-            'pending'  => (int) ($byStatus['pending'] ?? 0),
-            'approved' => (int) ($byStatus['approved'] ?? 0),
-            'rejected' => (int) ($byStatus['rejected'] ?? 0),
+            'total'          => (int) $byStatus->sum(),
+            'pending'        => (int) ($byStatus['pending'] ?? 0),
+            'approved'       => (int) ($byStatus['approved'] ?? 0),
+            'rejected'       => (int) ($byStatus['rejected'] ?? 0),
+            'approved_today' => $reviewedToday('approved'),
+            'rejected_today' => $reviewedToday('rejected'),
+            'avg_review_hours' => round($avgHours, 1),
         ];
     }
 }

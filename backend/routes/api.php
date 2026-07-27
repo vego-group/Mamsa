@@ -213,15 +213,19 @@ Route::prefix('v1')->group(function () {
             Route::prefix('users')->name('users.')->group(function () {
                 Route::get('/', [Admin\UserController::class, 'index'])->name('index');
                 Route::post('/', [Admin\UserController::class, 'store'])->name('store');
+                Route::get('{user}', [Admin\UserController::class, 'show'])->name('show');
                 Route::patch('{user}/status', [Admin\UserController::class, 'updateStatus'])->name('status');
                 Route::delete('{user}', [Admin\UserController::class, 'destroy'])->name('destroy');
             });
 
-            // Partner applications review (approve/reject + result email)
+            // Partner management + applications review (approve/reject/verify/disable)
             Route::prefix('partners')->name('partners.')->group(function () {
                 Route::get('/', [Admin\PartnerController::class, 'index'])->name('index');
+                Route::get('{user}', [Admin\PartnerController::class, 'show'])->name('show');
                 Route::post('{user}/approve', [Admin\PartnerController::class, 'approve'])->name('approve');
                 Route::post('{user}/reject', [Admin\PartnerController::class, 'reject'])->name('reject');
+                Route::post('{user}/active', [Admin\PartnerController::class, 'setActive'])->name('active');
+                Route::post('{user}/revoke', [Admin\PartnerController::class, 'revoke'])->name('revoke');
             });
 
             Route::prefix('requests')->name('requests.')->group(function () {
@@ -235,6 +239,7 @@ Route::prefix('v1')->group(function () {
             // Editorial "featured" toggle for the storefront home section.
             Route::patch('units/{unit}/featured', [Admin\UnitController::class, 'setFeatured'])->name('units.featured');
             Route::get('bookings', [Admin\BookingController::class, 'index'])->name('bookings.index');
+            Route::get('cancellations', [Admin\CancellationController::class, 'index'])->name('cancellations.index');
             Route::get('reports', [Admin\ReportController::class, 'index'])->name('reports');
 
             // Read-only since the 2026-07-18 fee revert (only the fixed VAT
