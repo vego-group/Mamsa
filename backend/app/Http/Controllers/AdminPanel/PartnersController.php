@@ -14,7 +14,6 @@ use App\Support\PhoneNumber;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Role;
 
@@ -373,6 +372,7 @@ class PartnersController extends Controller
             return $path;
         }
 
-        return Storage::url($path);
+        // Public storage symlink — not the default (s3) disk (adapter not installed).
+        return asset('storage/'.ltrim($path, '/'));
     }
 }
