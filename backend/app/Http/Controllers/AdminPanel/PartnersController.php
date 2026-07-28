@@ -365,14 +365,8 @@ class PartnersController extends Controller
 
     private function fileUrl(?string $path): ?string
     {
-        if (blank($path)) {
-            return null;
-        }
-        if (str_starts_with($path, 'http')) {
-            return $path;
-        }
-
-        // Public storage symlink — not the default (s3) disk (adapter not installed).
-        return asset('storage/'.ltrim($path, '/'));
+        // KYC doc columns store a DashboardUpload id (file_...) → resolve to its
+        // real public path.
+        return \App\Models\DashboardUpload::resolveUrl($path);
     }
 }
