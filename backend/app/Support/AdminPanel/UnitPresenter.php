@@ -29,13 +29,13 @@ class UnitPresenter
 
         return Unit::query()->with(['owner', 'images'])
             ->withCount(['bookings as bookings_count'])
-            ->withSum(['bookings as revenue' => fn ($q) => $q->where('status', 'confirmed')], 'total_amount')
+            ->withSum(['bookings as revenue' => fn ($q) => $q->whereIn('status', Booking::REVENUE_STATUSES)], 'total_amount')
             ->withAvg(['reviews as rating'], 'rating')
             ->withCount('reviews as reviews_count')
             ->addSelect(['booked_nights' => Booking::query()
                 ->selectRaw($this->nightsSql())
                 ->whereColumn('unit_id', 'units.id')
-                ->where('status', 'confirmed')
+                ->whereIn('status', Booking::REVENUE_STATUSES)
                 ->where('start_date', '>=', $since)]);
     }
 

@@ -81,7 +81,7 @@ class CancellationsController extends Controller
             'byGuest'          => $guest,
             'byHost'           => $host,
             'totalRefunds'     => $this->money($totalRefunds),
-            'financialImpact'  => $this->money(Booking::where('status', 'cancelled')->sum('commission_amount')),
+            'financialImpact'  => $this->money($this->commissionSum(Booking::where('status', 'cancelled'))),
             'hostCancellations'=> $host,
             'refundBreakdown'  => $this->refundBreakdown($total),
             'trend'            => $this->trend(),

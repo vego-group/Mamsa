@@ -62,7 +62,7 @@ class UsersController extends Controller
         // active + pendingActivation + disabled === total exact.
         $disabled = $total - $active - $pending;
 
-        $spend = (float) Booking::where('status', 'confirmed')
+        $spend = (float) Booking::query()->revenue()
             ->whereIn('user_id', (clone $base)->select('users.id'))
             ->sum('total_amount');
 
@@ -183,7 +183,7 @@ class UsersController extends Controller
         return User::query()->role('User', 'web')
             ->withCount('bookings')
             ->withCount(['bookings as active_bookings_count' => fn ($q) => $q->whereIn('status', ['pending', 'confirmed'])])
-            ->withSum(['bookings as total_spent' => fn ($q) => $q->where('status', 'confirmed')], 'total_amount')
+            ->withSum(['bookings as total_spent' => fn ($q) => $q->whereIn('status', Booking::REVENUE_STATUSES)], 'total_amount')
             ->addSelect(['city' => Booking::query()
                 ->select('units.city')
                 ->join('units', 'units.id', '=', 'bookings.unit_id')

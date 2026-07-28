@@ -14,6 +14,35 @@ class Booking extends Model
     public const STATUS_COMPLETED = 'completed';
     public const STATUS_CANCELLED = 'cancelled';
 
+    /**
+     * Bookings that represent realized revenue: a paid, upcoming stay
+     * (confirmed) OR a paid, finished stay (completed). Reports/dashboards must
+     * sum over BOTH — counting only `confirmed` drops every finished stay.
+     */
+    public const REVENUE_STATUSES = [self::STATUS_CONFIRMED, self::STATUS_COMPLETED];
+
+    /** Mamsa's commission = 2% of the rental subtotal (frozen per booking). */
+    public const COMMISSION_RATE = 0.02;
+
+    /** @param \Illuminate\Database\Eloquent\Builder $q */
+    public function scopeRevenue($q)
+    {
+        // Qualify the column — this scope is used in queries joined to `units`,
+        // which also has a `status` column (would otherwise be ambiguous).
+        return $q->whereIn('bookings.status', self::REVENUE_STATUSES);
+    }
+
+    /**
+     * SQL for a booking's effective commission: the frozen amount when it was
+     * captured, otherwise 2% of the subtotal (historical bookings predate the
+     * frozen column, so `SUM(commission_amount)` alone reads ~0).
+     */
+    public static function commissionExpr(string $table = 'bookings'): string
+    {
+        return "(CASE WHEN {$table}.commission_amount > 0 THEN {$table}.commission_amount"
+            ." ELSE ROUND(COALESCE({$table}.subtotal, 0) * ".self::COMMISSION_RATE.", 2) END)";
+    }
+
     protected $fillable = [
         'unit_id',
         'user_id',

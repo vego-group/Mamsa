@@ -10,6 +10,7 @@ use App\Models\Review;
 use App\Models\Unit;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
@@ -31,25 +32,35 @@ class ReportController extends Controller
     /** @return array<string, mixed> */
     private function kpis(): array
     {
-        $confirmed = Booking::where('status', 'confirmed');
+        // Revenue-bearing = paid stays (confirmed + completed). Counting only
+        // 'confirmed' drops every finished stay and reads near-zero.
+        $revenue = Booking::query()->revenue();
 
-        $avgNights = (float) (clone $confirmed)
+        $avgNights = (float) (clone $revenue)
             ->selectRaw('AVG(DATEDIFF(end_date, start_date)) as a')
             ->value('a');
 
-        $totalRevenue = round((float) (clone $confirmed)->sum('total_amount'), 2);
+        $totalRevenue = round((float) (clone $revenue)->sum('total_amount'), 2);
+        $activeMonths = $this->activeMonths();
 
         return [
             'total_revenue'    => $totalRevenue,
-            // Mamsa's 2% cut of partner rentals (frozen per booking).
-            'total_commission' => round((float) (clone $confirmed)->sum('commission_amount'), 2),
+            // Mamsa's 2% cut: frozen amount where captured, else 2% of subtotal.
+            'total_commission' => round((float) (clone $revenue)->sum(DB::raw(Booking::commissionExpr())), 2),
             'total_bookings'   => Booking::count(),
-            'avg_monthly_revenue' => round($totalRevenue / 12, 2),
+            'avg_monthly_revenue' => round($totalRevenue / max(1, $activeMonths), 2),
             'occupancy_rate'   => $this->occupancyRate(),
             'avg_nights'       => round($avgNights, 1),
             'avg_rating'       => round((float) Review::avg('rating'), 1),
             'reviews_count'    => Review::count(),
         ];
+    }
+
+    /** Distinct months that actually have revenue — so the average isn't diluted by /12. */
+    private function activeMonths(): int
+    {
+        return max(1, (int) Booking::query()->revenue()
+            ->selectRaw("COUNT(DISTINCT DATE_FORMAT(created_at, '%Y-%m')) as m")->value('m'));
     }
 
     private function occupancyRate(): int
@@ -59,7 +70,7 @@ class ReportController extends Controller
             return 0;
         }
 
-        $occupied = Booking::where('status', 'confirmed')
+        $occupied = Booking::query()->revenue()
             ->whereDate('start_date', '<=', today())
             ->whereDate('end_date', '>=', today())
             ->distinct('unit_id')
@@ -71,9 +82,9 @@ class ReportController extends Controller
     /** @return array<int, array{month: string, label: string, total: float, commission: float}> */
     private function monthlyRevenue(): array
     {
-        $rows = Booking::where('status', 'confirmed')
+        $rows = Booking::query()->revenue()
             ->where('created_at', '>=', now()->subMonths(11)->startOfMonth())
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, SUM(total_amount) as total, SUM(commission_amount) as commission")
+            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, SUM(total_amount) as total, SUM(".Booking::commissionExpr().") as commission")
             ->groupBy('ym')
             ->get()
             ->keyBy('ym');
@@ -99,7 +110,7 @@ class ReportController extends Controller
     private function revenueByCity(): array
     {
         return Booking::query()
-            ->where('bookings.status', 'confirmed')
+            ->whereIn('bookings.status', Booking::REVENUE_STATUSES)
             ->join('units', 'units.id', '=', 'bookings.unit_id')
             ->whereNotNull('units.city')
             ->selectRaw('units.city as city, SUM(bookings.total_amount) as total')
@@ -118,6 +129,7 @@ class ReportController extends Controller
 
         return [
             'confirmed' => (int) ($c['confirmed'] ?? 0),
+            'completed' => (int) ($c['completed'] ?? 0),
             'pending'   => (int) ($c['pending'] ?? 0),
             'cancelled' => (int) ($c['cancelled'] ?? 0),
         ];
@@ -160,7 +172,7 @@ class ReportController extends Controller
     {
         return Unit::query()
             ->withCount('bookings')
-            ->withSum(['bookings as revenue' => fn ($q) => $q->where('status', 'confirmed')], 'total_amount')
+            ->withSum(['bookings as revenue' => fn ($q) => $q->whereIn('status', Booking::REVENUE_STATUSES)], 'total_amount')
             ->having('bookings_count', '>', 0)
             ->orderByDesc('bookings_count')
             ->limit(5)

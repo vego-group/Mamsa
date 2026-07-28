@@ -153,7 +153,7 @@ const revenueKpis = computed(() => [
 ])
 const bookingKpis = computed(() => [
   { key: 'total', label: t('reports.totalBookings'), value: int(k.value.total_bookings) },
-  { key: 'done', label: t('reports.completed'), value: int(data.value.booking_status?.confirmed) },
+  { key: 'done', label: t('reports.completed'), value: int(data.value.booking_status?.completed) },
   { key: 'pend', label: t('reports.pending'), value: int(data.value.booking_status?.pending) },
   { key: 'canc', label: t('reports.cancelled'), value: int(data.value.booking_status?.cancelled) },
 ])
@@ -178,7 +178,8 @@ const unitStatusBars = computed(() => {
 const donutSegs = computed(() => {
   const b = data.value.booking_status || {}
   return [
-    { label: t('reports.completed'), value: b.confirmed || 0, color: '#2e7d46' },
+    { label: t('reports.completed'), value: b.completed || 0, color: '#2e7d46' },
+    { label: t('reports.approved'), value: b.confirmed || 0, color: '#2196a5' },
     { label: t('reports.pending'), value: b.pending || 0, color: '#f5a623' },
     { label: t('reports.cancelled'), value: b.cancelled || 0, color: '#ef5a3c' },
   ]

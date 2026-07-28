@@ -24,9 +24,9 @@ class Analytics
     public function revenueSeries(int $months): array
     {
         $ym   = $this->ymSql('created_at');
-        $rows = Booking::where('status', 'confirmed')
+        $rows = Booking::query()->revenue()
             ->where('created_at', '>=', now()->subMonths($months - 1)->startOfMonth())
-            ->selectRaw("{$ym} as ym, SUM(total_amount) as revenue, SUM(commission_amount) as commission")
+            ->selectRaw("{$ym} as ym, SUM(total_amount) as revenue, SUM(".Booking::commissionExpr().") as commission")
             ->groupBy('ym')->get()->keyBy('ym');
 
         return $this->eachMonth($months, fn ($m) => [
@@ -57,7 +57,7 @@ class Analytics
         $ym       = $this->ymSql('start_date');
         // Alias must NOT be `nights` — that collides with Booking's getNightsAttribute
         // accessor, which would dereference the (unselected) start_date and crash.
-        $rows = Booking::where('status', 'confirmed')
+        $rows = Booking::query()->revenue()
             ->where('start_date', '>=', now()->subMonths($months - 1)->startOfMonth())
             ->selectRaw("{$ym} as ym, {$this->nightsSql()} as total_nights")
             ->groupBy('ym')->get()->keyBy('ym');
@@ -88,10 +88,10 @@ class Analytics
         return $out;
     }
 
-    /** Confirmed revenue grouped by unit city, highest first. */
+    /** Revenue (paid stays) grouped by unit city, highest first. */
     public function revenueByCity(?CarbonInterface $since = null): array
     {
-        return Booking::where('bookings.status', 'confirmed')
+        return Booking::query()->revenue()
             ->when($since, fn ($q) => $q->where('bookings.created_at', '>=', $since))
             ->join('units', 'units.id', '=', 'bookings.unit_id')
             ->selectRaw('units.city as city, SUM(bookings.total_amount) as revenue')
@@ -114,17 +114,18 @@ class Analytics
         return array_map(fn ($status, $count) => ['status' => $status, 'count' => $count], array_keys($slices), array_values($slices));
     }
 
-    /** Top partners by (range-scoped) confirmed revenue. */
+    /** Top partners by (range-scoped) revenue from paid stays. */
     public function topPartners(int $limit = 5, ?CarbonInterface $since = null): array
     {
-        $confirmed = fn ($q) => $q->where('bookings.status', 'confirmed')
+        // Paid stays (confirmed + completed); commission = 2% of subtotal.
+        $revenue = fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)
             ->when($since, fn ($b) => $b->where('bookings.created_at', '>=', $since));
 
         return User::role(['Individual', 'Company'], 'web')->whereHas('partnerDetail')->with('partnerDetail')
             ->withCount('units')
             ->withCount(['unitBookings as bookings_count'])
-            ->withSum(['unitBookings as revenue' => $confirmed], 'total_amount')
-            ->withSum(['unitBookings as commission' => $confirmed], 'commission_amount')
+            ->withSum(['unitBookings as revenue' => $revenue], 'total_amount')
+            ->withSum(['unitBookings as subtotal_sum' => $revenue], 'subtotal')
             ->addSelect(['city' => Unit::query()->select('city')->whereColumn('units.user_id', 'users.id')->latest()->limit(1)])
             ->orderByDesc('revenue')->limit($limit)->get()
             ->map(fn (User $u) => [
@@ -134,7 +135,7 @@ class Analytics
                 'units'      => (int) $u->units_count,
                 'bookings'   => (int) $u->bookings_count,
                 'revenue'    => $this->money($u->revenue),
-                'commission' => $this->money($u->commission),
+                'commission' => $this->money((float) $u->subtotal_sum * Booking::COMMISSION_RATE),
             ])->all();
     }
 
