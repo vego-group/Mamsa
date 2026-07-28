@@ -152,12 +152,8 @@ class UnitPresenter
 
     private function fileUrl(?string $path): ?string
     {
-        if (blank($path)) {
-            return null;
-        }
-
-        // Resolve via the public storage symlink (like unit images) — NOT the
-        // default disk, which is s3 whose adapter isn't installed on the host.
-        return str_starts_with($path, 'http') ? $path : asset('storage/'.ltrim($path, '/'));
+        // permit column stores a DashboardUpload id (file_...) → resolve to its
+        // real public path (NOT the id used as a path, which 404/403s).
+        return \App\Models\DashboardUpload::resolveUrl($path);
     }
 }
