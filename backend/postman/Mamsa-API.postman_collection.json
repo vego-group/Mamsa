@@ -4752,6 +4752,1582 @@
         }
       ],
       "description": "Root-mounted contract API for the Next.js partner dashboard (base = {{dashboard_url}}, NO /api/v1). Cookie-session auth: run Auth → Verify OTP first; the cookie jar carries the session. Error envelope { error:{code,message,fields} }. See docs/NEXTJS-DASHBOARD-*.md."
+    },
+    {
+      "name": "12 — Admin Panel (Next.js BFF)",
+      "item": [
+        {
+          "name": "Auth (OTP → session cookie)",
+          "item": [
+            {
+              "name": "Request OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/auth/request-otp",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "auth",
+                    "request-otp"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Admin phones only (403 otherwise). Staging fixed OTP 111222.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"{{dashboard_phone}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Verify OTP (login)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/auth/verify-otp",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "auth",
+                    "verify-otp"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Sets the httpOnly session cookie — Postman stores it in its jar automatically. No token is returned; every request below relies on the cookie.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"{{dashboard_phone}}\",\n  \"code\": \"{{otp_code}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Me",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/me",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "me"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Restores the session; 401 if the cookie is missing/expired."
+              },
+              "response": []
+            },
+            {
+              "name": "Logout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/auth/logout",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "auth",
+                    "logout"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            }
+          ],
+          "description": "Cookie session (guard: admin-panel). Run Verify OTP once; Postman sends the cookie on the rest."
+        },
+        {
+          "name": "Profile",
+          "item": [
+            {
+              "name": "Get Profile",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/profile",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "profile"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Profile",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/profile",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "profile"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"سوبر أدمن\",\n  \"email\": \"superadmin@mamsaa.sa\",\n  \"preferredLocale\": \"ar\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Sessions",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/profile/sessions",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "profile",
+                    "sessions"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Revoke Session (current → 409)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/profile/sessions/current",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "profile",
+                    "sessions",
+                    "current"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Dashboard",
+          "item": [
+            {
+              "name": "Summary",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/dashboard/summary",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "dashboard",
+                    "summary"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Users",
+          "item": [
+            {
+              "name": "List",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/users?page=1&pageSize=10",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "10"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/users/stats",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "users",
+                    "stats"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Show",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/users/{{user_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "users",
+                    "{{user_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Set Status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/users/{{user_id}}/status",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "users",
+                    "{{user_id}}",
+                    "status"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "status ∈ active | disabled | pending_activation",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"disabled\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete (409 if active bookings)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/users/{{user_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "users",
+                    "{{user_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Invite",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/users/invite",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "users",
+                    "invite"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"+966512345678\",\n  \"name\": \"ضيف مدعو\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Partners",
+          "item": [
+            {
+              "name": "List",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners?page=1&pageSize=10",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "10"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners/stats",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "stats"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Show",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners/{{partner_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "{{partner_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Approve",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners/{{partner_id}}/approve",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "{{partner_id}}",
+                    "approve"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Reject",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners/{{partner_id}}/reject",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "{{partner_id}}",
+                    "reject"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"مستندات ناقصة\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Suspend",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners/{{partner_id}}/suspend",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "{{partner_id}}",
+                    "suspend"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"شكاوى متكررة\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Verify (badge)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners/{{partner_id}}/verify",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "{{partner_id}}",
+                    "verify"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Revoke Verification",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners/{{partner_id}}/revoke-verification",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "{{partner_id}}",
+                    "revoke-verification"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Verify Document",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners/{{partner_id}}/documents/national_id/verify",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "{{partner_id}}",
+                    "documents",
+                    "national_id",
+                    "verify"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Invite",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/partners/invite",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "partners",
+                    "invite"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"+966598765432\",\n  \"type\": \"company\",\n  \"name\": \"شركة\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Units",
+          "item": [
+            {
+              "name": "List",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/units?page=1&pageSize=10",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "units"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "10"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/units/stats",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "units",
+                    "stats"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Show",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/units/{{unit_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "units",
+                    "{{unit_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create (Mamsa-owned)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/units",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "units"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"شاليه ممسى\",\n  \"type\": \"chalet\",\n  \"city\": \"أبها\",\n  \"district\": \"السد\",\n  \"pricePerNight\": 750,\n  \"bedrooms\": 3,\n  \"bathrooms\": 2,\n  \"capacity\": 8,\n  \"sizeSqm\": 200\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Unpublish",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/units/{{unit_id}}/unpublish",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "units",
+                    "{{unit_id}}",
+                    "unpublish"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"مخالفة الشروط\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Approvals",
+          "item": [
+            {
+              "name": "Queue",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/approvals?page=1&pageSize=10",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "approvals"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "10"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/approvals/stats",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "approvals",
+                    "stats"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Detail (embeds UnitDetail)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/approvals/{{unit_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "approvals",
+                    "{{unit_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Approve",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/approvals/{{unit_id}}/approve",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "approvals",
+                    "{{unit_id}}",
+                    "approve"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Reject",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/approvals/{{unit_id}}/reject",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "approvals",
+                    "{{unit_id}}",
+                    "reject"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"الصور غير واضحة\",\n  \"notes\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Bookings (read-only)",
+          "item": [
+            {
+              "name": "List",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/bookings?page=1&pageSize=10",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "bookings"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "10"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Counts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/bookings/counts",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "bookings",
+                    "counts"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/bookings/stats",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "bookings",
+                    "stats"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Show",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/bookings/{{booking_id}}",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "bookings",
+                    "{{booking_id}}"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Cancellations",
+          "item": [
+            {
+              "name": "List",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/cancellations?page=1&pageSize=10",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "cancellations"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "10"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/cancellations/stats",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "cancellations",
+                    "stats"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "High-risk Partners",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/cancellations/high-risk-partners",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "cancellations",
+                    "high-risk-partners"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Retry Refund (409 if none failed)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/cancellations/{{booking_id}}/retry-refund",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "cancellations",
+                    "{{booking_id}}",
+                    "retry-refund"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Reports",
+          "item": [
+            {
+              "name": "Summary",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/reports/summary?range=1y",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "reports",
+                    "summary"
+                  ],
+                  "query": [
+                    {
+                      "key": "range",
+                      "value": "1y"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "range ∈ 6m | 1y | all"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Notifications",
+          "item": [
+            {
+              "name": "List",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/notifications",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "notifications"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Unread Count (bare number)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/notifications/unread-count",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "notifications",
+                    "unread-count"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Read All",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/notifications/read-all",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "notifications",
+                    "read-all"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Read One",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{dashboard_url}}/admin/notifications/{{notification_id}}/read",
+                  "host": [
+                    "{{dashboard_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "notifications",
+                    "{{notification_id}}",
+                    "read"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ],
+      "description": "Admin dashboard BFF (BACKEND_SPEC.md), root-mounted under {{dashboard_url}}/admin/*. Cookie session (no Bearer) — run Auth → Verify OTP first; Postman carries the cookie. camelCase, {items,total,page,pageSize} lists, flat {message,code} errors."
     }
   ],
   "variable": [
@@ -4850,6 +6426,10 @@
     {
       "key": "upload_url",
       "value": ""
+    },
+    {
+      "key": "partner_id",
+      "value": "1"
     }
   ]
 }
