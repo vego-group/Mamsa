@@ -9,7 +9,6 @@ use App\Models\Booking;
 use App\Models\Unit;
 use App\Support\Media;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Single source of truth for the admin-panel Unit / UnitDetail shapes
@@ -157,6 +156,8 @@ class UnitPresenter
             return null;
         }
 
-        return str_starts_with($path, 'http') ? $path : Storage::url($path);
+        // Resolve via the public storage symlink (like unit images) — NOT the
+        // default disk, which is s3 whose adapter isn't installed on the host.
+        return str_starts_with($path, 'http') ? $path : asset('storage/'.ltrim($path, '/'));
     }
 }
