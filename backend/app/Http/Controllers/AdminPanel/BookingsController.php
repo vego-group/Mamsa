@@ -1,0 +1,187 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers\AdminPanel;
+
+use App\Models\Booking;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+/**
+ * Bookings — BACKEND_SPEC §5.8 (read-only for admin). commission = 2% of total,
+ * partnerShare = total − commission; policySnapshot is frozen at payment time.
+ */
+class BookingsController extends Controller
+{
+    private const SORT = [
+        'total'     => 'total_amount',
+        'checkIn'   => 'start_date',
+        'createdAt' => 'created_at',
+    ];
+
+    public function index(Request $request): JsonResponse
+    {
+        $args  = $this->listArgs($request);
+        $query = Booking::query()->with(['unit.owner', 'user', 'payment']);
+
+        if ($status = $this->cleanParam($request->query('status'))) {
+            $query->where('status', $status === 'pending_payment' ? 'pending' : $status);
+        }
+        if ($unitId = $this->cleanParam($request->query('unitId'))) {
+            $query->where('unit_id', $unitId);
+        }
+        if ($userId = $this->cleanParam($request->query('userId'))) {
+            $query->where('user_id', $userId);
+        }
+        if ($city = $this->cleanParam($request->query('city'))) {
+            $query->whereHas('unit', fn ($u) => $u->where('city', $city));
+        }
+        if ($partnerId = $this->cleanParam($request->query('partnerId'))) {
+            $query->whereHas('unit', fn ($u) => $u->where('user_id', $partnerId));
+        }
+        if ($from = $this->cleanParam($request->query('from'))) {
+            $query->whereDate('start_date', '>=', $from);
+        }
+        if ($to = $this->cleanParam($request->query('to'))) {
+            $query->whereDate('start_date', '<=', $to);
+        }
+        if ($args['search'] !== null) {
+            $s = $args['search'];
+            $query->where(function ($q) use ($s) {
+                if (ctype_digit($s)) {
+                    $q->orWhere('id', (int) $s);
+                }
+                $q->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$s}%")->orWhere('phone', 'like', "%{$s}%"))
+                  ->orWhereHas('unit', fn ($u) => $u->where('unit_name', 'like', "%{$s}%"));
+            });
+        }
+
+        $page = $this->queryList($query, $args, [], self::SORT, ['created_at', 'desc']);
+
+        return $this->items($page, fn (Booking $b) => $this->row($b));
+    }
+
+    /** GET /admin/bookings/counts — per-status counts; the four sum to `all`. */
+    public function counts(): JsonResponse
+    {
+        $raw = Booking::query()->selectRaw('status, COUNT(*) c')->groupBy('status')->pluck('c', 'status');
+
+        $out = ['all' => 0, 'pending_payment' => 0, 'confirmed' => 0, 'completed' => 0, 'cancelled' => 0];
+        foreach ($raw as $status => $c) {
+            $out[$this->bookingStatus($status)] += (int) $c;
+            $out['all'] += (int) $c;
+        }
+
+        return response()->json($out);
+    }
+
+    public function stats(): JsonResponse
+    {
+        $confirmed = Booking::where('status', 'confirmed');
+        $revenue   = (float) (clone $confirmed)->sum('total_amount');
+        $count     = (int) (clone $confirmed)->count();
+
+        return response()->json([
+            'totalRevenue'    => $this->money($revenue),
+            'commission'      => $this->money((clone $confirmed)->sum('commission_amount')),
+            'avgBookingValue' => $count > 0 ? $this->money($revenue / $count) : 0.0,
+        ]);
+    }
+
+    public function show(string $id): JsonResponse
+    {
+        $b = Booking::query()->with(['unit.owner', 'user', 'payment'])->whereKey($id)->first();
+
+        if (! $b) {
+            $this->fail('NOT_FOUND', 'الحجز غير موجود', 404);
+        }
+
+        return response()->json(array_merge($this->row($b), [
+            'policySnapshot' => $this->policySnapshot($b),
+            'timeline'       => $this->timeline($b),
+        ]));
+    }
+
+    /** @return array<string, mixed> */
+    private function row(Booking $b): array
+    {
+        $total      = (float) $b->total_amount;
+        $commission = $this->commissionOf($total, $b->commission_amount);
+
+        return [
+            'id'            => (string) $b->id,
+            'code'          => $this->code('BKG', $b->id, 4),
+            'guestId'       => (string) $b->user_id,
+            'guestName'     => $b->user?->name ?? '',
+            'guestPhone'    => (string) ($b->user?->phone ?? ''),
+            'unitId'        => (string) $b->unit_id,
+            'unitName'      => $b->unit?->unit_name ?? '',
+            'unitCity'      => $b->unit?->city ?? '',
+            'partnerId'     => (string) ($b->unit?->user_id ?? ''),
+            'partnerName'   => $b->unit?->owner?->name ?? '',
+            'checkIn'       => $this->iso($b->start_date),
+            'checkOut'      => $this->iso($b->end_date),
+            'nights'        => (int) $b->nights,
+            'guests'        => (int) $b->guests,
+            'total'         => $this->money($total),
+            'commission'    => $commission,
+            'partnerShare'  => $this->money($total - $commission),
+            'nightlyRate'   => (float) $b->nightly_rate,
+            'paymentMethod' => $b->payment?->payment_method ?? '',
+            // Refunds are tracked via refunded_amount, not a 'refunded' status.
+            'paymentStatus' => (float) ($b->payment?->refunded_amount ?? 0) > 0
+                ? 'refunded'
+                : $this->paymentStatus($b->payment?->payment_status),
+            'moyasarRef'    => $b->payment?->moyasar_id,
+            'status'        => $this->bookingStatus($b->status),
+            'createdAt'     => $this->iso($b->created_at),
+            'mamsaOwned'    => false,
+        ];
+    }
+
+    /** Cancellation policy frozen at payment time (§5.8). */
+    private function policySnapshot(Booking $b): array
+    {
+        $snap  = $b->cancellation_snapshot ?? [];
+        $tiers = array_map(fn ($t) => [
+            'label'         => $t['label'] ?? $t['tier_label'] ?? '',
+            'refundPercent' => (int) ($t['refund_percent'] ?? $t['refundPercent'] ?? 0),
+        ], $snap['tiers'] ?? []);
+
+        $name = $snap['policy_key'] ?? 'moderate';
+
+        return [
+            'name'       => in_array($name, ['flexible', 'moderate', 'strict'], true) ? $name : 'moderate',
+            'capturedAt' => $this->iso($b->payment?->paid_at ?? $b->created_at),
+            'tiers'      => $tiers,
+        ];
+    }
+
+    /** Ordered lifecycle events; state ∈ done | current | cancelled. */
+    private function timeline(Booking $b): array
+    {
+        $t   = [];
+        $add = function (string $label, mixed $at, string $state) use (&$t) {
+            $t[] = ['id' => (string) (count($t) + 1), 'label' => $label, 'at' => $this->iso($at), 'state' => $state];
+        };
+
+        $add('إنشاء الحجز', $b->created_at, 'done');
+
+        if ($b->payment?->paid_at) {
+            $add('تأكيد الدفع', $b->payment->paid_at, 'done');
+        }
+
+        if ($b->status === 'cancelled') {
+            $add('إلغاء الحجز', $b->cancelled_at ?? $b->updated_at, 'cancelled');
+
+            return $t;
+        }
+
+        $add('تسجيل الوصول', $b->start_date, $b->start_date && $b->start_date->isPast() ? 'done' : 'current');
+        $add('تسجيل المغادرة', $b->end_date, $b->end_date && $b->end_date->isPast() ? 'done' : 'current');
+
+        return $t;
+    }
+}

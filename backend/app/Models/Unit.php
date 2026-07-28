@@ -46,6 +46,7 @@ class Unit extends Model
         'checkout_time',
         'calendar_token',
         'ical_import_url',
+        'mamsa_owned',
     ];
 
     protected $casts = [
@@ -57,6 +58,7 @@ class Unit extends Model
         'beds'     => 'integer',
         'bathrooms' => 'integer',
         'is_featured' => 'boolean',
+        'mamsa_owned' => 'boolean',
     ];
 
     public function owner(): BelongsTo

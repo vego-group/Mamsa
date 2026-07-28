@@ -34,5 +34,13 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinutes(10, 3)->by('pd-otp:'.($phone ?: $request->ip()));
         });
+
+        // Admin-panel OTP sends: 3 per phone per 10 minutes (BACKEND_SPEC §3);
+        // the per-day caps live in OtpService::enforceDailyCaps().
+        RateLimiter::for('ap-otp', function (Request $request) {
+            $phone = preg_replace('/\D+/', '', (string) $request->input('phone'));
+
+            return Limit::perMinutes(10, 3)->by('ap-otp:'.($phone ?: $request->ip()));
+        });
     }
 }

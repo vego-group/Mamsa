@@ -16,6 +16,8 @@ return [
         'auth/*', 'me', 'me/*', 'overview', 'units', 'units/*',
         'bookings', 'bookings/*', 'reports/*', 'notifications',
         'notifications/*', 'uploads/*', 'webhooks/*',
+        // Admin-panel (Next.js) BFF — root-mounted under /admin/*, cookie-credentialed.
+        'admin/*',
     ],
 
     'allowed_methods' => ['*'],

@@ -21,12 +21,17 @@ class PartnerDetail extends Model
         'vat_certificate_file',
         'operator_license_file',
         'status',
+        'verified_at',
         'rejection_reason',
+        'suspension_reason',
+        'verified_documents',
         'reviewed_at',
     ];
 
     protected $casts = [
-        'reviewed_at' => 'datetime',
+        'reviewed_at'        => 'datetime',
+        'verified_at'        => 'datetime',
+        'verified_documents' => 'array',
     ];
 
     public function user(): BelongsTo

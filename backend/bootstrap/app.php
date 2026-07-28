@@ -21,6 +21,11 @@ return Application::configure(basePath: dirname(__DIR__))
             // /me, /units, …) served with cookie sessions — routes/dashboard.php.
             \Illuminate\Support\Facades\Route::middleware('dashboard-api')
                 ->group(base_path('routes/dashboard.php'));
+
+            // Admin-panel (Next.js) contract API: root-mounted under /admin/*,
+            // cookie sessions, OTP auth — routes/admin-panel.php.
+            \Illuminate\Support\Facades\Route::middleware('admin-panel')
+                ->group(base_path('routes/admin-panel.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -47,6 +52,15 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Session\Middleware\StartSession::class,
         ]);
 
+        // Admin-panel (Next.js) BFF group: same cookie-session stack, distinct
+        // marker middleware so the exception renderer uses the flat envelope.
+        $middleware->group('admin-panel', [
+            \App\Http\Middleware\AdminPanelApi::class,
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+        ]);
+
         $middleware->alias([
             'role'               => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission'         => \Spatie\Permission\Middleware\PermissionMiddleware::class,
@@ -55,8 +69,58 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->attributes->get('dashboard_api'),
+            fn (Request $request) => $request->is('api/*')
+                || $request->attributes->get('dashboard_api')
+                || $request->attributes->get('admin_panel_api'),
         );
+
+        // Admin-panel (Next.js) envelope: flat { message, code } — distinct from
+        // the partner-dashboard { error: { code, message } }. Runs before the
+        // dashboard renderer so admin requests never fall into it.
+        $exceptions->render(function (\Throwable $e, Request $request) {
+            if (! $request->attributes->get('admin_panel_api')) {
+                return null; // not an admin-panel request — fall through
+            }
+
+            if ($e instanceof \App\Exceptions\AdminPanelException) {
+                return $e->render();
+            }
+
+            $flat = fn (string $code, string $message, int $status, array $headers = []) => response()->json(
+                ['message' => $message, 'code' => $code], $status, $headers,
+            );
+
+            if ($e instanceof \App\Exceptions\OtpException) {
+                $code = match ($e->otpCode) {
+                    'OTP_EXPIRED' => 'OTP_EXPIRED',
+                    'OTP_LOCKED'  => 'OTP_MAX_ATTEMPTS',
+                    default       => 'OTP_INVALID',
+                };
+                $status = $code === 'OTP_MAX_ATTEMPTS' ? 429 : 422;
+
+                return $flat($code, collect($e->errors())->flatten()->first() ?: 'رمز غير صحيح', $status);
+            }
+
+            if ($e instanceof ValidationException) {
+                return $flat('VALIDATION_ERROR', $e->validator->errors()->first() ?: 'بيانات غير صالحة', 422);
+            }
+
+            if ($e instanceof AuthenticationException) {
+                return $flat('UNAUTHENTICATED', 'يجب تسجيل الدخول للمتابعة', 401);
+            }
+
+            if ($e instanceof ThrottleRequestsException) {
+                return $flat('RATE_LIMITED', 'محاولات كثيرة، حاول لاحقاً', 429, $e->getHeaders());
+            }
+
+            if ($e instanceof ModelNotFoundException || $e instanceof NotFoundHttpException) {
+                return $flat('NOT_FOUND', 'المورد غير موجود', 404);
+            }
+
+            report($e);
+
+            return $flat('SERVER_ERROR', 'حدث خطأ غير متوقع', 500);
+        });
 
         // Partner-dashboard envelope: { error: { code, message, fields? } }.
         $exceptions->render(function (\Throwable $e, Request $request) {

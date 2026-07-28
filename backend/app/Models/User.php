@@ -27,6 +27,8 @@ class User extends Authenticatable
         'password',
         'email_verified_at',
         'is_active',
+        'invited_at',
+        'preferred_locale',
     ];
 
     protected $hidden = [
@@ -40,6 +42,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password'          => 'hashed',
             'is_active'         => 'boolean',
+            'invited_at'        => 'datetime',
         ];
     }
 

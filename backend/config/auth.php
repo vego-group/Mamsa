@@ -49,6 +49,13 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Admin-panel (Next.js) BFF: httpOnly session cookie auth, OTP only.
+        // Separate guard so admin and partner sessions coexist per browser.
+        'admin-panel' => [
+            'driver' => 'session',
+            'provider' => 'users',
+        ],
     ],
 
     /*
