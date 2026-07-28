@@ -167,10 +167,13 @@ APP_DEBUG=false
   in dev, refunds are simulated (marked succeeded locally).
 - SMS: set `SMS_DRIVER=fgc` (or `taqnyat`) + creds so invite/OTP messages send.
 
-## 9. Known follow-ups (additive, contract-stable)
-- **Admin notification fan-out:** the feed endpoints work and the dev seeder
-  populates a few, but wiring live platform events (new approval, booking
-  confirmed, host cancellation, refund failed, partner applied) to write into
-  each admin's DB feed is a follow-up. It adds rows only — the response contract
-  doesn't change.
+## 9. Admin notification fan-out (implemented)
+Live platform events write into each admin's DB feed via **model observers**
+(`app/Observers/AdminPanel/*`, registered by `AdminNotificationServiceProvider`):
+new/resubmitted unit review → `approval`, host cancellation → `cancellation`,
+failed refund → `refund`, new partner application → `partner`. Delivery is
+best-effort (`NotifiesAdmins` trait) and never breaks the triggering write.
+It is strictly additive — no `/api/v1` or partner/customer flow changes.
+
+## 10. Known follow-ups
 - CSV/PDF report export (`§5.10`) is intentionally left client-side per the spec.
