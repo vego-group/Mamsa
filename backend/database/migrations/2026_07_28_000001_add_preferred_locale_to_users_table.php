@@ -1,0 +1,26 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * Admin-panel AdminProfile.preferredLocale (BACKEND_SPEC §6). Nullable, additive
+ * — existing rows and every other API response are unaffected.
+ */
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('preferred_locale', 5)->nullable()->after('phone');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn('preferred_locale');
+        });
+    }
+};
