@@ -22,7 +22,7 @@ const messages = {
     },
     brand: { title: 'Mamsa', subtitle: 'Super Admin' },
     header: {
-      search: 'Search anything...', role: 'Super Admin', logout: 'Sign Out',
+      search: 'Search anything...', noResults: 'No matching pages', role: 'Super Admin', logout: 'Sign Out',
       settings: 'Settings', profile: 'Profile', notifications: 'Notifications',
     },
     dashboard: {
@@ -199,7 +199,7 @@ const messages = {
     },
     brand: { title: 'ممسى', subtitle: 'المدير العام' },
     header: {
-      search: 'ابحث عن أي شيء...', role: 'المدير العام', logout: 'تسجيل الخروج',
+      search: 'ابحث عن أي شيء...', noResults: 'لا توجد صفحات مطابقة', role: 'المدير العام', logout: 'تسجيل الخروج',
       settings: 'الإعدادات', profile: 'الملف الشخصي', notifications: 'الإشعارات',
     },
     dashboard: {

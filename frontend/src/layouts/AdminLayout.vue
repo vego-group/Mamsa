@@ -33,10 +33,10 @@
           <span class="text-gray-800 font-semibold">{{ pageTitle }}</span>
         </nav>
 
-        <!-- Search -->
+        <!-- Search / command palette -->
         <div class="flex-1 flex justify-center px-6">
-          <div class="relative w-full max-w-md">
-            <span class="material-symbols-outlined absolute top-1/2 -translate-y-1/2 text-gray-400 text-[20px]" :class="dir === 'rtl' ? 'right-3' : 'left-3'">search</span>
+          <div ref="searchRoot" class="relative w-full max-w-md">
+            <span class="material-symbols-outlined absolute top-1/2 -translate-y-1/2 text-gray-400 text-[20px] pointer-events-none" :class="dir === 'rtl' ? 'right-3' : 'left-3'">search</span>
             <input
               ref="searchInput"
               v-model="search"
@@ -44,8 +44,27 @@
               :class="dir === 'rtl' ? 'pr-10 pl-14' : 'pl-10 pr-14'"
               :placeholder="t('header.search')"
               type="text"
+              @keydown="onSearchKey"
+              @input="searchIndex = 0"
             />
             <kbd class="absolute top-1/2 -translate-y-1/2 text-[10px] font-sans text-gray-400 bg-white border border-gray-200 rounded px-1.5 py-0.5" :class="dir === 'rtl' ? 'left-2' : 'right-2'">⌘K</kbd>
+
+            <!-- results dropdown -->
+            <div v-if="search.trim()" class="absolute top-full mt-1.5 w-full bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 z-40 overflow-hidden">
+              <button
+                v-for="(p, i) in searchResults"
+                :key="p.name"
+                type="button"
+                class="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-start transition-colors"
+                :class="i === searchIndex ? 'bg-gray-50' : 'hover:bg-gray-50'"
+                @mousedown.prevent="goSearch(p)"
+                @mouseenter="searchIndex = i"
+              >
+                <span class="material-symbols-outlined text-[18px] text-primary">{{ p.icon }}</span>
+                <span class="font-semibold text-gray-700">{{ p.label }}</span>
+              </button>
+              <div v-if="!searchResults.length" class="px-3 py-3 text-center text-gray-400 text-[12px]">{{ t('header.noResults') }}</div>
+            </div>
           </div>
         </div>
 
@@ -125,7 +144,43 @@ const sidebarOpen = ref(false)
 const menuOpen = ref(false)
 const menuRoot = ref(null)
 const searchInput = ref(null)
+const searchRoot = ref(null)
 const search = ref('')
+const searchIndex = ref(0)
+
+// ⌘K command palette — jump to any admin section. `kw` adds AR/EN synonyms so
+// e.g. "عمولة" / "commission" / "revenue" resolve to Reports.
+const searchPages = computed(() => [
+  { name: 'admin-dashboard', icon: 'dashboard', label: t('nav.dashboard'), kw: 'home overview الرئيسية لوحة' },
+  { name: 'admin-users', icon: 'group', label: t('nav.users'), kw: 'guests customers مستخدمين عملاء ضيوف' },
+  { name: 'admin-partners', icon: 'handshake', label: t('nav.partners'), kw: 'hosts owners شركاء ملاك مضيفين' },
+  { name: 'admin-units', icon: 'apartment', label: t('nav.units'), kw: 'properties listings وحدات عقارات شقق' },
+  { name: 'admin-requests', icon: 'fact_check', label: t('nav.approvals'), kw: 'approvals review طلبات مراجعة موافقات' },
+  { name: 'admin-bookings', icon: 'calendar_month', label: t('nav.bookings'), kw: 'reservations حجوزات' },
+  { name: 'admin-cancellations', icon: 'cancel', label: t('nav.cancellations'), kw: 'refunds إلغاء استرداد' },
+  { name: 'admin-reports', icon: 'bar_chart', label: t('nav.reports'), kw: 'revenue commission analytics تقارير إيرادات عمولة إحصائيات' },
+  { name: 'admin-notifications', icon: 'notifications', label: t('nav.notifications'), kw: 'alerts إشعارات تنبيهات' },
+  { name: 'admin-settings', icon: 'settings', label: t('nav.profile'), kw: 'profile settings الإعدادات الملف حساب' },
+])
+const searchResults = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return []
+  return searchPages.value.filter((p) => `${p.label} ${p.kw}`.toLowerCase().includes(q)).slice(0, 6)
+})
+function goSearch(page) {
+  if (!page) return
+  search.value = ''
+  searchIndex.value = 0
+  if (route.name !== page.name) router.push({ name: page.name })
+}
+function onSearchKey(e) {
+  const n = searchResults.value.length
+  if (e.key === 'Escape') { search.value = ''; searchInput.value?.blur(); return }
+  if (!n) return
+  if (e.key === 'ArrowDown') { e.preventDefault(); searchIndex.value = (searchIndex.value + 1) % n }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); searchIndex.value = (searchIndex.value - 1 + n) % n }
+  else if (e.key === 'Enter') { e.preventDefault(); goSearch(searchResults.value[searchIndex.value] || searchResults.value[0]) }
+}
 
 const otherLang = computed(() => (locale.value === 'en' ? 'AR' : 'EN'))
 
@@ -146,6 +201,7 @@ const pageTitle = computed(() => t(`nav.${routeToNavKey[route.name] || 'dashboar
 
 function onDocClick(e) {
   if (menuOpen.value && menuRoot.value && !menuRoot.value.contains(e.target)) menuOpen.value = false
+  if (search.value && searchRoot.value && !searchRoot.value.contains(e.target)) search.value = ''
 }
 function onKeydown(e) {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
