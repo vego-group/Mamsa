@@ -154,7 +154,10 @@ class CancellationsController extends Controller
         }
 
         $refund->update([
-            'status'            => $gateway ? 'processing' : 'succeeded',
+            // Gateway-accepted refunds settle via webhook → 'pending' until then;
+            // simulated (no gateway) is immediate. NB: the refunds enum is
+            // pending|succeeded|failed (no 'processing').
+            'status'            => $gateway ? 'pending' : 'succeeded',
             'moyasar_refund_id' => $gateway['id'] ?? $refund->moyasar_refund_id,
             'moyasar_response'  => $gateway ?? ['retried' => true, 'simulated' => true],
         ]);
