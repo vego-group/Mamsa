@@ -66,7 +66,7 @@ class PartnerController extends Controller
         $d = $u->partnerDetail;
 
         $revenue    = round((float) ($u->revenue ?? 0), 2);
-        $commission = round((float) ($u->commission ?? 0), 2);
+        $commission = round((float) ($u->subtotal_sum ?? 0) * Booking::COMMISSION_RATE, 2);
         $bookings   = (int) $u->bookings_count;
 
         return $this->success([
@@ -172,8 +172,8 @@ class PartnerController extends Controller
             ->withCount('units')
             ->withCount(['unitBookings as bookings_count'])
             ->withCount(['unitBookings as cancellations_count' => fn ($q) => $q->where('bookings.status', 'cancelled')])
-            ->withSum(['unitBookings as revenue' => fn ($q) => $q->where('bookings.status', 'confirmed')], 'total_amount')
-            ->withSum(['unitBookings as commission' => fn ($q) => $q->where('bookings.status', 'confirmed')], 'commission_amount')
+            ->withSum(['unitBookings as revenue' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'total_amount')
+            ->withSum(['unitBookings as subtotal_sum' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'subtotal')
             ->withAvg(['unitReviews as rating'], 'rating')
             ->addSelect(['city' => Unit::query()->select('city')
                 ->whereColumn('units.user_id', 'users.id')
@@ -248,8 +248,8 @@ class PartnerController extends Controller
             ->whereHas('partnerDetail', fn ($q) => $q->where('status', PartnerDetail::STATUS_APPROVED))
             ->count();
 
-        // Total revenue across all partner units = platform confirmed revenue.
-        $revenue = (float) Booking::where('status', 'confirmed')->sum('total_amount');
+        // Total revenue across all partner units = platform revenue (paid stays).
+        $revenue = (float) Booking::query()->revenue()->sum('total_amount');
 
         // High-risk needs per-partner rates; cheap at partner scale.
         $highRisk = $this->aggregateQuery()->get()

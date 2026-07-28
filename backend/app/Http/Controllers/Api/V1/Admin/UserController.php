@@ -42,7 +42,7 @@ class UserController extends Controller
         // ── list query: aggregates + latest-booking city (correlated subquery) ──
         $query = User::query()->with('roles')
             ->withCount('bookings')
-            ->withSum(['bookings as total_spent' => fn ($q) => $q->where('status', 'confirmed')], 'total_amount')
+            ->withSum(['bookings as total_spent' => fn ($q) => $q->whereIn('status', Booking::REVENUE_STATUSES)], 'total_amount')
             ->addSelect(['city' => Booking::query()
                 ->select('units.city')
                 ->join('units', 'units.id', '=', 'bookings.unit_id')
@@ -97,10 +97,10 @@ class UserController extends Controller
     public function show(User $user): JsonResponse
     {
         $bookings = $user->bookings();
-        $confirmed = (clone $bookings)->where('status', 'confirmed');
+        $paid = (clone $bookings)->whereIn('status', Booking::REVENUE_STATUSES);
 
-        $count = (int) $confirmed->count();
-        $spent = round((float) (clone $confirmed)->sum('total_amount'), 2);
+        $count = (int) $paid->count();
+        $spent = round((float) (clone $paid)->sum('total_amount'), 2);
 
         $city = Booking::query()
             ->select('units.city')
@@ -180,7 +180,7 @@ class UserController extends Controller
         $disabled = (clone $base)->where('is_active', false)->count();
         $total    = $active + $inactive + $disabled;
 
-        $spend = Booking::where('status', 'confirmed')
+        $spend = Booking::query()->revenue()
             ->whereIn('user_id', (clone $base)->select('users.id'))
             ->sum('total_amount');
 
