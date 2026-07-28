@@ -99,6 +99,9 @@ class UserController extends Controller
         $bookings = $user->bookings();
         $paid = (clone $bookings)->whereIn('status', Booking::REVENUE_STATUSES);
 
+        // total_bookings = ALL bookings (matches the list's withCount); spend/avg
+        // are over paid (confirmed + completed) stays only.
+        $total = (int) (clone $bookings)->count();
         $count = (int) $paid->count();
         $spent = round((float) (clone $paid)->sum('total_amount'), 2);
 
@@ -120,7 +123,7 @@ class UserController extends Controller
             'status'     => $this->statusFor($user),
             'created_at' => $user->created_at?->toIso8601String(),
             'stats'      => [
-                'total_bookings'    => $count,
+                'total_bookings'    => $total,
                 'total_spent'       => $spent,
                 'avg_booking_value' => $count > 0 ? round($spent / $count, 2) : 0.0,
             ],
