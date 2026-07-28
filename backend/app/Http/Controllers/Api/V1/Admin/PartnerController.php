@@ -68,6 +68,8 @@ class PartnerController extends Controller
         $revenue    = round((float) ($u->revenue ?? 0), 2);
         $commission = round((float) ($u->subtotal_sum ?? 0) * Booking::COMMISSION_RATE, 2);
         $bookings   = (int) $u->bookings_count;
+        // avg is over the paid stays that produced the revenue, not all bookings.
+        $paidCount  = (int) $u->unitBookings()->whereIn('bookings.status', Booking::REVENUE_STATUSES)->count();
 
         return $this->success([
             'user_id'    => $u->id,
@@ -87,7 +89,7 @@ class PartnerController extends Controller
                 'total_revenue'   => $revenue,
                 'commission_paid' => $commission,
                 'partner_earning' => round($revenue - $commission, 2),
-                'avg_booking'     => $bookings > 0 ? round($revenue / $bookings, 2) : 0.0,
+                'avg_booking'     => $paidCount > 0 ? round($revenue / $paidCount, 2) : 0.0,
             ],
             'performance' => [
                 'total_units'       => (int) $u->units_count,
