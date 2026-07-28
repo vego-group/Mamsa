@@ -24,14 +24,14 @@ class UnitController extends Controller
 
         $query = Unit::query()->with(['images', 'owner'])
             ->withCount(['bookings as bookings_count'])
-            ->withSum(['bookings as revenue' => fn ($q) => $q->where('status', 'confirmed')], 'total_amount')
+            ->withSum(['bookings as revenue' => fn ($q) => $q->whereIn('status', Booking::REVENUE_STATUSES)], 'total_amount')
             ->withAvg(['reviews as rating'], 'rating')
             ->withCount('reviews as reviews_count')
-            // Confirmed booked nights in the trailing window → occupancy %.
+            // Booked nights (paid stays) in the trailing window → occupancy %.
             ->addSelect(['booked_nights' => Booking::query()
                 ->selectRaw('COALESCE(SUM(DATEDIFF(end_date, start_date)), 0)')
                 ->whereColumn('unit_id', 'units.id')
-                ->where('status', 'confirmed')
+                ->whereIn('status', Booking::REVENUE_STATUSES)
                 ->where('start_date', '>=', $since)]);
 
         if ($search = trim((string) $request->query('search', ''))) {
@@ -111,8 +111,7 @@ class UnitController extends Controller
     {
         $approved = Unit::where('approval_status', 'approved')->count();
 
-        $bookedNights = (int) Booking::query()
-            ->where('status', 'confirmed')
+        $bookedNights = (int) Booking::query()->revenue()
             ->where('start_date', '>=', $since)
             ->selectRaw('COALESCE(SUM(DATEDIFF(end_date, start_date)), 0) as n')
             ->value('n');
@@ -125,7 +124,7 @@ class UnitController extends Controller
             'total'         => Unit::count(),
             'published'     => Unit::where('approval_status', 'approved')->where('status', 'available')->count(),
             'avg_occupancy' => $avgOccupancy,
-            'total_revenue' => round((float) Booking::where('status', 'confirmed')->sum('total_amount'), 2),
+            'total_revenue' => round((float) Booking::query()->revenue()->sum('total_amount'), 2),
         ];
     }
 

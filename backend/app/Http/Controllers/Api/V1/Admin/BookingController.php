@@ -54,18 +54,20 @@ class BookingController extends Controller
             ->groupBy('status')
             ->pluck('c', 'status');
 
-        $confirmed = Booking::where('status', 'confirmed');
-        $revenue = round((float) (clone $confirmed)->sum('total_amount'), 2);
-        $confirmedCount = (int) ($counts['confirmed'] ?? 0);
+        // Revenue = paid stays (confirmed + completed); commission from subtotal.
+        $revenueQ  = Booking::query()->revenue();
+        $revenue   = round((float) (clone $revenueQ)->sum('total_amount'), 2);
+        $revCount  = (int) (clone $revenueQ)->count();
 
         return [
             'total'      => (int) $counts->sum(),
-            'confirmed'  => $confirmedCount,
+            'confirmed'  => (int) ($counts['confirmed'] ?? 0),
+            'completed'  => (int) ($counts['completed'] ?? 0),
             'pending'    => (int) ($counts['pending'] ?? 0),
             'cancelled'  => (int) ($counts['cancelled'] ?? 0),
             'revenue'    => $revenue,
-            'commission' => round((float) (clone $confirmed)->sum('commission_amount'), 2),
-            'avg_value'  => $confirmedCount > 0 ? round($revenue / $confirmedCount, 2) : 0.0,
+            'commission' => round((float) (clone $revenueQ)->sum(\DB::raw(Booking::commissionExpr())), 2),
+            'avg_value'  => $revCount > 0 ? round($revenue / $revCount, 2) : 0.0,
         ];
     }
 }

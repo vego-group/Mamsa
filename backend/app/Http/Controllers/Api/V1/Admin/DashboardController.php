@@ -10,6 +10,7 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -74,6 +75,7 @@ class DashboardController extends Controller
             'total'     => (int) $byStatus->sum(),
             'pending'   => (int) ($byStatus['pending'] ?? 0),
             'confirmed' => (int) ($byStatus['confirmed'] ?? 0),
+            'completed' => (int) ($byStatus['completed'] ?? 0),
             'cancelled' => (int) ($byStatus['cancelled'] ?? 0),
         ];
     }
@@ -81,15 +83,17 @@ class DashboardController extends Controller
     /** @return array{total: float, this_month: float, commission: float, commission_this_month: float, currency: string} */
     private function revenue(): array
     {
-        $confirmed = Booking::where('status', 'confirmed');
-        $thisMonth = (clone $confirmed)->where('created_at', '>=', now()->startOfMonth());
+        // Revenue = paid stays (confirmed + completed); commission = frozen amount
+        // where captured, else 2% of subtotal (historical bookings read ~0).
+        $revenue   = Booking::query()->revenue();
+        $thisMonth = (clone $revenue)->where('created_at', '>=', now()->startOfMonth());
+        $comm      = fn ($q) => round((float) $q->sum(DB::raw(Booking::commissionExpr())), 2);
 
         return [
-            'total'                 => round((float) (clone $confirmed)->sum('total_amount'), 2),
+            'total'                 => round((float) (clone $revenue)->sum('total_amount'), 2),
             'this_month'            => round((float) (clone $thisMonth)->sum('total_amount'), 2),
-            // Mamsa's 2% cut of partner rentals (frozen per booking).
-            'commission'            => round((float) (clone $confirmed)->sum('commission_amount'), 2),
-            'commission_this_month' => round((float) (clone $thisMonth)->sum('commission_amount'), 2),
+            'commission'            => $comm(clone $revenue),
+            'commission_this_month' => $comm(clone $thisMonth),
             'currency'              => 'SAR',
         ];
     }
@@ -105,7 +109,7 @@ class DashboardController extends Controller
             return 0;
         }
 
-        $occupied = Booking::where('status', 'confirmed')
+        $occupied = Booking::query()->revenue()
             ->whereDate('start_date', '<=', today())
             ->whereDate('end_date', '>=', today())
             ->distinct('unit_id')
@@ -123,9 +127,9 @@ class DashboardController extends Controller
      */
     private function monthlyRevenue(): array
     {
-        $rows = Booking::where('status', 'confirmed')
+        $rows = Booking::query()->revenue()
             ->where('created_at', '>=', now()->subMonths(11)->startOfMonth())
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, SUM(total_amount) as total, SUM(commission_amount) as commission")
+            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, SUM(total_amount) as total, SUM(".Booking::commissionExpr().") as commission")
             ->groupBy('ym')
             ->get()
             ->keyBy('ym');
@@ -153,18 +157,18 @@ class DashboardController extends Controller
         return User::role(['Individual', 'Company'])->where('is_active', true)->count();
     }
 
-    /** Average confirmed-booking value (rounded). */
+    /** Average revenue-booking value (rounded). */
     private function avgBookingValue(): float
     {
-        return round((float) Booking::where('status', 'confirmed')->avg('total_amount'), 2);
+        return round((float) Booking::query()->revenue()->avg('total_amount'), 2);
     }
 
     /** Revenue this month vs last month, as a signed percentage. */
     private function monthlyGrowth(): float
     {
-        $thisMonth = (float) Booking::where('status', 'confirmed')
+        $thisMonth = (float) Booking::query()->revenue()
             ->where('created_at', '>=', now()->startOfMonth())->sum('total_amount');
-        $lastMonth = (float) Booking::where('status', 'confirmed')
+        $lastMonth = (float) Booking::query()->revenue()
             ->whereBetween('created_at', [now()->subMonth()->startOfMonth(), now()->startOfMonth()])
             ->sum('total_amount');
 
@@ -187,13 +191,13 @@ class DashboardController extends Controller
         $users    = User::query();
         $partners = User::role(['Individual', 'Company']);
         $bookings = Booking::query();
-        $confirmed = Booking::where('status', 'confirmed');
+        $revenue  = Booking::query()->revenue();
 
-        $commThis = (float) (clone $confirmed)->where('created_at', '>=', $tmStart)->sum('commission_amount');
-        $commLast = (float) (clone $confirmed)->whereBetween('created_at', [$lmStart, $tmStart])->sum('commission_amount');
+        $commThis = (float) (clone $revenue)->where('created_at', '>=', $tmStart)->sum(DB::raw(Booking::commissionExpr()));
+        $commLast = (float) (clone $revenue)->whereBetween('created_at', [$lmStart, $tmStart])->sum(DB::raw(Booking::commissionExpr()));
 
-        $avgThis = (float) (clone $confirmed)->where('created_at', '>=', $tmStart)->avg('total_amount');
-        $avgLast = (float) (clone $confirmed)->whereBetween('created_at', [$lmStart, $tmStart])->avg('total_amount');
+        $avgThis = (float) (clone $revenue)->where('created_at', '>=', $tmStart)->avg('total_amount');
+        $avgLast = (float) (clone $revenue)->whereBetween('created_at', [$lmStart, $tmStart])->avg('total_amount');
 
         return [
             'users'      => $this->pct($countFrom($users, $tmStart), $countBetween($users, $lmStart, $tmStart)),
@@ -211,8 +215,7 @@ class DashboardController extends Controller
      */
     private function revenueByCity(): array
     {
-        return Booking::query()
-            ->where('bookings.status', 'confirmed')
+        return Booking::query()->revenue()
             ->join('units', 'units.id', '=', 'bookings.unit_id')
             ->selectRaw('units.city as city, SUM(bookings.total_amount) as total')
             ->groupBy('units.city')
