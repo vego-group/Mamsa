@@ -68,7 +68,7 @@ class PartnersController extends Controller
             'pending'      => (clone $base)->whereHas('partnerDetail', fn ($q) => $q->where('status', PartnerDetail::STATUS_PENDING))->count(),
             'verified'     => (clone $base)->whereHas('partnerDetail', fn ($q) => $q->whereNotNull('verified_at'))->count(),
             'highRisk'     => $highRisk,
-            'totalRevenue' => $this->money(Booking::where('status', 'confirmed')->sum('total_amount')),
+            'totalRevenue' => $this->money(Booking::query()->revenue()->sum('total_amount')),
         ]);
     }
 
@@ -82,7 +82,7 @@ class PartnersController extends Controller
 
         $d          = $u->partnerDetail;
         $revenue    = $this->money($u->revenue);
-        $commission = $this->money($u->commission);
+        $commission = $this->money((float) $u->subtotal_sum * Booking::COMMISSION_RATE);
         $bookings   = (int) $u->bookings_count;
 
         return response()->json(array_merge($this->row($u), [
@@ -261,8 +261,8 @@ class PartnersController extends Controller
             ->withCount(['unitBookings as bookings_count'])
             ->withCount(['unitBookings as bookings_12m' => fn ($q) => $q->where('bookings.created_at', '>=', $yearAgo)])
             ->withCount(['unitBookings as cancellations_12m' => fn ($q) => $q->where('bookings.status', 'cancelled')->where('bookings.created_at', '>=', $yearAgo)])
-            ->withSum(['unitBookings as revenue' => fn ($q) => $q->where('bookings.status', 'confirmed')], 'total_amount')
-            ->withSum(['unitBookings as commission' => fn ($q) => $q->where('bookings.status', 'confirmed')], 'commission_amount')
+            ->withSum(['unitBookings as revenue' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'total_amount')
+            ->withSum(['unitBookings as subtotal_sum' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'subtotal')
             ->withAvg(['unitReviews as rating'], 'rating')
             ->addSelect(['city' => Unit::query()->select('city')->whereColumn('units.user_id', 'users.id')->latest()->limit(1)]);
     }

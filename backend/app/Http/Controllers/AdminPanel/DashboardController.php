@@ -34,26 +34,27 @@ class DashboardController extends Controller
             now()->subMonth()->endOfMonth(),
         ];
 
-        $confirmed        = Booking::where('status', 'confirmed');
-        $confirmedRevenue = (float) (clone $confirmed)->sum('total_amount');
-        $confirmedCount   = (clone $confirmed)->count();
+        // Revenue = paid stays (confirmed + completed); commission = 2% of subtotal.
+        $revenue        = Booking::query()->revenue();
+        $revenueTotal   = (float) (clone $revenue)->sum('total_amount');
+        $revenueCount   = (clone $revenue)->count();
 
-        $revThisMonth = (float) Booking::where('status', 'confirmed')->where('created_at', '>=', $monthStart)->sum('total_amount');
-        $revPrevMonth = (float) Booking::where('status', 'confirmed')->whereBetween('created_at', [$prevStart, $prevEnd])->sum('total_amount');
+        $revThisMonth = (float) Booking::query()->revenue()->where('created_at', '>=', $monthStart)->sum('total_amount');
+        $revPrevMonth = (float) Booking::query()->revenue()->whereBetween('created_at', [$prevStart, $prevEnd])->sum('total_amount');
 
         return response()->json([
             'totalUsers'         => User::role('User', 'web')->count(),
-            'platformCommission' => $this->money((clone $confirmed)->sum('commission_amount')),
+            'platformCommission' => $this->money($this->commissionSum((clone $revenue))),
             'totalBookings'      => Booking::count(),
             'activePartners'     => $this->activePartners(),
             'pendingRequests'    => Unit::where('approval_status', 'pending')->count(),
             'monthlyGrowth'      => $this->pctDelta($revThisMonth, $revPrevMonth),
-            'avgBookingValue'    => $confirmedCount > 0 ? $this->money($confirmedRevenue / $confirmedCount) : 0.0,
+            'avgBookingValue'    => $revenueCount > 0 ? $this->money($revenueTotal / $revenueCount) : 0.0,
             'deltas'             => [
                 'totalUsers'         => $this->createdDelta(User::role('User', 'web'), $monthStart, $prevStart, $prevEnd),
                 'platformCommission' => $this->pctDelta(
-                    (float) Booking::where('status', 'confirmed')->where('created_at', '>=', $monthStart)->sum('commission_amount'),
-                    (float) Booking::where('status', 'confirmed')->whereBetween('created_at', [$prevStart, $prevEnd])->sum('commission_amount'),
+                    $this->commissionSum(Booking::query()->revenue()->where('created_at', '>=', $monthStart)),
+                    $this->commissionSum(Booking::query()->revenue()->whereBetween('created_at', [$prevStart, $prevEnd])),
                 ),
                 'totalBookings'      => $this->createdDelta(Booking::query(), $monthStart, $prevStart, $prevEnd),
                 'activePartners'     => $this->createdDelta(User::role(['Individual', 'Company'], 'web')->whereHas('partnerDetail'), $monthStart, $prevStart, $prevEnd),

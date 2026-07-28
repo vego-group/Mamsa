@@ -79,14 +79,14 @@ class BookingsController extends Controller
 
     public function stats(): JsonResponse
     {
-        $confirmed = Booking::where('status', 'confirmed');
-        $revenue   = (float) (clone $confirmed)->sum('total_amount');
-        $count     = (int) (clone $confirmed)->count();
+        $revenue    = Booking::query()->revenue();
+        $revTotal   = (float) (clone $revenue)->sum('total_amount');
+        $count      = (int) (clone $revenue)->count();
 
         return response()->json([
-            'totalRevenue'    => $this->money($revenue),
-            'commission'      => $this->money((clone $confirmed)->sum('commission_amount')),
-            'avgBookingValue' => $count > 0 ? $this->money($revenue / $count) : 0.0,
+            'totalRevenue'    => $this->money($revTotal),
+            'commission'      => $this->money($this->commissionSum((clone $revenue))),
+            'avgBookingValue' => $count > 0 ? $this->money($revTotal / $count) : 0.0,
         ]);
     }
 

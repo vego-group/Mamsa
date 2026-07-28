@@ -57,7 +57,7 @@ class UnitsController extends Controller
     {
         $since        = now()->subDays(UnitPresenter::OCCUPANCY_WINDOW)->toDateString();
         $approved     = Unit::where('approval_status', 'approved')->count();
-        $bookedNights = (int) Booking::query()->where('status', 'confirmed')->where('start_date', '>=', $since)
+        $bookedNights = (int) Booking::query()->revenue()->where('start_date', '>=', $since)
             ->selectRaw($this->nightsSql().' as n')->value('n');
 
         return response()->json([
@@ -65,7 +65,7 @@ class UnitsController extends Controller
             'approved'      => $approved,
             'pendingReview' => Unit::where('approval_status', 'pending')->count(),
             'avgOccupancy'  => $approved > 0 ? min(100, (int) round(($bookedNights / ($approved * UnitPresenter::OCCUPANCY_WINDOW)) * 100)) : 0,
-            'totalRevenue'  => $this->money(Booking::where('status', 'confirmed')->sum('total_amount')),
+            'totalRevenue'  => $this->money(Booking::query()->revenue()->sum('total_amount')),
         ]);
     }
 

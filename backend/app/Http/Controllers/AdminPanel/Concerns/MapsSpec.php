@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AdminPanel\Concerns;
 
+use App\Models\Booking;
 use App\Models\PartnerDetail;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -31,10 +32,23 @@ trait MapsSpec
         return round((float) $v, 2);
     }
 
-    /** Commission is a frozen 2% of total; partner keeps the rest (§7). */
+    /** Commission is a frozen 2% of total; partner keeps the rest (§7). A stored
+     *  0/null means it was never frozen (historical booking) → compute 2%. */
     protected function commissionOf(float $total, ?float $stored = null): float
     {
-        return $this->money($stored ?? round($total * 0.02, 2));
+        return $this->money(($stored !== null && $stored > 0) ? $stored : round($total * 0.02, 2));
+    }
+
+    /**
+     * SUM of effective commission over a bookings query (frozen amount where
+     * captured, else 2% of subtotal) — see Booking::commissionExpr(). The query
+     * must be over the `bookings` table (no alias).
+     *
+     * @param \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query
+     */
+    protected function commissionSum($query): float
+    {
+        return (float) $query->sum(DB::raw(Booking::commissionExpr()));
     }
 
     /** Percentage change vs a previous value (§5.3 deltas); negative allowed. */

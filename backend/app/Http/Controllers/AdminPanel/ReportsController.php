@@ -24,14 +24,14 @@ class ReportsController extends Controller
         $months = $this->months($range);
         $since  = now()->subMonths($months - 1)->startOfMonth();
 
-        $confirmed      = Booking::where('status', 'confirmed')->where('created_at', '>=', $since);
-        $totalRevenue   = $this->money((clone $confirmed)->sum('total_amount'));
+        $revenue        = Booking::query()->revenue()->where('created_at', '>=', $since);
+        $totalRevenue   = $this->money((clone $revenue)->sum('total_amount'));
         $occupancy      = $this->analytics->occupancySeries($months);
         $occupancyAvg   = $occupancy !== [] ? (int) round(array_sum(array_column($occupancy, 'value')) / count($occupancy)) : 0;
 
         return response()->json([
             'totalRevenue'        => $totalRevenue,
-            'totalCommission'     => $this->money((clone $confirmed)->sum('commission_amount')),
+            'totalCommission'     => $this->money($this->commissionSum((clone $revenue))),
             'totalBookings'       => Booking::where('created_at', '>=', $since)->count(),
             'avgMonthlyRevenue'   => $this->money($totalRevenue / $months),
             'revenueSeries'       => $this->analytics->revenueSeries($months),
