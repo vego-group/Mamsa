@@ -4,33 +4,44 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Models\Booking;
 use App\Models\Feature;
 use App\Models\PartnerDetail;
 use App\Models\Unit;
+use App\Models\UnitIcalFeed;
 use App\Models\User;
 use App\Support\Media;
 use App\Support\PhoneNumber;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 
 /**
- * Populate the test partner with sample UNITS only — one in every lifecycle
- * state (draft / pending / approved / rejected). Deliberately creates NO
- * bookings or payments, so it can run against production without touching the
- * admin's revenue/analytics, and the "approved" unit is kept `unavailable` so it
- * never appears in consumer search (which requires approved AND available).
+ * Populate the test partner with sample data for the dashboard.
  *
- * Idempotent (keyed on unit_name); safe to re-run.
+ * Default: UNITS only (one per lifecycle state), prod-safe — no bookings, and the
+ * approved unit is kept `unavailable` so it never appears in consumer search.
  *
- *   php artisan test-partner:populate            # uses TEST_PARTNER_PHONE
- *   php artisan test-partner:populate --phone=+9665XXXXXXXX
+ * With --rich: also adds bookings (confirmed/completed/cancelled) + paid payments
+ * + an iCal feed + a manual block, so Overview revenue, Bookings and Calendar
+ * populate. NOTE: the bookings count toward the admin's platform-wide revenue /
+ * analytics until removed with `test-partner:purge`. No notifications are sent
+ * (rows are inserted directly — no observer/SMS/email fires).
+ *
+ * Idempotent (keyed on unit_name / booking start_date); safe to re-run.
+ *
+ *   php artisan test-partner:populate
+ *   php artisan test-partner:populate --rich
+ *   php artisan test-partner:populate --phone=+9665XXXXXXXX --rich
  */
 class PopulateTestPartner extends Command
 {
-    protected $signature = 'test-partner:populate {--phone= : Partner phone (defaults to config test_mode.accounts.partner)}';
+    protected $signature = 'test-partner:populate
+        {--phone= : Partner phone (defaults to config test_mode.accounts.partner)}
+        {--rich : Also add bookings/payments/iCal/block (touches admin analytics; purge to undo)}';
 
-    protected $description = 'Give the test partner sample units in every lifecycle state (no bookings; prod-safe)';
+    protected $description = 'Give the test partner sample units (and, with --rich, bookings/revenue)';
 
     public function handle(): int
     {
@@ -89,21 +100,26 @@ class PopulateTestPartner extends Command
         ];
 
         $rows = [];
+        $approved = null;
         foreach ($units as $spec) {
             $unit = $this->upsertUnit($partner, $spec);
-            $rows[] = [
-                $unit->unit_name,
-                $unit->unit_type,
-                $unit->approval_status,
-                $unit->status,
-                $this->isPublic($unit) ? '⚠️ YES' : 'no',
-            ];
+            if ($unit->approval_status === 'approved') {
+                $approved = $unit;
+            }
+            $rows[] = [$unit->unit_name, $unit->unit_type, $unit->approval_status, $unit->status, $this->isPublic($unit) ? '⚠️ YES' : 'no'];
         }
 
         $this->newLine();
         $this->line("  Partner: {$partner->name} ({$partner->phone})");
         $this->table(['Unit', 'Type', 'Approval', 'Status', 'Public on mamsaa.com?'], $rows);
-        $this->info('  Done — '.count($rows).' units. No bookings/revenue created; nothing exposed to consumers.');
+
+        if ($this->option('rich') && $approved) {
+            $n = $this->richData($approved);
+            $this->info("  Rich data: {$n} bookings (+ paid payments), 1 iCal feed, 1 manual block on the approved unit.");
+            $this->warn('  These bookings COUNT toward admin platform revenue/analytics until `test-partner:purge`.');
+        } else {
+            $this->info('  Units only — no bookings/revenue; nothing exposed to consumers.');
+        }
 
         return self::SUCCESS;
     }
@@ -163,6 +179,76 @@ class PopulateTestPartner extends Command
         }
 
         return $unit;
+    }
+
+    /**
+     * Bookings across every status (real financials + paid payments) + an iCal
+     * feed + a manual block, on the approved unit. Returns the booking count.
+     * Rows are inserted directly (no payment flow), so no notification/SMS fires.
+     */
+    private function richData(Unit $approved): int
+    {
+        $guest = User::firstOrCreate(['phone' => '+966599000001'], ['name' => 'ضيف تجريبي', 'is_active' => true]);
+        if (! $guest->roles()->exists()) {
+            $guest->assignRole('User');
+        }
+
+        $mk = function (string $start, string $end, string $status, array $extra = []) use ($approved, $guest): void {
+            $nights = Carbon::parse($start)->diffInDays(Carbon::parse($end));
+            $subtotal = $nights * (float) $approved->price;
+            $cleaning = 100;
+            $total = $subtotal + $cleaning;
+
+            $booking = $approved->bookings()->updateOrCreate(
+                ['unit_id' => $approved->id, 'user_id' => $guest->id, 'start_date' => $start],
+                array_merge([
+                    'end_date' => $end,
+                    'guests' => 2,
+                    'nightly_rate' => $approved->price,
+                    'subtotal' => $subtotal,
+                    'cleaning_fee' => $cleaning,
+                    'service_fee' => 0,
+                    'taxes' => 0,
+                    'commission_rate' => 0.02,
+                    'commission_amount' => round($subtotal * 0.02, 2),
+                    'total_amount' => $total,
+                    'status' => $status,
+                    'cancellation_snapshot' => [
+                        'policy_key' => 'flexible', 'policy_name' => 'مرنة',
+                        'checkin_at' => Carbon::parse($start.' 15:00')->toIso8601String(),
+                        'tiers' => [['min_hours_before_checkin' => 168, 'refund_percent' => 100, 'label' => 'أكثر من 7 أيام']],
+                    ],
+                ], $extra),
+            );
+
+            $booking->payment()->updateOrCreate(
+                ['booking_id' => $booking->id],
+                ['amount' => $total, 'payment_method' => 'creditcard', 'payment_status' => 'paid', 'paid_at' => Carbon::parse($start)->subDays(3)],
+            );
+        };
+
+        // 2 upcoming confirmed, 2 past completed, 1 host-cancelled.
+        $mk(now()->addDays(12)->toDateString(), now()->addDays(15)->toDateString(), Booking::STATUS_CONFIRMED);
+        $mk(now()->addDays(25)->toDateString(), now()->addDays(28)->toDateString(), Booking::STATUS_CONFIRMED);
+        $mk(now()->subDays(20)->toDateString(), now()->subDays(17)->toDateString(), Booking::STATUS_COMPLETED);
+        $mk(now()->subDays(9)->toDateString(), now()->subDays(6)->toDateString(), Booking::STATUS_COMPLETED);
+        $mk(now()->addDays(40)->toDateString(), now()->addDays(43)->toDateString(), Booking::STATUS_CANCELLED, [
+            'cancelled_at' => now()->subDays(2),
+            'cancelled_by' => 'partner',
+            'cancellation_reason' => 'الوحدة محجوزة في منصة أخرى',
+        ]);
+
+        UnitIcalFeed::updateOrCreate(
+            ['unit_id' => $approved->id, 'source' => 'Airbnb'],
+            ['url' => 'https://www.airbnb.com/calendar/ical/seed-test.ics', 'status' => UnitIcalFeed::STATUS_SYNCED, 'last_synced_at' => now()->subMinutes(8)],
+        );
+
+        $approved->blockedDates()->updateOrCreate(
+            ['start_date' => now()->addDays(7)->toDateString(), 'source' => 'manual'],
+            ['end_date' => now()->addDays(9)->toDateString(), 'note' => 'صيانة'],
+        );
+
+        return $approved->bookings()->count();
     }
 
     /** Mirrors the consumer visibility filter (UnitController): approved AND available. */
