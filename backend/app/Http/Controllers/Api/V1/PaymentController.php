@@ -11,10 +11,12 @@ use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\SavedCard;
 use App\Models\User;
+use App\Models\WalletTransaction;
 use App\Notifications\BookingConfirmed;
 use App\Notifications\NewBooking;
 use App\Services\CancellationPolicyService;
 use App\Services\MoyasarService;
+use App\Support\TestMode;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -38,8 +40,8 @@ class PaymentController extends Controller
     {
         return $this->success([
             'publishable_key' => $this->moyasar->getPublishableKey(),
-            'test_mode'       => $this->isTestMode(),
-            'currency'        => config('moyasar.currency', 'SAR'),
+            'test_mode' => $this->isTestMode(),
+            'currency' => config('moyasar.currency', 'SAR'),
         ]);
     }
 
@@ -62,51 +64,51 @@ class PaymentController extends Controller
         $payment = Payment::firstOrCreate(
             ['booking_id' => $booking->id],
             [
-                'amount'         => $booking->total_amount,
+                'amount' => $booking->total_amount,
                 'payment_method' => $data['payment_method'] ?? 'card',
                 'payment_status' => 'pending',
             ],
         );
 
-        $unit      = $booking->unit;
+        $unit = $booking->unit;
         $mainImage = $unit->images->firstWhere('is_main', true) ?? $unit->images->first();
 
         return $this->success([
-            'payment_id'      => $payment->id,
-            'booking_id'      => $booking->id,
-            'amount'          => (float) $booking->total_amount,
-            'amount_halalas'  => (int) round($booking->total_amount * 100),
+            'payment_id' => $payment->id,
+            'booking_id' => $booking->id,
+            'amount' => (float) $booking->total_amount,
+            'amount_halalas' => (int) round($booking->total_amount * 100),
             // Order summary for the payment sidebar — the fee lines are the ones
             // frozen onto the booking at creation, never recomputed here.
-            'booking'         => [
-                'start_date'   => $booking->start_date?->toDateString(),
-                'end_date'     => $booking->end_date?->toDateString(),
-                'nights'       => $booking->start_date && $booking->end_date
+            'booking' => [
+                'start_date' => $booking->start_date?->toDateString(),
+                'end_date' => $booking->end_date?->toDateString(),
+                'nights' => $booking->start_date && $booking->end_date
                     ? $booking->start_date->diffInDays($booking->end_date)
                     : null,
-                'guests'       => $booking->guests,
+                'guests' => $booking->guests,
                 'nightly_rate' => (float) $booking->nightly_rate,
-                'subtotal'     => (float) $booking->subtotal,
-                'service_fee'  => (float) $booking->service_fee,
+                'subtotal' => (float) $booking->subtotal,
+                'service_fee' => (float) $booking->service_fee,
                 'cleaning_fee' => (float) $booking->cleaning_fee,
-                'taxes'        => (float) $booking->taxes,
-                'unit'         => [
-                    'name'      => $unit->unit_name,
-                    'city'      => $unit->city,
-                    'district'  => $unit->district,
+                'taxes' => (float) $booking->taxes,
+                'unit' => [
+                    'name' => $unit->unit_name,
+                    'city' => $unit->city,
+                    'district' => $unit->district,
                     'image_url' => $mainImage?->url,
                 ],
             ],
-            'currency'        => config('moyasar.currency', 'SAR'),
-            'description'     => 'حجز وحدة #'.$booking->id.' - '.$booking->unit->unit_name,
+            'currency' => config('moyasar.currency', 'SAR'),
+            'description' => 'حجز وحدة #'.$booking->id.' - '.$booking->unit->unit_name,
             'publishable_key' => $this->moyasar->getPublishableKey(),
             // Browser destination after 3-DS — must be a frontend page, never the
             // API. The page calls POST /payments/verify to confirm server-side.
-            'callback_url'    => $this->frontendCallbackUrl(),
+            'callback_url' => $this->frontendCallbackUrl(),
             // Simulate only when no keys are configured. With pk_test/sk_test the
             // real Moyasar form renders and charges hit Moyasar's test gateway;
             // the frontend shows the test-card hint based on the key prefix.
-            'test_mode'       => $this->isTestMode(),
+            'test_mode' => $this->isTestMode(),
         ]);
     }
 
@@ -135,10 +137,10 @@ class PaymentController extends Controller
         // ── Live Moyasar charge ────────────────────────────────────
         $params = [
             'amount_halalas' => (int) round($payment->amount * 100),
-            'description'    => 'حجز وحدة #'.$payment->booking_id,
+            'description' => 'حجز وحدة #'.$payment->booking_id,
             // pid lets the frontend callback page verify after the 3-DS redirect.
-            'callback_url'   => $this->frontendCallbackUrl().'?pid='.$payment->id,
-            'metadata'       => ['payment_id' => $payment->id, 'booking_id' => $payment->booking_id],
+            'callback_url' => $this->frontendCallbackUrl().'?pid='.$payment->id,
+            'metadata' => ['payment_id' => $payment->id, 'booking_id' => $payment->booking_id],
         ];
 
         if (! empty($data['apple_pay_token'])) {
@@ -155,7 +157,7 @@ class PaymentController extends Controller
             }
 
             $params['cvc'] = $data['cvc'] ?? null;
-            $response      = $this->moyasar->chargeWithToken($card->moyasar_token, $params);
+            $response = $this->moyasar->chargeWithToken($card->moyasar_token, $params);
         } elseif (! empty($data['token'])) {
             $response = $this->moyasar->chargeWithToken($data['token'], $params);
         } else {
@@ -165,15 +167,15 @@ class PaymentController extends Controller
         $status = $response['status'] ?? 'failed';
 
         $payment->update([
-            'moyasar_id'       => $response['id'] ?? null,
+            'moyasar_id' => $response['id'] ?? null,
             'moyasar_response' => $response,
             // 'initiated' means 3DS is pending — keep the payment open until callback.
-            'payment_status'   => match ($status) {
-                'paid'      => 'paid',
+            'payment_status' => match ($status) {
+                'paid' => 'paid',
                 'initiated' => 'pending',
-                default     => 'failed',
+                default => 'failed',
             },
-            'paid_at'          => $status === 'paid' ? now() : null,
+            'paid_at' => $status === 'paid' ? now() : null,
         ]);
 
         if ($status === 'paid') {
@@ -181,11 +183,11 @@ class PaymentController extends Controller
         }
 
         return $this->success([
-            'status'          => $status,
-            'payment_id'      => $payment->id,
+            'status' => $status,
+            'payment_id' => $payment->id,
             // For 3DS the frontend must redirect the user to this URL.
             'transaction_url' => $response['source']['transaction_url'] ?? null,
-            'message'         => $response['source']['message'] ?? null,
+            'message' => $response['source']['message'] ?? null,
         ], $status === 'paid' ? 'تم الدفع بنجاح' : 'تتطلب العملية إجراءً إضافياً');
     }
 
@@ -209,16 +211,16 @@ class PaymentController extends Controller
 
         $remote = $this->moyasar->fetchPayment($data['moyasar_id']);
 
-        $status   = $remote['status'] ?? 'failed';
+        $status = $remote['status'] ?? 'failed';
         $amountOk = (int) ($remote['amount'] ?? 0) === (int) round($payment->amount * 100);
-        $paid     = $status === 'paid' && $amountOk;
+        $paid = $status === 'paid' && $amountOk;
 
         $payment->update([
-            'moyasar_id'       => $data['moyasar_id'],
+            'moyasar_id' => $data['moyasar_id'],
             'moyasar_response' => $remote,
-            'payment_method'   => $remote['source']['type'] ?? $payment->payment_method,
-            'payment_status'   => $paid ? 'paid' : ($status === 'failed' ? 'failed' : 'pending'),
-            'paid_at'          => $paid ? now() : null,
+            'payment_method' => $remote['source']['type'] ?? $payment->payment_method,
+            'payment_status' => $paid ? 'paid' : ($status === 'failed' ? 'failed' : 'pending'),
+            'paid_at' => $paid ? now() : null,
         ]);
 
         if ($paid) {
@@ -229,10 +231,10 @@ class PaymentController extends Controller
         }
 
         return $this->success([
-            'status'     => $paid ? 'paid' : $status,
+            'status' => $paid ? 'paid' : $status,
             'payment_id' => $payment->id,
             'booking_id' => $payment->booking_id,
-            'message'    => $remote['source']['message'] ?? null,
+            'message' => $remote['source']['message'] ?? null,
         ], $paid ? 'تم الدفع بنجاح' : 'لم يكتمل الدفع');
     }
 
@@ -271,8 +273,8 @@ class PaymentController extends Controller
         $verified = $this->moyasar->verifyCallback($moyasarId, (float) $payment->amount);
 
         $payment->update([
-            'payment_status'   => $verified ? 'paid' : 'failed',
-            'paid_at'          => $verified ? now() : null,
+            'payment_status' => $verified ? 'paid' : 'failed',
+            'paid_at' => $verified ? now() : null,
             'moyasar_response' => $request->all(),
         ]);
 
@@ -301,8 +303,8 @@ class PaymentController extends Controller
                     $verified = $this->moyasar->verifyCallback($moyasarId, (float) $payment->amount);
 
                     $payment->update([
-                        'payment_status'   => $verified ? 'paid' : 'failed',
-                        'paid_at'          => $verified ? now() : null,
+                        'payment_status' => $verified ? 'paid' : 'failed',
+                        'paid_at' => $verified ? now() : null,
                         'moyasar_response' => $request->query(),
                     ]);
 
@@ -318,8 +320,8 @@ class PaymentController extends Controller
         }
 
         return redirect()->away($this->frontendCallbackUrl().'?'.http_build_query([
-            'id'      => $moyasarId,
-            'status'  => (string) $request->query('status', ''),
+            'id' => $moyasarId,
+            'status' => (string) $request->query('status', ''),
             'message' => (string) $request->query('message', ''),
         ]));
     }
@@ -345,18 +347,18 @@ class PaymentController extends Controller
     private function markPaid(Payment $payment, array $response): JsonResponse
     {
         $payment->update([
-            'payment_status'   => 'paid',
-            'paid_at'          => now(),
-            'moyasar_id'       => $response['id'] ?? null,
+            'payment_status' => 'paid',
+            'paid_at' => now(),
+            'moyasar_id' => $response['id'] ?? null,
             'moyasar_response' => $response,
         ]);
 
         $this->confirmBooking($payment->booking);
 
         return $this->success([
-            'status'     => 'paid',
+            'status' => 'paid',
             'payment_id' => $payment->id,
-            'test'       => $response['test'] ?? false,
+            'test' => $response['test'] ?? false,
         ], 'تم الدفع بنجاح');
     }
 
@@ -376,7 +378,7 @@ class PaymentController extends Controller
         // FR-036: freeze the cancellation policy onto the booking at payment time
         // so later partner edits never alter this booking's refund terms.
         $booking->update([
-            'status'                => Booking::STATUS_CONFIRMED,
+            'status' => Booking::STATUS_CONFIRMED,
             'cancellation_snapshot' => $this->cancellationPolicy->snapshotForBooking($booking),
         ]);
 
@@ -386,12 +388,12 @@ class PaymentController extends Controller
         // Inside the idempotency guard above, so duplicates are impossible.
         try {
             $booking->user?->walletTransactions()->create([
-                'ref_code'    => 'PAY-'.now()->format('Y').'-'.str_pad((string) $booking->id, 6, '0', STR_PAD_LEFT),
-                'type'        => \App\Models\WalletTransaction::TYPE_PAYMENT,
-                'amount'      => -1 * (float) $booking->total_amount,
+                'ref_code' => 'PAY-'.now()->format('Y').'-'.str_pad((string) $booking->id, 6, '0', STR_PAD_LEFT),
+                'type' => WalletTransaction::TYPE_PAYMENT,
+                'amount' => -1 * (float) $booking->total_amount,
                 'description' => 'دفع حجز — '.($booking->unit?->unit_name ?? 'وحدة #'.$booking->unit_id),
-                'status'      => 'completed',
-                'booking_id'  => $booking->id,
+                'status' => 'completed',
+                'booking_id' => $booking->id,
                 'occurred_at' => now(),
             ]);
         } catch (\Throwable $e) {
@@ -432,10 +434,10 @@ class PaymentController extends Controller
             // Moyasar reports the scheme as `company`; map to our enum and
             // skip anything we don't support rather than fail.
             $brand = match ($remote['source']['company'] ?? '') {
-                'visa'   => 'visa',
+                'visa' => 'visa',
                 'master' => 'mastercard',
-                'mada'   => 'mada',
-                default  => null,
+                'mada' => 'mada',
+                default => null,
             };
 
             // Masked PAN looks like "XXXX-XXXX-XXXX-1234" — keep the last 4.
@@ -468,13 +470,22 @@ class PaymentController extends Controller
     }
 
     /**
-     * Test mode simulates a successful charge so the flow works without live
-     * credentials. It is ONLY ever allowed outside production — a missing secret
-     * key in production is a misconfiguration, never a licence to fake payments.
+     * Test mode simulates a successful charge instead of calling Moyasar.
+     *
+     * Two disjoint triggers:
+     *  1. No secret key configured AND not production — the dev/staging default,
+     *     so the flow works end-to-end without live credentials.
+     *  2. An allowlisted test account while TEST_PAYMENTS_MODE is on — this is the
+     *     only path allowed in production, and it is scoped to the specific demo
+     *     phones (never a real customer, whose live charge always runs).
      */
     private function isTestMode(): bool
     {
-        return blank(config('moyasar.secret_key')) && ! app()->isProduction();
+        if (blank(config('moyasar.secret_key')) && ! app()->isProduction()) {
+            return true;
+        }
+
+        return TestMode::paymentBypass(auth()->user()?->phone);
     }
 
     /**
