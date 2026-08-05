@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Exceptions\OtpException;
 use App\Services\Sms\SmsProvider;
 use App\Support\PhoneNumber;
+use App\Support\TestMode;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
@@ -20,13 +22,18 @@ class OtpService
 
     public function request(string $rawPhone, string $purpose = 'login', ?string $ip = null): string
     {
-        $phone    = PhoneNumber::toE164Ksa($rawPhone);
+        $phone = PhoneNumber::toE164Ksa($rawPhone);
         $cooldown = (int) config('otp.resend_seconds', 60);
-        $ttl      = (int) config('otp.exp_minutes', 5) * 60;
+        $ttl = (int) config('otp.exp_minutes', 5) * 60;
+
+        // Scoped test account: return the fixed code, skip the SMS, and bypass the
+        // resend cooldown + daily caps so the demo flow is never throttled. Gated
+        // to the allowlist by TestMode, so a real user can never reach this branch.
+        $bypass = TestMode::otpBypass($phone);
 
         $existing = $this->get($phone, $purpose);
 
-        if ($existing) {
+        if (! $bypass && $existing) {
             $elapsed = now()->timestamp - $existing['sent_at'];
             if ($elapsed < $cooldown) {
                 $remain = $cooldown - $elapsed;
@@ -36,9 +43,11 @@ class OtpService
             }
         }
 
-        $this->enforceDailyCaps($phone, $ip);
+        if (! $bypass) {
+            $this->enforceDailyCaps($phone, $ip);
+        }
 
-        $code = $this->generateCode();
+        $code = $bypass ? (string) TestMode::code() : $this->generateCode();
 
         $this->cache()->put(
             $this->key($phone, $purpose),
@@ -46,7 +55,9 @@ class OtpService
             $ttl
         );
 
-        $this->sms->send($phone, $this->smsText($code, $purpose), config('sms.sender_id'));
+        if (! $bypass) {
+            $this->sms->send($phone, $this->smsText($code, $purpose), config('sms.sender_id'));
+        }
 
         return $code;
     }
@@ -62,7 +73,7 @@ class OtpService
 
         $reason = match ($purpose) {
             'change-phone' => 'لتغيير رقم الجوال في منصة ممسى',
-            default        => 'لدخول منصة ممسى',
+            default => 'لدخول منصة ممسى',
         };
 
         return "رمز التحقق: {$code} {$reason}. صالح لمدة {$expMinutes} دقائق، لا تشاركه مع أحد.";
@@ -75,11 +86,11 @@ class OtpService
     public function verify(string $rawPhone, string $code, string $purpose = 'login'): void
     {
         $phone = PhoneNumber::toE164Ksa($rawPhone);
-        $key   = $this->key($phone, $purpose);
-        $otp   = $this->get($phone, $purpose);
+        $key = $this->key($phone, $purpose);
+        $otp = $this->get($phone, $purpose);
 
         if (! $otp) {
-            throw \App\Exceptions\OtpException::withMessages([
+            throw OtpException::withMessages([
                 'code' => ['رمز غير صحيح أو منتهي الصلاحية'],
             ])->setOtpCode('OTP_EXPIRED');
         }
@@ -88,7 +99,7 @@ class OtpService
 
         if ($otp['attempts'] >= $maxAttempts) {
             $this->cache()->forget($key);
-            throw \App\Exceptions\OtpException::withMessages([
+            throw OtpException::withMessages([
                 'code' => ['تم تجاوز الحد الأقصى للمحاولات. يرجى طلب رمز جديد.'],
             ])->setOtpCode('OTP_LOCKED');
         }
@@ -100,7 +111,7 @@ class OtpService
 
         if (! hash_equals((string) $otp['code'], trim($code))) {
             $remaining = $maxAttempts - $otp['attempts'];
-            throw \App\Exceptions\OtpException::withMessages([
+            throw OtpException::withMessages([
                 'code' => ["رمز غير صحيح. المحاولات المتبقية: {$remaining}"],
             ])->setOtpCode('OTP_WRONG');
         }
@@ -162,7 +173,7 @@ class OtpService
         }
 
         $length = max(4, (int) config('otp.length', 6));
-        $max    = (10 ** $length) - 1;
+        $max = (10 ** $length) - 1;
 
         return str_pad((string) random_int(0, $max), $length, '0', STR_PAD_LEFT);
     }
