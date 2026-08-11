@@ -363,8 +363,9 @@ class PaymentController extends Controller
     }
 
     /**
-     * Confirm a paid booking and notify the unit's partner + all admins
-     * (in-app + email). Single entry point for every payment success path.
+     * Confirm a paid booking and notify whoever OWNS the unit (in-app + email):
+     * a partner listing → its partner owner only; a Mamsa-owned listing → all
+     * super admins. Single entry point for every payment success path.
      */
     private function confirmBooking(Booking $booking): void
     {
@@ -402,10 +403,14 @@ class PaymentController extends Controller
 
         // Best-effort: a mail/SMS failure must never break a paid booking.
         try {
-            $recipients = User::role(['Admin', 'SuperAdmin'])->get();
-            if ($owner = $booking->unit?->owner) {
-                $recipients = $recipients->push($owner)->unique('id');
-            }
+            // Booking notifications go to whoever OWNS the unit:
+            //  - Partner listing     → the partner (unit owner) only.
+            //  - Mamsa-owned listing → all super admins (no external partner, so
+            //    the platform's super admins stand in as the owner).
+            $unit = $booking->unit;
+            $recipients = $unit?->mamsa_owned
+                ? User::role('SuperAdmin')->get()
+                : collect(array_filter([$unit?->owner]));
 
             if ($recipients->isNotEmpty()) {
                 Notification::send($recipients, new NewBooking($booking));
