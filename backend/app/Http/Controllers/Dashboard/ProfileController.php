@@ -162,6 +162,24 @@ class ProfileController extends DashboardController
             ->count();
     }
 
+    /**
+     * Company payout-docs completeness.
+     *
+     * ⚠️ PHASE A WARNING (bank_details migration) — this is company-only by
+     * design, and the `iban` element below now also carries INDIVIDUAL partners'
+     * bank accounts, because PUT /me/company-docs has no type gate and the
+     * dashboard writes individual IBANs through it in the interim.
+     *
+     * So do NOT extend this check to individuals as-is:
+     *  - an individual who saved only an IBAN would read as "complete" (the four
+     *    company-only fields are legitimately null for them), and
+     *  - an individual with no IBAN would be blocked from submitting a unit with
+     *    no visible cause — the 409 names company docs.
+     *
+     * When completeness moves to `bank_details`, make it TYPE-AWARE: companies
+     * need CR + the three files + a verified bank account; individuals need only
+     * a bank account, and only if payout eligibility actually requires one.
+     */
     public static function docs(User $user): array
     {
         $d = $user->partnerDetail;
