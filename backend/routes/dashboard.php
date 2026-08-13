@@ -82,4 +82,13 @@ Route::middleware(['auth:dashboard', 'throttle:120,1'])->group(function () {
 
     /* Uploads */
     Route::post('uploads/presign', [Dashboard\UploadController::class, 'presign'])->name('pd.uploads.presign');
+
+    /* ---- Wallet & Bank details — STUBS (contract v2.2 §6) ----
+     * Fixture-backed, non-production ONLY. Real controllers replace these. */
+    if (! app()->isProduction()) {
+        Route::get('wallet', [Dashboard\Stub\WalletStubController::class, 'summary'])->name('pd.wallet');
+        Route::get('wallet/ledger', [Dashboard\Stub\WalletStubController::class, 'ledger'])->name('pd.wallet.ledger');
+        Route::get('me/bank-details', [Dashboard\Stub\BankDetailsStubController::class, 'show'])->name('pd.bank-details.show');
+        Route::put('me/bank-details', [Dashboard\Stub\BankDetailsStubController::class, 'update'])->name('pd.bank-details.update');
+    }
 });

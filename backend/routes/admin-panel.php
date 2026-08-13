@@ -91,5 +91,18 @@ Route::prefix('admin')->group(function () {
         Route::get('approvals/{id}', [AdminPanel\ApprovalsController::class, 'show'])->name('ap.approvals.show');
         Route::post('approvals/{id}/approve', [AdminPanel\ApprovalsController::class, 'approve'])->name('ap.approvals.approve');
         Route::post('approvals/{id}/reject', [AdminPanel\ApprovalsController::class, 'reject'])->name('ap.approvals.reject');
+
+        /* ---- Wallets & Payouts — STUBS (contract v2.2 §5.1/§5.2) ----
+         * Fixture-backed, registered on non-production ONLY so prod never
+         * serves fixtures. Real controllers replace these in Phase 4/6. */
+        if (! app()->isProduction()) {
+            Route::get('payouts/eligible', [AdminPanel\Stub\PayoutStubController::class, 'eligible'])->name('ap.payouts.eligible');
+            Route::get('payouts/ineligible', [AdminPanel\Stub\PayoutStubController::class, 'ineligible'])->name('ap.payouts.ineligible');
+            Route::post('payouts/record', [AdminPanel\Stub\PayoutStubController::class, 'record'])->name('ap.payouts.record');
+
+            Route::get('wallets', [AdminPanel\Stub\WalletStubController::class, 'index'])->name('ap.wallets.index');
+            Route::get('wallets/{partnerId}/ledger', [AdminPanel\Stub\WalletStubController::class, 'ledger'])->name('ap.wallets.ledger');
+            Route::get('wallets/{partnerId}', [AdminPanel\Stub\WalletStubController::class, 'show'])->name('ap.wallets.show');
+        }
     });
 });

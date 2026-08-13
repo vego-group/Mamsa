@@ -169,7 +169,9 @@ class User extends Authenticatable
 
     public function isAdmin(): bool
     {
-        return $this->hasAnyRole(['Admin', 'SuperAdmin']);
+        // 'finance' is an admin-panel role (contract v2.2 §4.2) — it may open an
+        // admin session; per-permission authz is enforced separately.
+        return $this->hasAnyRole(['Admin', 'SuperAdmin', 'finance']);
     }
 
     public function isPartner(): bool

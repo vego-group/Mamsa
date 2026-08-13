@@ -25,12 +25,18 @@ class AdminProfileResource extends JsonResource
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
+        // Real role from Spatie: 'finance' when assigned, else 'superadmin'
+        // (the only two roles the contract's AdminRole union permits). The flat
+        // resolved permission list (§4.3) is what the frontend gates on.
+        $role = $this->hasRole('finance') ? 'finance' : 'superadmin';
+
         return [
             'id'              => (string) $this->id,
             'name'            => $this->name ?? '',
             'email'           => $this->email ?? '',
             'phone'           => (string) $this->phone,
-            'role'            => 'superadmin',
+            'role'            => $role,
+            'permissions'     => \App\Support\AdminPermissions::for($role),
             'verified'        => true,
             'memberSince'     => optional($this->created_at)->toIso8601String(),
             // Not yet tracked per-admin (no reviewer audit trail) — honest zeros

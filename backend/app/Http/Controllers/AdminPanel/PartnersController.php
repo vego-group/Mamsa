@@ -299,6 +299,10 @@ class PartnersController extends Controller
             'rating'           => $u->rating !== null ? round((float) $u->rating, 1) : 0.0,
             'verified'         => $d?->verified_at !== null,
             'status'           => $this->partnerStatus($u, $d),
+            // Raw signal alongside the derived `status` (which folds both into one
+            // string): payout eligibility is `approved` AND `isActive`, so the
+            // client needs the flag, not just the label.
+            'isActive'         => (bool) $u->is_active,
             'cancellations12m' => $c12,
             'cancellationRate' => $rate,
             'flagged'          => $this->flagged($rate),
