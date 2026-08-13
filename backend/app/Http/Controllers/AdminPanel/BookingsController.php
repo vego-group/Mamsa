@@ -27,7 +27,7 @@ class BookingsController extends Controller
         $query = Booking::query()->with(['unit.owner', 'user', 'payment']);
 
         if ($status = $this->cleanParam($request->query('status'))) {
-            $query->where('status', $status === 'pending_payment' ? 'pending' : $status);
+            $query->where('status', $status); // DB values are the spec literals since 2026-08-13
         }
         if ($unitId = $this->cleanParam($request->query('unitId'))) {
             $query->where('unit_id', $unitId);
@@ -70,7 +70,10 @@ class BookingsController extends Controller
 
         $out = ['all' => 0, 'pending_payment' => 0, 'confirmed' => 0, 'completed' => 0, 'cancelled' => 0];
         foreach ($raw as $status => $c) {
-            $out[$this->bookingStatus($status)] += (int) $c;
+            // DB values are the spec literals; ignore anything unexpected.
+            if (array_key_exists($status, $out)) {
+                $out[$status] += (int) $c;
+            }
             $out['all'] += (int) $c;
         }
 
@@ -135,7 +138,7 @@ class BookingsController extends Controller
                 ? 'refunded'
                 : $this->paymentStatus($b->payment?->payment_status),
             'moyasarRef'    => $b->payment?->moyasar_id,
-            'status'        => $this->bookingStatus($b->status),
+            'status'        => (string) $b->status,
             'createdAt'     => $this->iso($b->created_at),
             'mamsaOwned'    => false,
         ];

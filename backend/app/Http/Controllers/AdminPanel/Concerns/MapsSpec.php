@@ -63,15 +63,9 @@ trait MapsSpec
 
     /* ---------- enums ---------- */
 
-    protected function bookingStatus(?string $s): string
-    {
-        return match ($s) {
-            'confirmed', 'paid' => 'confirmed',
-            'completed'         => 'completed',
-            'cancelled'         => 'cancelled',
-            default             => 'pending_payment', // internal 'pending'
-        };
-    }
+    // bookingStatus() shim REMOVED 2026-08-13: bookings.status now stores the
+    // spec literals natively (pending_payment|confirmed|completed|cancelled),
+    // so no translation is needed — read $booking->status directly.
 
     protected function paymentStatus(?string $s): string
     {

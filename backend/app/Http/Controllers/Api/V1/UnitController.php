@@ -228,7 +228,7 @@ class UnitController extends Controller
         ]);
 
         $conflict = Booking::where('unit_id', $unit->id)
-            ->whereIn('status', ['pending', 'confirmed'])
+            ->whereIn('status', ['pending_payment', 'confirmed'])
             ->where(function ($q) use ($request) {
                 $q->whereBetween('start_date', [$request->start_date, $request->end_date])
                   ->orWhereBetween('end_date', [$request->start_date, $request->end_date])

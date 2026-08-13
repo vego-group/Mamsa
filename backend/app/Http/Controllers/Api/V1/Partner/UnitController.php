@@ -131,7 +131,7 @@ class UnitController extends Controller
             return response()->json(['message' => 'غير مصرح'], 403);
         }
 
-        if ($unit->bookings()->whereIn('status', ['pending', 'confirmed'])->exists()) {
+        if ($unit->bookings()->whereIn('status', ['pending_payment', 'confirmed'])->exists()) {
             return response()->json(['message' => 'لا يمكن حذف وحدة بها حجوزات نشطة'], 422);
         }
 

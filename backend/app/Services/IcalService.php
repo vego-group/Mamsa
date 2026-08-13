@@ -24,7 +24,7 @@ class IcalService
     public function export(Unit $unit): string
     {
         $unit->loadMissing([
-            'bookings' => fn ($q) => $q->whereIn('status', ['pending', 'confirmed'])
+            'bookings' => fn ($q) => $q->whereIn('status', ['pending_payment', 'confirmed'])
                 ->where('end_date', '>=', now()->subMonths(1)),
             'blockedDates' => fn ($q) => $q->where('source', UnitBlockedDate::SOURCE_MANUAL)
                 ->where('end_date', '>=', now()->subMonths(1)),

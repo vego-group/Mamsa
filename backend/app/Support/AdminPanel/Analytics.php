@@ -108,7 +108,10 @@ class Analytics
 
         $slices = ['pending_payment' => 0, 'confirmed' => 0, 'completed' => 0, 'cancelled' => 0];
         foreach ($counts as $status => $c) {
-            $slices[$this->bookingStatus($status)] += (int) $c;
+            // DB values are the spec literals; ignore anything unexpected.
+            if (array_key_exists($status, $slices)) {
+                $slices[$status] += (int) $c;
+            }
         }
 
         return array_map(fn ($status, $count) => ['status' => $status, 'count' => $count], array_keys($slices), array_values($slices));

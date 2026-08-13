@@ -130,7 +130,9 @@ class ReportController extends Controller
         return [
             'confirmed' => (int) ($c['confirmed'] ?? 0),
             'completed' => (int) ($c['completed'] ?? 0),
-            'pending'   => (int) ($c['pending'] ?? 0),
+            // Response key stays `pending` for existing /api/v1 consumers; the
+            // DB value is now `pending_payment` (renamed 2026-08-13).
+            'pending'   => (int) ($c[Booking::STATUS_PENDING] ?? 0),
             'cancelled' => (int) ($c['cancelled'] ?? 0),
         ];
     }

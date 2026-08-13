@@ -73,7 +73,9 @@ class DashboardController extends Controller
 
         return [
             'total'     => (int) $byStatus->sum(),
-            'pending'   => (int) ($byStatus['pending'] ?? 0),
+            // Response key stays `pending` for the existing /api/v1 consumers;
+            // the DB value is now `pending_payment` (renamed 2026-08-13).
+            'pending'   => (int) ($byStatus[Booking::STATUS_PENDING] ?? 0),
             'confirmed' => (int) ($byStatus['confirmed'] ?? 0),
             'completed' => (int) ($byStatus['completed'] ?? 0),
             'cancelled' => (int) ($byStatus['cancelled'] ?? 0),

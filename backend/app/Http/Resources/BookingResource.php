@@ -118,7 +118,7 @@ class BookingResource extends JsonResource
     private function statusLabel(): string
     {
         return match ($this->status) {
-            'pending'   => 'قيد الانتظار',
+            'pending_payment' => 'بانتظار الدفع',
             'confirmed' => 'مؤكد',
             'completed' => 'منتهي',
             'cancelled' => 'ملغى',

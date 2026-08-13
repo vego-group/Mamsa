@@ -39,7 +39,7 @@ class CalendarController extends Controller
                 ->get(['id', 'start_date', 'end_date', 'source', 'note']),
             // Read-only context so the calendar UI can paint booked days too.
             'booked'          => $unit->bookings()
-                ->whereIn('status', ['pending', 'confirmed'])
+                ->whereIn('status', ['pending_payment', 'confirmed'])
                 ->where('end_date', '>=', now()->toDateString())
                 ->orderBy('start_date')
                 ->get(['id', 'start_date', 'end_date', 'status']),

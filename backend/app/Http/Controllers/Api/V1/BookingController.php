@@ -98,7 +98,7 @@ class BookingController extends Controller
 
         // conflict check
         $conflict = Booking::where('unit_id', $unit->id)
-            ->whereIn('status', ['pending', 'confirmed'])
+            ->whereIn('status', ['pending_payment', 'confirmed'])
             ->where(function ($q) use ($data) {
                 $q->whereBetween('start_date', [$data['start_date'], $data['end_date']])
                   ->orWhereBetween('end_date', [$data['start_date'], $data['end_date']])
@@ -144,7 +144,7 @@ class BookingController extends Controller
             'commission_rate'   => $pricing['commission_rate'],
             'commission_amount' => $pricing['commission_amount'],
             'total_amount'      => $pricing['total'],
-            'status'            => 'pending', // explicit so the in-memory model matches the DB default
+            'status'            => Booking::STATUS_PENDING, // explicit so the in-memory model matches the DB default
             'notes'             => $data['notes'] ?? null,
         ]);
 

@@ -57,7 +57,7 @@ class PaymentController extends Controller
 
         $booking = Booking::where('id', $data['booking_id'])
             ->where('user_id', auth()->id())
-            ->where('status', 'pending')
+            ->where('status', Booking::STATUS_PENDING)
             ->with('unit.images')
             ->firstOrFail();
 

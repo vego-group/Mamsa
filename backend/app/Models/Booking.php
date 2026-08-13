@@ -9,7 +9,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Booking extends Model
 {
-    public const STATUS_PENDING   = 'pending';
+    /** Unpaid booking awaiting payment (renamed from 'pending' 2026-08-13). */
+    public const STATUS_PENDING   = 'pending_payment';
     public const STATUS_CONFIRMED = 'confirmed';
     public const STATUS_COMPLETED = 'completed';
     public const STATUS_CANCELLED = 'cancelled';
