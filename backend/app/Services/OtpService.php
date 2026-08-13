@@ -165,8 +165,9 @@ class OtpService
 
     private function generateCode(): string
     {
-        // Deterministic code for non-production testing (staging/local), e.g. 111222.
-        // Never honoured in production — live codes are always random.
+        // Deterministic code for non-production testing (staging/local), set via
+        // OTP_FIXED_CODE. Never honoured in production — live codes are always
+        // random. Do not name the actual value here: this repository is public.
         $fixed = config('otp.fixed_code');
         if ($fixed !== null && $fixed !== '' && ! app()->isProduction()) {
             return (string) $fixed;
