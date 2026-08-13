@@ -25,12 +25,20 @@ class ReportsController extends Controller
         $since  = now()->subMonths($months - 1)->startOfMonth();
 
         $revenue        = Booking::query()->revenue()->where('created_at', '>=', $since);
-        $totalRevenue   = $this->money((clone $revenue)->sum('total_amount'));
+        $grossSum       = (float) (clone $revenue)->sum('total_amount');
+        $totalRevenue   = $this->money($grossSum);
+        // VAT split (contract §5.4). Derived as total − taxes rather than by
+        // summing `subtotal`, so it stays exact under BOTH pricing models and
+        // still reconciles for the historical fee bookings.
+        // Invariant: netRevenue + vatCollected === totalRevenue.
+        $vatSum         = (float) (clone $revenue)->sum('taxes');
         $occupancy      = $this->analytics->occupancySeries($months);
         $occupancyAvg   = $occupancy !== [] ? (int) round(array_sum(array_column($occupancy, 'value')) / count($occupancy)) : 0;
 
         return response()->json([
             'totalRevenue'        => $totalRevenue,
+            'netRevenue'          => $this->money($grossSum - $vatSum),
+            'vatCollected'        => $this->money($vatSum),
             'totalCommission'     => $this->money($this->commissionSum((clone $revenue))),
             'totalBookings'       => Booking::where('created_at', '>=', $since)->count(),
             'avgMonthlyRevenue'   => $this->money($totalRevenue / $months),

@@ -30,8 +30,17 @@ class ReportController extends DashboardController
         $commission = (float) $base()->selectRaw('COALESCE(SUM(COALESCE(commission_amount, ROUND(total_amount*0.02,2))),0) as v')->value('v');
         $count      = $base()->count();
 
+        // VAT split (contract §6.1). Derived as total − taxes rather than by
+        // summing `subtotal`, so it stays exact under BOTH pricing models (today
+        // VAT is added on top; after the inclusive flip it is carved out of the
+        // same total) and still reconciles for the historical fee bookings.
+        // Invariant: netRevenue + vat === grossRevenue.
+        $vat = (float) $base()->sum('taxes');
+
         return response()->json([
             'grossRevenue'    => round($gross, 2),
+            'netRevenue'      => round($gross - $vat, 2),
+            'vat'             => round($vat, 2),
             'bookingsCount'   => $count,
             'commission'      => round($commission, 2),
             'netProfit'       => round($gross - $commission, 2),
