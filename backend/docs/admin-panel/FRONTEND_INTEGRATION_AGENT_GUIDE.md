@@ -125,7 +125,7 @@ Frontend responsibilities:
 
 ### Dev OTP code — important
 The frontend **mock** uses fixed OTP `123456`. Against the **real** API the code comes from
-the backend: in non-production it is `OTP_FIXED_CODE` (the sample env ships `111222`) and no
+the backend: in non-production it is `OTP_FIXED_CODE` (the sample env ships `<fixed OTP — request privately>`) and no
 SMS is sent when `SMS_DRIVER=log`. To make the two match while developing, ask the backend to
 set `OTP_FIXED_CODE=123456`, or just use whatever the backend's value is. In production the
 code is a real SMS — there is no fixed code.
