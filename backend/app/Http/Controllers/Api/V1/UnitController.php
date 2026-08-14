@@ -253,9 +253,11 @@ class UnitController extends Controller
         if ($available) {
             $nights = (int) now()->parse($request->start_date)->diffInDays($request->end_date);
 
+            // Internal settlement figures stay out of this public payload
+            // (contract §1.7, §7): a guest never sees the platform's margin.
             $payload['pricing'] = \Illuminate\Support\Arr::except(
                 Pricing::breakdown((float) $unit->price, $nights),
-                ['commission_rate', 'commission_amount'],
+                ['commission_rate', 'commission_amount', 'partner_share'],
             );
         }
 

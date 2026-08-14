@@ -74,6 +74,20 @@ class BookingPresenter
         $pricing = [
             'nightlyRate' => (float) ($booking->nightly_rate ?? ($booking->nights ? round($total / $booking->nights, 2) : 0)),
             'nights'      => $booking->nights,
+            // Contract §1.7 names — the same frozen numbers as the legacy keys
+            // below (subtotal IS the net base, taxes IS the VAT, total IS the
+            // gross), exposed under the contract's vocabulary. camelCase because
+            // this is a BFF surface (§9.4).
+            'gross'        => $total,
+            'netBase'      => (float) ($booking->subtotal ?? $total),
+            'vat'          => (float) $booking->taxes,
+            'vatRate'      => round((float) ($booking->tax_percent ?? 0) / 100, 4),
+            // Partner-facing: this is the partner's OWN booking, so the split
+            // that determines their payout is legitimately theirs to see.
+            'commission'   => (float) $booking->commission_amount,
+            'partnerShare' => (float) ($booking->partner_share
+                ?: round(($booking->subtotal ?? $total) - $booking->commission_amount, 2)),
+
             'subtotal'    => (float) ($booking->subtotal ?? $total),
             'taxes'       => (float) $booking->taxes,
             'taxPercent'  => (float) ($booking->tax_percent ?? (($base = $booking->subtotal + $booking->cleaning_fee + $booking->service_fee) > 0 ? round($booking->taxes / $base * 100, 2) : 0)),

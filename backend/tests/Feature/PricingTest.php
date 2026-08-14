@@ -59,13 +59,14 @@ class PricingTest extends TestCase
         return $user;
     }
 
-    /* ---- formula: subtotal + 15% VAT, nothing else ---- */
+    /* ---- formula: VAT-INCLUSIVE, nothing added on top ---- */
 
-    public function test_availability_returns_subtotal_plus_vat_only(): void
+    public function test_availability_returns_vat_inclusive_breakdown(): void
     {
         $unit = $this->unit(price: 1000);
 
-        // 3 nights: subtotal 3000, VAT 450, total 3450 — no fee lines at all.
+        // price is GROSS: 3 nights = 3000 payable. VAT is carved OUT of it —
+        // netBase 2608.70 + vat 391.30 = 3000, not 3000 + 450.
         $this->postJson("/api/v1/units/{$unit->id}/availability", [
             'start_date' => now()->addDays(10)->toDateString(),
             'end_date'   => now()->addDays(13)->toDateString(),
@@ -74,15 +75,19 @@ class PricingTest extends TestCase
             'pricing'   => [
                 'nights'       => 3,
                 'nightly_rate' => 1000.0,
-                'subtotal'     => 3000.0,
-                'taxes'        => 450.0,
+                'gross'        => 3000.0,
+                'net_base'     => 2608.70,
+                'vat'          => 391.30,
+                'subtotal'     => 2608.70,
+                'taxes'        => 391.30,
                 'tax_percent'  => 15.0,
-                'total'        => 3450.0,
+                'total'        => 3000.0,
             ],
         ])->assertJsonMissingPath('pricing.service_fee')
           ->assertJsonMissingPath('pricing.cleaning_fee')
           ->assertJsonMissingPath('pricing.service_fee_percent')
-          ->assertJsonMissingPath('pricing.commission_amount');
+          ->assertJsonMissingPath('pricing.commission_amount')
+          ->assertJsonMissingPath('pricing.partner_share');
     }
 
     public function test_booking_freezes_breakdown_and_halalas_are_exact(): void
@@ -95,26 +100,34 @@ class PricingTest extends TestCase
             'end_date'   => now()->addDays(13)->toDateString(),
             'guests'     => 2,
         ])->assertCreated()
-            ->assertJsonPath('pricing.taxes', 450)
+            ->assertJsonPath('pricing.taxes', 391.3)
+            ->assertJsonPath('pricing.vat', 391.3)
+            ->assertJsonPath('pricing.gross', 3000)
             ->assertJsonPath('pricing.tax_percent', 15)
-            ->assertJsonPath('pricing.total', 3450)
+            ->assertJsonPath('pricing.total', 3000)
             ->assertJsonMissingPath('pricing.service_fee')
             ->assertJsonMissingPath('pricing.cleaning_fee');
 
         $this->assertDatabaseHas('bookings', [
             'unit_id'      => $unit->id,
-            'subtotal'     => 3000.00,
-            'service_fee'  => 0,
-            'cleaning_fee' => 0,
-            'taxes'        => 450.00,
-            'tax_percent'  => 15.00,
-            'total_amount' => 3450.00,
+            'subtotal'      => 2608.70,   // net base
+            'service_fee'   => 0,
+            'cleaning_fee'  => 0,
+            'taxes'         => 391.30,    // VAT carved out of the gross
+            'tax_percent'   => 15.00,
+            'total_amount'  => 3000.00,   // gross = what the guest pays
+            'partner_share' => 2556.53,   // netBase - 2% commission, frozen
         ]);
+
+        // The two contract invariants must hold exactly under rounding.
+        $b = Booking::where('unit_id', $unit->id)->firstOrFail();
+        $this->assertSame(3000.00, round($b->subtotal + $b->taxes, 2));
+        $this->assertSame(3000.00, round($b->commission_amount + $b->partner_share + $b->taxes, 2));
 
         // Halalas parity: lines pre-rounded to 2dp → total × 100 is exact
         // (this is the figure /payments/initiate sends to Moyasar).
         $total = (float) Booking::where('unit_id', $unit->id)->value('total_amount');
-        $this->assertSame(345000, (int) round($total * 100));
+        $this->assertSame(300000, (int) round($total * 100));
     }
 
     public function test_historical_fee_era_booking_still_shows_its_fee_lines(): void

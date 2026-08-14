@@ -143,6 +143,9 @@ class BookingController extends Controller
             'tax_percent'       => $pricing['tax_percent'],
             'commission_rate'   => $pricing['commission_rate'],
             'commission_amount' => $pricing['commission_amount'],
+            // Frozen payout basis (§1.8) — a later rate change must never alter
+            // what a partner is owed for a stay already taken.
+            'partner_share'     => $pricing['partner_share'],
             'total_amount'      => $pricing['total'],
             'status'            => Booking::STATUS_PENDING, // explicit so the in-memory model matches the DB default
             'notes'             => $data['notes'] ?? null,

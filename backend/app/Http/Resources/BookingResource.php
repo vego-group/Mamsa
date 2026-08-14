@@ -106,6 +106,16 @@ class BookingResource extends JsonResource
         $pricing = [
             'nightly_rate' => (float) ($this->nightly_rate ?? ($this->nights ? round($this->total_amount / $this->nights, 2) : 0)),
             'nights'       => $this->nights,
+            // Contract §1.7 names. These are the SAME frozen numbers as the
+            // legacy keys below — subtotal IS the net base, taxes IS the VAT,
+            // total IS the gross — exposed under the contract's vocabulary so
+            // clients need not know the historical column names.
+            // snake_case here because /api/v1 is snake_case (§9.4).
+            'gross'        => (float) $this->total_amount,
+            'net_base'     => (float) ($this->subtotal ?? $this->total_amount),
+            'vat'          => (float) $this->taxes,
+            'vat_rate'     => round((float) ($this->tax_percent ?? 0) / 100, 4),
+
             'subtotal'     => (float) ($this->subtotal ?? $this->total_amount),
             'taxes'        => (float) $this->taxes,
             // Frozen applied rate; derived (fee ÷ base, the fee-era formula)
