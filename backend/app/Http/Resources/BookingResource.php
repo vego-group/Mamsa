@@ -9,6 +9,14 @@ class BookingResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        // Mamsa's cut is an internal settlement between the platform and the
+        // partner — never a guest-facing figure (contract §1.7, §7). This
+        // resource is shared by the guest, partner and admin endpoints, so the
+        // field is gated here rather than at the route.
+        $viewer  = $request->user();
+        $isAdmin = (bool) $viewer?->isAdmin();
+        $isOwner = $viewer !== null && (int) ($this->unit?->user_id ?? 0) === (int) $viewer->id;
+
         return [
             'id'           => $this->id,
             // Human-friendly confirmation code derived deterministically from the id.
@@ -34,8 +42,11 @@ class BookingResource extends JsonResource
                 'children' => (int) $this->children,
             ],
             'total_amount' => $this->total_amount,
-            // Mamsa's frozen 2% cut — surfaced for the admin bookings table.
-            'commission_amount' => (float) $this->commission_amount,
+            // Mamsa's frozen 2% cut — surfaced for the admin bookings table and
+            // the partner's own earnings view. Withheld from guests.
+            $this->mergeWhen($isAdmin || $isOwner, fn () => [
+                'commission_amount' => (float) $this->commission_amount,
+            ]),
             // Itemised price summary (ملخص السعر). Falls back gracefully for
             // legacy rows that predate the breakdown columns.
             'pricing'      => $this->pricingBlock(),
