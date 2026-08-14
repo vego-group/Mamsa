@@ -54,7 +54,7 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Without `intent` this is the legacy unified passwordless flow (verify-otp will create the user row if missing). Send `intent: \"login\" | \"register\"` to get an early 422 with a machine-readable `code` instead (see the two intent variants below).\n\nNon-production returns `debug_otp` in the response and this request auto-captures it into {{otp_code}} (so Verify OTP just works). When OTP_FIXED_CODE is set (e.g. staging), every OTP is that fixed value — **111222**. Production sends a real SMS and omits debug_otp."
+            "description": "Without `intent` this is the legacy unified passwordless flow (verify-otp will create the user row if missing). Send `intent: \"login\" | \"register\"` to get an early 422 with a machine-readable `code` instead (see the two intent variants below).\n\nNon-production returns `debug_otp` in the response and this request auto-captures it into {{otp_code}} (so Verify OTP just works). When OTP_FIXED_CODE is set (e.g. staging), every OTP is that fixed value (see OTP_FIXED_CODE for that environment). Production sends a real SMS and omits debug_otp."
           },
           "response": [],
           "event": [
@@ -213,7 +213,7 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Captures access_token + refresh_token into collection variables on success. Code = {{otp_code}} (auto-filled by Request OTP from debug_otp). With OTP_FIXED_CODE set in non-production it's the fixed value — **111222**."
+            "description": "Captures access_token + refresh_token into collection variables on success. Code = {{otp_code}} (auto-filled by Request OTP from debug_otp). With OTP_FIXED_CODE set in non-production it's the value of OTP_FIXED_CODE for that environment."
           },
           "response": [],
           "event": [
@@ -1167,7 +1167,7 @@
                 }
               }
             },
-            "description": "Email task 2026-07-19 §1 — stores the email UNVERIFIED and sends a 6-digit OTP to it. Changing an existing email always drops it back to verified=false. 200 → data { email, verified:false, resend_available_in:60 }. Machine-coded errors: EMAIL_INVALID / EMAIL_ALREADY_IN_USE (422), RATE_LIMITED (429, + retry_after). OTP validity 300s, same policy as the phone OTP. Staging fixed code = 111222 (NOT 123456); fixed codes never work in production. Login stays phone-OTP only — email is a verified contact channel."
+            "description": "Email task 2026-07-19 §1 — stores the email UNVERIFIED and sends a 6-digit OTP to it. Changing an existing email always drops it back to verified=false. 200 → data { email, verified:false, resend_available_in:60 }. Machine-coded errors: EMAIL_INVALID / EMAIL_ALREADY_IN_USE (422), RATE_LIMITED (429, + retry_after). OTP validity 300s, same policy as the phone OTP. Staging uses a fixed code (OTP_FIXED_CODE); fixed codes never work in production. Login stays phone-OTP only — email is a verified contact channel."
           },
           "response": []
         },
@@ -1198,7 +1198,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"111222\"\n}",
+              "raw": "{\n  \"code\": \"{{otp_code}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3243,7 +3243,7 @@
                 "auth": {
                   "type": "noauth"
                 },
-                "description": "9-digit phone starting with 5 (no leading 0). Staging uses fixed OTP 111222; the code is never returned.",
+                "description": "9-digit phone starting with 5 (no leading 0). Staging uses a fixed OTP (OTP_FIXED_CODE); the code is never returned.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"phone\": \"{{dashboard_phone}}\"\n}",
@@ -4787,7 +4787,7 @@
                 "auth": {
                   "type": "noauth"
                 },
-                "description": "Admin phones only (403 otherwise). Staging fixed OTP 111222.",
+                "description": "Admin phones only (403 otherwise). Staging uses a fixed OTP (OTP_FIXED_CODE).",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"phone\": \"{{dashboard_phone}}\"\n}",
@@ -6349,7 +6349,7 @@
     },
     {
       "key": "otp_code",
-      "value": "111222"
+      "value": ""
     },
     {
       "key": "admin_email",

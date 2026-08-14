@@ -36,7 +36,7 @@ class EmailVerificationFlowTest extends TestCase
         // only) — and pin the contract's OTP policy so a dev .env with
         // shortened staging values can't skew these assertions.
         config([
-            'otp.fixed_code'         => '111222',
+            'otp.fixed_code'         => '424242',
             'otp.resend_seconds'     => 60,
             'otp.exp_minutes'        => 5,
             'otp.email_max_attempts' => 5,
@@ -131,7 +131,7 @@ class EmailVerificationFlowTest extends TestCase
 
         // Even the right code is dead now → expired (must request a new one).
         $this->actingAs($user)
-            ->postJson('/api/v1/user/email/verify', ['code' => '111222'])
+            ->postJson('/api/v1/user/email/verify', ['code' => '424242'])
             ->assertStatus(422)
             ->assertJsonPath('code', 'OTP_EXPIRED');
 
@@ -140,7 +140,7 @@ class EmailVerificationFlowTest extends TestCase
         $this->actingAs($user)->postJson('/api/v1/user/email/resend')->assertOk();
         $this->travel(6)->minutes();
         $this->actingAs($user)
-            ->postJson('/api/v1/user/email/verify', ['code' => '111222'])
+            ->postJson('/api/v1/user/email/verify', ['code' => '424242'])
             ->assertStatus(422)
             ->assertJsonPath('code', 'OTP_EXPIRED');
 
@@ -148,7 +148,7 @@ class EmailVerificationFlowTest extends TestCase
         $this->travel(2)->minutes();
         $this->actingAs($user)->postJson('/api/v1/user/email/resend')->assertOk();
         $this->actingAs($user)
-            ->postJson('/api/v1/user/email/verify', ['code' => '111222'])
+            ->postJson('/api/v1/user/email/verify', ['code' => '424242'])
             ->assertOk()
             ->assertJsonPath('data.verified', true);
 
@@ -173,7 +173,7 @@ class EmailVerificationFlowTest extends TestCase
             ->assertJsonPath('data.verified', false);
 
         $this->actingAs($user)
-            ->postJson('/api/v1/account/email/verify', ['code' => '111222'])
+            ->postJson('/api/v1/account/email/verify', ['code' => '424242'])
             ->assertOk()
             ->assertJsonPath('data.verified', true);
 

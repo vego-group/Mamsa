@@ -24,7 +24,8 @@ use Spatie\Permission\Models\Role;
  * every lifecycle state, bookings across every status (with 2% commission +
  * payments), an iCal feed, manual blocks, and notifications.
  *
- * Login (staging): phone 0512345678, OTP 111222.
+ * Login (staging): phone 0512345678. The OTP is whatever OTP_FIXED_CODE is set
+ * to in that environment — never hardcode it here (public repository).
  *
  *   php artisan db:seed --class=DashboardTestPartnerSeeder
  */
@@ -101,7 +102,7 @@ class DashboardTestPartnerSeeder extends Seeder
 
         $this->notifications($partner, $approved);
 
-        $this->command?->info('Dashboard test partner ready: phone 0512345678, OTP 111222 (staging).');
+        $this->command?->info('Dashboard test partner ready: phone 0512345678 (OTP = OTP_FIXED_CODE in this environment).');
     }
 
     private function partner(): User
