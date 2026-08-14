@@ -62,6 +62,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            // Per-endpoint authz for the admin-panel BFF (contract §4.3).
+            'admin.can'          => \App\Http\Middleware\EnsureAdminPermission::class,
             'role'               => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission'         => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,

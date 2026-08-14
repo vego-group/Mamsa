@@ -21,8 +21,19 @@ class WebhookController extends Controller
 {
     public function moyasar(Request $request): JsonResponse
     {
+        // Fail CLOSED. This endpoint flips refunds to settled and triggers the
+        // settlement email, so an unauthenticated caller could fabricate refund
+        // events. A blank secret must therefore reject everything rather than
+        // wave it through — a missing env var is a misconfiguration, not consent.
         $secret = (string) config('moyasar.webhook_secret');
-        if ($secret !== '' && ! hash_equals($secret, (string) $request->input('secret_token'))) {
+
+        if ($secret === '') {
+            Log::error('Moyasar webhook rejected: MOYASAR_WEBHOOK_SECRET is not configured.');
+
+            return response()->json(['error' => ['code' => 'FORBIDDEN', 'message' => 'forbidden']], 403);
+        }
+
+        if (! hash_equals($secret, (string) $request->input('secret_token'))) {
             return response()->json(['error' => ['code' => 'FORBIDDEN', 'message' => 'forbidden']], 403);
         }
 

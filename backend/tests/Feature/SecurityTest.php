@@ -126,6 +126,74 @@ class SecurityTest extends TestCase
         $this->getJson('/api/v1/user/bookings')->assertUnauthorized(); // guest API
     }
 
+    /* ========== 1b. per-endpoint authorisation on the admin BFF ========== */
+
+    private function financeAdmin(): User
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $user->assignRole('finance');
+
+        return $user;
+    }
+
+    public function test_finance_admin_is_refused_the_endpoints_outside_its_permissions(): void
+    {
+        $finance = $this->financeAdmin();
+
+        // §4.3: finance has no users/units/approvals/dashboard reach.
+        foreach (['/admin/users', '/admin/units', '/admin/approvals', '/admin/dashboard/summary'] as $path) {
+            $this->actingAs($finance, 'admin-panel')->getJson($path)
+                ->assertForbidden()
+                ->assertJsonPath('code', 'INSUFFICIENT_PERMISSION');
+        }
+    }
+
+    public function test_finance_admin_keeps_the_endpoints_inside_its_permissions(): void
+    {
+        $finance = $this->financeAdmin();
+
+        // Reading these is the whole point of the role — it must not be over-blocked.
+        foreach (['/admin/partners', '/admin/bookings', '/admin/payouts/eligible'] as $path) {
+            $this->actingAs($finance, 'admin-panel')->getJson($path)->assertOk();
+        }
+    }
+
+    public function test_finance_admin_cannot_perform_superadmin_only_mutations(): void
+    {
+        $finance = $this->financeAdmin();
+        $partner = $this->partner();
+
+        $this->actingAs($finance, 'admin-panel')
+            ->postJson("/admin/partners/{$partner->id}/suspend", ['reason' => 'تجربة'])
+            ->assertForbidden()
+            ->assertJsonPath('code', 'INSUFFICIENT_PERMISSION');
+    }
+
+    public function test_superadmin_retains_full_reach(): void
+    {
+        $admin = $this->admin();
+
+        foreach (['/admin/users', '/admin/units', '/admin/approvals', '/admin/dashboard/summary'] as $path) {
+            $this->actingAs($admin, 'admin-panel')->getJson($path)->assertOk();
+        }
+    }
+
+    public function test_admin_me_stays_reachable_for_every_admin_role(): void
+    {
+        // /admin/me must never be permission-gated: the client needs it to learn
+        // which permissions it has before it can gate anything.
+        // Both users are created up-front: Spatie resolves a role's guard from the
+        // ACTIVE session, so assigning a role while acting as another guard fails.
+        $finance = $this->financeAdmin();
+        $super   = $this->admin();
+
+        $this->actingAs($finance, 'admin-panel')->getJson('/admin/me')
+            ->assertOk()->assertJsonPath('role', 'finance');
+
+        $this->actingAs($super, 'admin-panel')->getJson('/admin/me')
+            ->assertOk()->assertJsonPath('role', 'superadmin');
+    }
+
     /* ========== 2. cross-tenant isolation ========== */
 
     public function test_partner_cannot_read_another_partners_booking(): void
