@@ -58,6 +58,18 @@ class FreezeLegacyCommission extends Command
                 $count++;
                 $commission += $newCommission;
 
+                // Already credited? The difference has to be posted so the
+                // ledger and the balance cannot drift apart. Counted in the dry
+                // run too — predicting the wallet movement is the point of it.
+                $earned = PartnerLedgerEntry::where('type', PartnerLedgerEntry::TYPE_EARNING)
+                    ->where('ref_type', 'booking')->where('ref_id', (string) $booking->id)->exists();
+
+                $needsAdjustment = $earned && abs($delta) >= 0.01 && $booking->unit?->user_id;
+
+                if ($needsAdjustment) {
+                    $adjusted++;
+                }
+
                 if ($dry) {
                     continue;
                 }
@@ -67,12 +79,7 @@ class FreezeLegacyCommission extends Command
                     'partner_share'     => $newShare,
                 ])->saveQuietly();
 
-                // Already credited? Post the difference so the ledger and the
-                // balance cannot drift apart.
-                $earned = PartnerLedgerEntry::where('type', PartnerLedgerEntry::TYPE_EARNING)
-                    ->where('ref_type', 'booking')->where('ref_id', (string) $booking->id)->exists();
-
-                if ($earned && abs($delta) >= 0.01 && $booking->unit?->user_id) {
+                if ($needsAdjustment) {
                     $wallet->post(
                         partnerUserId: $booking->unit->user_id,
                         type: PartnerLedgerEntry::TYPE_ADJUSTMENT,
@@ -82,7 +89,6 @@ class FreezeLegacyCommission extends Command
                         refCode: $booking->code ?: (string) $booking->id,
                         description: 'تصحيح عمولة الحجز '.($booking->code ?: $booking->id),
                     );
-                    $adjusted++;
                 }
             }
         });
