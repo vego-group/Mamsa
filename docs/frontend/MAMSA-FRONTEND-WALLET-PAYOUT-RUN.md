@@ -2,7 +2,8 @@
 
 **For:** a Claude Code agent working in the **admin panel** (`/wallets`, the payout run) and the
 **partner dashboard** (`/wallet`, `/wallet/payouts`).
-**Backend status:** ✅ **live on staging AND production**, verified 2026-08-15 ~16:30 UTC.
+**Backend status:** ✅ **live on staging AND production**, verified 2026-08-15 ~19:35 UTC.
+**Update:** the bank-verification gap flagged in §7 is now **built and deployed** — see §7.
 **Action required:** mostly **none** — the shapes are unchanged from the stubs you built against.
 Read §3 and §6 before you demo.
 
@@ -181,11 +182,52 @@ covered bookings so those earnings can go out again** in the next run.
 No partner has saved a payout account yet, so the run is legitimately empty. It fills as soon as
 partners add an IBAN **and finance verifies it**.
 
-**Which raises the one gap left:** there is **no admin endpoint to verify a bank account**. Finance
-can see `verified: false` on `/admin/wallets/{id}` but has no way to flip it, so today no partner can
-become eligible without a database change. That is the next piece of work — **tell us if you want it
-prioritised**, and whether you want it as a per-account verify/reject pair (mirroring the KYC document
-flow) or folded into the existing partner-documents screen.
+### 7.1 Bank verification — built, and it is what unblocks the run
+
+Shipped as a verify/reject pair, mirroring the KYC document flow:
+
+```
+POST /admin/wallets/{partnerId}/bank/verify              → { ok: true }
+POST /admin/wallets/{partnerId}/bank/reject  { reason }   → { ok: true }
+```
+
+Verified live on staging against a real partner holding 100,190 SAR:
+
+```
+BEFORE verify: reason=bank_unverified        (excluded from the run)
+VERIFY:        {"ok":true}
+AFTER verify:  amount=100190  bookings=23  bank=بنك الرياض
+AUDIT:         verified_by=محمد أشرف  at=2026-08-15 19:33:27
+```
+
+**Build the verify/reject controls into the wallet detail screen** (`/admin/wallets/{id}`), next to
+`bankDetails`. That object gained one additive field:
+
+```jsonc
+"bankDetails": {
+  "iban": "SA03…", "accountHolderName": "…", "bankName": "بنك الرياض",
+  "verified": true, "verifiedAt": "2026-08-15T19:33:27Z",
+  "verifiedBy": "محمد أشرف",        // ← NEW: who approved this destination
+  "rejectionReason": null, "updatedAt": "…"
+}
+```
+
+- [ ] `reason` is **required** on reject (3–500 chars, Arabic). `422 VALIDATION_ERROR` without it.
+- [ ] The reason reaches the partner verbatim on their own account screen — it is the only channel
+      telling them why they are not being paid, so the copy must say **what to fix**, not just "rejected".
+- [ ] A partner with no saved account at all → `404`. Don't offer the controls in that state.
+- [ ] Verifying clears any previous rejection; rejecting clears verification.
+
+**⚠️ The finance role cannot verify — this is deliberate, not an oversight.** These two routes are
+gated on `wallets.adjust`, which finance does not hold, while recording a transfer needs
+`payouts.execute`, which it does. Finance moves money; a superadmin approves *where* it can go. One
+compromised finance session would otherwise be able to point a payout at its own account and then pay
+it.
+
+So the screen must **hide or disable the verify/reject controls for finance** — they will get
+`403 INSUFFICIENT_PERMISSION`. `/admin/me` already tells you the permission list; key the controls on
+`wallets.adjust`. If you would rather finance owned this too, say so — but it is worth being a
+deliberate decision rather than a default.
 
 ---
 
@@ -207,7 +249,8 @@ against a payout account is not. Correcting it is a config edit, no deploy.
 - [ ] `DUPLICATE_BANK_REFERENCE` reads as "already recorded" (§3.3)
 - [ ] Empty payout run renders as an empty state, not an error (§7)
 - [ ] `reversed` payouts render with reason (§6); no reverse button
-- [ ] Tell us whether you want the bank-verification endpoint next (§7)
+- [ ] Verify/reject controls on the wallet detail screen, keyed on `wallets.adjust` (§7.1)
+- [ ] Reject dialog requires a reason, and the copy says what to fix (§7.1)
 
 **Partner dashboard:**
 - [ ] Nothing required — `paidThisMonth` before `ineligibleReason` (§5) is the only subtlety
@@ -221,9 +264,11 @@ against a payout account is not. Correcting it is a config edit, no deploy.
 |---|---|---|
 | Admin payouts (eligible/ineligible/record) | ✅ live | ✅ live |
 | Admin wallets (list/detail/ledger) | ✅ live | ✅ live |
+| **Bank verify / reject** | ✅ **live** | ✅ **live** |
 | Partner wallet, ledger, payouts, bank details | ✅ live | ✅ live |
 | Fixture stubs | ❌ removed | ❌ removed |
 
-Suite: **184 passed, 1056 assertions** — including that a recorded transfer equals the server's own
-figure rather than the client's, that a paid booking is never paid twice, and that a reversal restores
-both the balance and the payability of the stays behind it.
+Suite: **190 passed, 1079 assertions** — including that a recorded transfer equals the server's own
+figure rather than the client's, that a paid booking is never paid twice, that a reversal restores both
+the balance and the payability of the stays behind it, and that the finance role is refused bank
+verification.
