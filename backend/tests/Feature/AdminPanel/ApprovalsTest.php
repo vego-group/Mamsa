@@ -312,4 +312,21 @@ class ApprovalsTest extends TestCase
         $this->assertLessThan(24, $avg, "draft time must not count as review time (got {$avg}h)");
         $this->assertGreaterThan(1, $avg);
     }
+
+    /**
+     * 0 reads as "reviews are instant" — the same false signal the whole
+     * submitted_at change exists to remove. No measurable sample must be
+     * distinguishable from a genuinely fast one.
+     */
+    public function test_avg_review_hours_is_null_when_nothing_is_measurable(): void
+    {
+        // Decided, but pre-migration: no submission time to measure from.
+        $unit = $this->makeUnit('legacy', ['approval_status' => 'approved']);
+        $unit->forceFill(['submitted_at' => null])->saveQuietly();
+
+        $avg = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/approvals/stats?range=30d')->json('avgReviewHours');
+
+        $this->assertNull($avg, 'no sample must report as null, not 0');
+    }
 }

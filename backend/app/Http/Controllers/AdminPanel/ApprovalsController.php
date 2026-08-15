@@ -75,7 +75,10 @@ class ApprovalsController extends Controller
         // submitted_at are pre-migration decisions whose submission time is
         // unrecoverable; they are excluded rather than counted from created_at,
         // which would fold draft time into the SLA.
-        $avg = (float) Unit::whereIn('approval_status', ['approved', 'rejected'])
+        // NULL, not 0, when nothing in the window has a measurable submission:
+        // 0 renders as "reviews are instant", which is the same false signal in
+        // the other direction. The client shows "no data" for null.
+        $avg = Unit::whereIn('approval_status', ['approved', 'rejected'])
             ->whereBetween('updated_at', [$from, $to])
             ->whereNotNull('submitted_at')
             ->selectRaw($this->avgHoursSql('submitted_at', 'updated_at').' as h')->value('h');
@@ -87,7 +90,7 @@ class ApprovalsController extends Controller
             'pendingReview'  => Unit::where('approval_status', 'pending')->count(),
             'approved'       => $approved,
             'rejected'       => $rejected,
-            'avgReviewHours' => round($avg, 1),
+            'avgReviewHours' => $avg === null ? null : round((float) $avg, 1),
             'range'          => $range,
 
             // Legacy keys — kept so a client that predates `range` keeps working.
