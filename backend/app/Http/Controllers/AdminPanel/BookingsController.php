@@ -10,8 +10,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Bookings — BACKEND_SPEC §5.8 (read-only for admin). commission = 2% of total,
- * partnerShare = total − commission; policySnapshot is frozen at payment time.
+ * Bookings — BACKEND_SPEC §5.8 (read-only for admin).
+ *
+ * Money is VAT-inclusive: `total` is gross, commission is 2% of the VAT-exclusive
+ * base, and partnerShare is the frozen per-booking column — never total minus
+ * commission, which would pay the partner the VAT. policySnapshot is frozen at
+ * payment time.
  */
 class BookingsController extends Controller
 {
@@ -113,6 +117,16 @@ class BookingsController extends Controller
         $total      = (float) $b->total_amount;
         $commission = $this->commissionOf($total, $b->commission_amount);
 
+        // The partner's share is the frozen column, NOT total − commission.
+        // `total` is VAT-INCLUSIVE gross, and the VAT is remitted to ZATCA — it
+        // was never the partner's. Deriving it from gross overstated every
+        // booking by the VAT: 900 gross reported 884.35 where the wallet pays
+        // 766.96, so an admin quoting this figure contradicted what the partner
+        // was actually paid.
+        $partnerShare = $b->partner_share !== null
+            ? (float) $b->partner_share
+            : round((float) $b->subtotal - $commission, 2);
+
         return [
             'id'            => (string) $b->id,
             'code'          => $this->code('BKG', $b->id, 4),
@@ -130,7 +144,7 @@ class BookingsController extends Controller
             'guests'        => (int) $b->guests,
             'total'         => $this->money($total),
             'commission'    => $commission,
-            'partnerShare'  => $this->money($total - $commission),
+            'partnerShare'  => $this->money($partnerShare),
             'nightlyRate'   => (float) $b->nightly_rate,
             'paymentMethod' => $b->payment?->payment_method ?? '',
             // Refunds are tracked via refunded_amount, not a 'refunded' status.
