@@ -99,6 +99,17 @@ class UnitsController extends Controller
             'bathrooms'     => ['required', 'integer', 'min:0'],
             'capacity'      => ['required', 'integer', 'min:1'],
             'sizeSqm'       => ['required', 'numeric', 'min:0'],
+        ], [
+            'name.required'          => 'اسم الوحدة مطلوب',
+            'type.required'          => 'نوع الوحدة مطلوب',
+            'type.in'                => 'نوع الوحدة غير صالح',
+            'city.required'          => 'المدينة مطلوبة',
+            'district.required'      => 'الحي مطلوب',
+            'pricePerNight.required' => 'سعر الليلة مطلوب',
+            'bedrooms.required'      => 'عدد غرف النوم مطلوب',
+            'bathrooms.required'     => 'عدد دورات المياه مطلوب',
+            'capacity.required'      => 'السعة مطلوبة',
+            'sizeSqm.required'       => 'المساحة مطلوبة',
         ]);
 
         Unit::create([

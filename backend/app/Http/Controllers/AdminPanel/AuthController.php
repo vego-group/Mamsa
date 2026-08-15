@@ -52,6 +52,11 @@ class AuthController extends Controller
         $data = $this->validate($request, [
             'phone' => ['required', 'string', self::PHONE_RULE],
             'code'  => ['required', 'digits:6'],
+        ], [
+            'phone.required' => 'رقم الجوال مطلوب',
+            'phone.regex'    => 'رقم جوال غير صالح',
+            'code.required'  => 'رمز التحقق مطلوب',
+            'code.digits'    => 'رمز التحقق يجب أن يكون 6 أرقام',
         ]);
 
         // Prove phone ownership FIRST (throws OtpException on failure), then gate.
