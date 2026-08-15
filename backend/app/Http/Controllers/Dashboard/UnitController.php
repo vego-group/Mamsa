@@ -239,7 +239,11 @@ class UnitController extends DashboardController
         }
         if (blank($unit->tourism_permit_no))                           $fields['tourismLicenseNumber'] = 'رقم رخصة السياحة مطلوب';
         if (blank($unit->tourism_permit_file))                         $fields['tourismLicenseFileId'] = 'ملف الرخصة مطلوب';
-        if ($unit->images()->count() < 1)                              $fields['photos'] = 'أضف صورة واحدة على الأقل';
+        // REAL photos, not rows: a placeholder row pointing at the shared
+        // default image satisfied a bare count, which would let a listing reach
+        // review with nothing to look at — and make the reviewer's "no photos"
+        // finding a permanent feature of the queue rather than a rare one.
+        if ($this->realPhotoCount($unit) < 1)                          $fields['photos'] = 'أضف صورة واحدة على الأقل';
 
         if ($fields) {
             $this->fail('VALIDATION', 'بيانات غير مكتملة', 400, $fields);
@@ -250,6 +254,16 @@ class UnitController extends DashboardController
             && ! ProfileController::docs($user)['complete']) {
             $this->fail('COMPANY_DOCS_INCOMPLETE', 'أكمل مستندات الشركة قبل تقديم الوحدة', 409);
         }
+    }
+
+
+    /** Photos the partner actually uploaded, excluding shared-default rows. */
+    private function realPhotoCount(Unit $unit): int
+    {
+        return $unit->images()
+            ->whereNotNull('path')->where('path', '!=', '')
+            ->where('path', '!=', \App\Support\Media::defaultImagePath())
+            ->count();
     }
 
     /* ---- files (§9.1 presign flow → unit) ---- */

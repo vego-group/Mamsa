@@ -293,6 +293,39 @@ class ApprovalsTest extends TestCase
         $this->assertNull($row['coverImage']);
     }
 
+    public function test_the_average_carries_the_sample_it_was_taken_over(): void
+    {
+        // One decided unit that predates submitted_at: counted as a decision,
+        // but not measurable.
+        $legacy = $this->makeUnit('legacy', ['approval_status' => 'approved']);
+        $legacy->forceFill(['submitted_at' => null])->saveQuietly();
+
+        $measured = $this->makeUnit('measured', ['approval_status' => 'draft']);
+        $measured->update(['approval_status' => 'pending']);
+        $measured->forceFill(['submitted_at' => now()->subHours(3)])->saveQuietly();
+        $measured->update(['approval_status' => 'approved']);
+
+        $stats = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/approvals/stats?range=30d')->assertOk()->json();
+
+        // The client needs both to say "averaged over 1 of 2 decisions".
+        $this->assertSame(1, $stats['avgReviewSample']);
+        $this->assertGreaterThan(0, $stats['approved']);
+        $this->assertNotNull($stats['avgReviewHours']);
+    }
+
+    public function test_the_sample_is_zero_when_the_average_is_null(): void
+    {
+        $legacy = $this->makeUnit('legacy-only', ['approval_status' => 'approved']);
+        $legacy->forceFill(['submitted_at' => null])->saveQuietly();
+
+        $stats = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/approvals/stats?range=30d')->assertOk()->json();
+
+        $this->assertNull($stats['avgReviewHours']);
+        $this->assertSame(0, $stats['avgReviewSample']);
+    }
+
     /* ---- submitted_at (review-SLA basis) ---- */
 
     public function test_submitted_at_is_stamped_when_a_unit_enters_review(): void

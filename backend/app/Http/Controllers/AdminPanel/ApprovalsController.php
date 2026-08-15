@@ -78,10 +78,17 @@ class ApprovalsController extends Controller
         // NULL, not 0, when nothing in the window has a measurable submission:
         // 0 renders as "reviews are instant", which is the same false signal in
         // the other direction. The client shows "no data" for null.
-        $avg = Unit::whereIn('approval_status', ['approved', 'rejected'])
+        $measurable = Unit::whereIn('approval_status', ['approved', 'rejected'])
             ->whereBetween('updated_at', [$from, $to])
-            ->whereNotNull('submitted_at')
-            ->selectRaw($this->avgHoursSql('submitted_at', 'updated_at').' as h')->value('h');
+            ->whereNotNull('submitted_at');
+
+        // The sample size travels with the average. Without it the screen shows
+        // "7 decisions" beside "no measured decisions" and reads as broken —
+        // both true, but only explicable if the client can say "averaged over
+        // 3 of 7". Stays useful after the backfill window, whenever a decision
+        // is missing a timestamp for any reason.
+        $sample = (clone $measurable)->count();
+        $avg    = $measurable->selectRaw($this->avgHoursSql('submitted_at', 'updated_at').' as h')->value('h');
 
         $approved = $decided('approved');
         $rejected = $decided('rejected');
@@ -91,6 +98,7 @@ class ApprovalsController extends Controller
             'approved'       => $approved,
             'rejected'       => $rejected,
             'avgReviewHours' => $avg === null ? null : round((float) $avg, 1),
+            'avgReviewSample' => $sample,
             'range'          => $range,
 
             // Legacy keys — kept so a client that predates `range` keeps working.

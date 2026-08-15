@@ -75,7 +75,10 @@ class UnitPresenter
             'occupancyRate'  => min(100, (int) round(((int) $u->booked_nights / self::OCCUPANCY_WINDOW) * 100)),
             'revenue'        => $this->money($u->revenue),
             'bookingsCount'  => (int) $u->bookings_count,
-            'coverImage'     => $this->coverImage($u),
+            // Null when the unit has no photo of its own — the browse surfaces
+            // render a quiet placeholder rather than a shared stock image, so
+            // "no photography" stays visible wherever a unit is listed.
+            'coverImage'     => $this->realCoverImage($u),
             'mamsaOwned'     => $mamsaOwned,
             'rejectionReason'=> $u->rejection_reason,
             'approvedAt'     => $u->approval_status === 'approved' ? $this->iso($u->updated_at) : null,
@@ -143,12 +146,6 @@ class UnitPresenter
         return $img && filled($img->path) && $img->path !== Media::defaultImagePath()
             ? $img->url
             : null;
-    }
-
-    /** Never null — the browse/list surfaces render a card either way. */
-    private function coverImage(Unit $u): string
-    {
-        return $this->realCoverImage($u) ?? Media::defaultImageUrl();
     }
 
     /**
