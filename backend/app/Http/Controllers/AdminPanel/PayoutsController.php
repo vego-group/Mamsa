@@ -115,11 +115,21 @@ class PayoutsController extends Controller
      */
     public function record(Request $request): JsonResponse
     {
+        // Arabic messages: the admin panel renders `message` straight to the
+        // user, so a Laravel default would surface as English on an otherwise
+        // Arabic screen.
         $data = $this->validate($request, [
             'partnerId'     => ['required', 'string'],
             'bankReference' => ['required', 'string', 'min:4', 'max:64'],
             'paidAt'        => ['sometimes', 'nullable', 'date'],
             'note'          => ['sometimes', 'nullable', 'string', 'max:500'],
+        ], [
+            'partnerId.required'     => 'الشريك مطلوب',
+            'bankReference.required' => 'رقم المرجع البنكي مطلوب',
+            'bankReference.min'      => 'رقم المرجع البنكي قصير جداً',
+            'bankReference.max'      => 'رقم المرجع البنكي طويل جداً',
+            'paidAt.date'            => 'تاريخ التحويل غير صالح',
+            'note.max'               => 'الملاحظة طويلة جداً',
         ]);
 
         $partner = $this->partner($data['partnerId']);

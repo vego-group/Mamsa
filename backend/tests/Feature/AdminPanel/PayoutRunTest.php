@@ -250,6 +250,17 @@ class PayoutRunTest extends TestCase
         $this->assertNull(collect($rows)->firstWhere('partnerId', 'prt_'.$this->partner->id));
     }
 
+    public function test_validation_messages_reach_the_admin_in_arabic(): void
+    {
+        // The panel renders `message` verbatim; a Laravel default would show
+        // English on an otherwise Arabic screen.
+        $body = $this->actingAs($this->admin, 'admin-panel')
+            ->postJson('/admin/payouts/record', ['partnerId' => 'prt_'.$this->partner->id])
+            ->assertStatus(422)->assertJsonPath('code', 'VALIDATION_ERROR')->json();
+
+        $this->assertSame('رقم المرجع البنكي مطلوب', $body['message']);
+    }
+
     /* ---- reversal ---- */
 
     public function test_reversing_returns_the_money_and_makes_the_stays_payable_again(): void
