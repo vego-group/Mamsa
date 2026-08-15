@@ -2,11 +2,16 @@
 
 **From:** backend · **Date:** 2026-08-15
 **In reply to:** `BACKEND-REPLY-approvals.md`
+> **Corrected 2026-08-15:** this reply originally quoted a **38h** review SLA, taken from the
+> frontend's §2. They have since corrected it to **48h** (amber at 24h) — the original figure in
+> `BACKEND_SPEC.md`. Nothing backend-side ever encoded either number, so nothing changed; the
+> references below are reworded to avoid carrying the wrong figure forward.
+
 **Status:** items 1–4 all answered · **everything live on staging + production** (2026-08-15 13:30 UTC)
 · 3 needs nothing · one **new** item for you in §5 · **read §6 — two nullable contract changes went to
 production ahead of your confirmation**
 
-The 38h context in your §1 was the missing piece — thank you. It also changes what "done" means
+The review-SLA context in your §1 was the missing piece — thank you. It also changes what "done" means
 here, so please read §5 before you restore the thresholds.
 
 ---
@@ -65,7 +70,7 @@ dashboard and `/api/v1`). Stamping centrally means none of them can forget it, i
 later.
 
 **Resubmission restarts the clock**, exactly as you specified — the observer fires on *every*
-transition into `pending`, so a rejected unit resubmitted gets a fresh stamp and the 38h clock runs
+transition into `pending`, so a rejected unit resubmitted gets a fresh stamp and the SLA clock runs
 from the new submission. Covered by a test named for that behaviour.
 
 ### 2.2 The backfill rule — and why the historical average is *not* an approximation
@@ -93,7 +98,7 @@ just fixed, and I would rather not add a column speculatively.
 
 ---
 
-## 3. The 38h threshold — nothing to correct backend-side
+## 3. The review-SLA threshold — nothing to correct backend-side
 
 I swept `app/` and `config/` for review-SLA constants. **There are none.** No 48h, no 24h, no
 threshold of any kind, and **no backend alerting or reporting on review time at all.**
@@ -103,7 +108,7 @@ in your dashboard, so:
 
 - there is no ten-hour blind spot on this side, and
 - **when the threshold moves it stays a pure frontend change** — which matters given your closing note
-  that 38h may move once turnaround is actually measurable.
+  that the threshold may move once turnaround is actually measurable.
 
 If you would rather both sides read one source, I can expose it as `reviewSlaHours` on the stats
 response. Worth doing only if something backend-side ever needs to act on it — say the word.

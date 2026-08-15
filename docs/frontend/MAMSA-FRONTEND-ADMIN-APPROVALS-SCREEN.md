@@ -121,9 +121,9 @@ Seven decisions and an average over zero of them — both correct: those seven p
 screen reads as broken.
 
 - [ ] `avgReviewSample === 0` ⟺ `avgReviewHours === null`. Both directions hold.
-- [ ] Apply the **38h** target only when `avgReviewHours` is non-null. 38 *continuous* hours from
-      submission — no working-calendar logic; the backend encodes no threshold at all, so this value
-      is entirely yours.
+- [ ] Apply the **48h** target only when `avgReviewHours` is non-null. 48 *continuous* hours from
+      submission (amber at 24h) — no working-calendar logic; the backend encodes no threshold at all,
+      so this value is entirely yours.
 
 ---
 
@@ -270,7 +270,7 @@ Zulu (`…Z`). Both are valid ISO-8601 and `new Date()` parses both.
 - [ ] `range` read back from the response, not assumed
 - [ ] `avgReviewHours: null` → `—`, no colour, no threshold (§3.1)
 - [ ] Caption shows `avgReviewSample` as "N of M decisions"
-- [ ] 38h/24h thresholds applied only to non-null values
+- [ ] 48h/24h thresholds applied only to non-null values
 
 **Detail:**
 - [ ] `unit.images: []` → amber "no photos" state, never padded (§7.2)
