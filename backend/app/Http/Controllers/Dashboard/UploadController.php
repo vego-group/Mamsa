@@ -23,7 +23,11 @@ class UploadController extends DashboardController
     private const RULES = [
         'unit_photo'  => ['png/jpg', ["\x89PNG", "\xFF\xD8\xFF"]],
         'license_pdf' => ['pdf', ["%PDF"]],
-        'company_doc' => ['pdf', ["%PDF"]],
+        // Images allowed as well as PDF: a KYC document is usually PHOTOGRAPHED,
+        // not scanned to PDF — and registration already accepts jpg/png for the
+        // identity scan, so a PDF-only rule here left partners who registered
+        // earlier unable to supply the same file through the dashboard.
+        'company_doc' => ['pdf/png/jpg', ["%PDF", "\x89PNG", "\xFF\xD8\xFF"]],
     ];
 
     public function presign(Request $request): JsonResponse
@@ -76,9 +80,13 @@ class UploadController extends DashboardController
             $this->fail('INVALID_FILE_TYPE', "نوع الملف غير صالح — مسموح: {$label}", 400);
         }
 
-        $ext  = $record->kind === 'unit_photo'
-            ? (str_starts_with($bytes, "\x89PNG") ? 'png' : 'jpg')
-            : 'pdf';
+        // Extension follows the BYTES, not the kind: a company_doc may now be a
+        // photo, and storing a PNG as .pdf would make it unopenable.
+        $ext = match (true) {
+            str_starts_with($bytes, "\x89PNG")     => 'png',
+            str_starts_with($bytes, "\xFF\xD8\xFF") => 'jpg',
+            default                               => 'pdf',
+        };
         $path = "dashboard/{$record->kind}/{$record->id}.{$ext}";
 
         Storage::disk('public')->put($path, $bytes);

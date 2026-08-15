@@ -141,6 +141,38 @@ class PartnerIdentityDocumentTest extends TestCase
         $this->assertNull($body['nationalIdFileId'], 'the field is still reported');
     }
 
+    /**
+     * The route a partner who registered BEFORE the identity scan existed has
+     * to take: presign → upload → attach. A KYC document is usually
+     * photographed, so the upload must accept an image, not only a PDF.
+     */
+    public function test_an_existing_partner_can_add_their_identity_scan_later(): void
+    {
+        $partner = User::factory()->create(['is_active' => true]);
+        $partner->assignRole('Individual');
+        $partner->partnerDetail()->create(['type' => 'individual', 'national_id' => '1012345678']);
+
+        $presign = $this->actingAs($partner, 'dashboard')
+            ->postJson('/uploads/presign', [
+                'kind' => 'company_doc', 'fileName' => 'id.jpg',
+                'mimeType' => 'image/jpeg', 'size' => 1024,
+            ])->assertOk()->json();
+
+        $fileId = $presign['fileId'];
+
+        // A JPEG, not a PDF. Sent to the signed URL presign handed back.
+        $jpeg = "\xFF\xD8\xFF".str_repeat('x', 128);
+        $this->call('PUT', $presign['uploadUrl'], [], [], [], [], $jpeg)->assertOk();
+
+        $this->actingAs($partner, 'dashboard')
+            ->putJson('/me/company-docs', ['nationalIdFileId' => $fileId])
+            ->assertOk()->assertJsonPath('nationalIdFileId', $fileId);
+
+        $upload = DashboardUpload::findOrFail($fileId);
+        $this->assertStringEndsWith('.jpg', $upload->path, 'a photo must not be stored as .pdf');
+        Storage::disk('public')->assertExists($upload->path);
+    }
+
     public function test_admin_sees_the_identity_scan_on_the_document_row(): void
     {
         $this->requestOtp();
