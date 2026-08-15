@@ -103,6 +103,25 @@ class WalletTest extends TestCase
         $this->assertSame(1, PartnerLedgerEntry::where('type', 'earning')->count());
     }
 
+    public function test_the_backfill_credits_pre_wallet_stays_and_is_idempotent(): void
+    {
+        // A stay completed before the wallet existed: no ledger row.
+        $booking = $this->booking(Booking::STATUS_CONFIRMED);
+        $booking->updateQuietly(['status' => Booking::STATUS_COMPLETED]);
+        $this->assertSame(0, PartnerLedgerEntry::count());
+
+        $this->artisan('wallet:backfill-earnings')->assertSuccessful();
+        $this->artisan('wallet:backfill-earnings')->assertSuccessful();
+
+        $entries = PartnerLedgerEntry::where('type', 'earning')->get();
+        $this->assertCount(1, $entries, 're-running must not pay twice');
+        // Dated at checkout, so the ledger reads in the order money was earned.
+        $this->assertSame(
+            $booking->end_date->toDateString(),
+            $entries->first()->created_at->toDateString(),
+        );
+    }
+
     /* ---- §1 summary ---- */
 
     public function test_summary_separates_pending_from_available(): void

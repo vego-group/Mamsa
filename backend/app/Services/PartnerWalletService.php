@@ -35,9 +35,10 @@ class PartnerWalletService
         ?string $refCode = null,
         ?string $description = null,
         ?int $adminId = null,
+        ?\DateTimeInterface $at = null,
     ): PartnerLedgerEntry {
         return DB::transaction(function () use (
-            $partnerUserId, $type, $amount, $refType, $refId, $refCode, $description, $adminId
+            $partnerUserId, $type, $amount, $refType, $refId, $refCode, $description, $adminId, $at
         ) {
             $wallet = PartnerWallet::query()
                 ->where('partner_user_id', $partnerUserId)
@@ -58,7 +59,7 @@ class PartnerWalletService
                 'ref_code'            => $refCode,
                 'description'         => $description,
                 'created_by_admin_id' => $adminId,
-                'created_at'          => now(),
+                'created_at'          => $at ?? now(),
             ]);
 
             $wallet->available_balance = $balance;
@@ -90,7 +91,7 @@ class PartnerWalletService
      * twice. Returns null when the booking has already been credited or has
      * nothing to credit.
      */
-    public function recordEarning(Booking $booking): ?PartnerLedgerEntry
+    public function recordEarning(Booking $booking, ?\DateTimeInterface $at = null): ?PartnerLedgerEntry
     {
         $partnerId = $booking->unit?->user_id;
         $share     = round((float) ($booking->partner_share ?? 0), 2);
@@ -110,6 +111,7 @@ class PartnerWalletService
             refId: (string) $booking->id,
             refCode: $code,
             description: "حصتك من الحجز {$code} — {$unitName}",
+            at: $at,
         );
     }
 
