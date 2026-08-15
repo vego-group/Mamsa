@@ -42,7 +42,11 @@ class PartnerAuthController extends Controller
         $phone = PhoneNumber::toE164Ksa($data['phone']);
         $role  = $data['type'] === 'company' ? 'Company' : 'Individual';
 
-        $user = DB::transaction(function () use ($data, $phone, $role) {
+        // Read outside the transaction: the uploaded file belongs to the request,
+        // not the closure.
+        $identity = $request->file('national_id_file');
+
+        $user = DB::transaction(function () use ($data, $phone, $role, $identity) {
             $user = User::firstOrCreate(['phone' => $phone], ['is_active' => true]);
 
             // Don't let an admin account be silently downgraded to a partner.
@@ -61,14 +65,21 @@ class PartnerAuthController extends Controller
             // Partner roles are exclusive of the base User role.
             $user->syncRoles($role);
 
-            $detail = $user->partnerDetail()->updateOrCreate(
-                ['user_id' => $user->id],
-                [
-                    'type'        => $data['type'],
-                    'national_id' => $data['type'] === 'individual' ? $data['national_id'] : null,
-                    'cr_number'   => $data['type'] === 'company' ? $data['cr_number'] : null,
-                ],
-            );
+            $attrs = [
+                'type'        => $data['type'],
+                'national_id' => $data['type'] === 'individual' ? $data['national_id'] : null,
+                'cr_number'   => $data['type'] === 'company' ? $data['cr_number'] : null,
+            ];
+
+            // Identity scan: stored as a DashboardUpload so the admin's existing
+            // document resolution and verify/reject flow pick it up unchanged.
+            // Only overwrite when a new file is supplied — a re-submitting
+            // applicant must not lose the document already on file.
+            if ($identity) {
+                $attrs['national_id_file'] = $this->storeIdentityFile($user->id, $identity);
+            }
+
+            $detail = $user->partnerDetail()->updateOrCreate(['user_id' => $user->id], $attrs);
 
             // A rejected applicant who re-submits goes back into the review queue.
             if ($detail->status === \App\Models\PartnerDetail::STATUS_REJECTED) {
@@ -103,5 +114,33 @@ class PartnerAuthController extends Controller
             'needs_email_verification' => (bool) $needsEmailVerification,
             'user'                     => new UserResource($pair['user']->load('roles')),
         ], 'تم تسجيلك كشريك بنجاح', 201);
+    }
+
+    /**
+     * Persist the identity scan and return its DashboardUpload id.
+     *
+     * Reuses the KYC upload table so the admin panel resolves the URL, and the
+     * document verify/reject flow works, with no changes on that side.
+     */
+    private function storeIdentityFile(int $userId, \Illuminate\Http\UploadedFile $file): string
+    {
+        $id   = 'file_'.\Illuminate\Support\Str::ulid();
+        $ext  = strtolower($file->getClientOriginalExtension() ?: $file->guessExtension() ?: 'jpg');
+        $path = "dashboard/national_id/{$id}.{$ext}";
+
+        \Illuminate\Support\Facades\Storage::disk('public')->put($path, file_get_contents($file->getRealPath()));
+
+        \App\Models\DashboardUpload::create([
+            'id'            => $id,
+            'user_id'       => $userId,
+            'kind'          => 'company_doc',
+            'original_name' => $file->getClientOriginalName(),
+            'mime'          => $file->getClientMimeType(),
+            'size'          => $file->getSize(),
+            'path'          => $path,
+            'status'        => 'stored',
+        ]);
+
+        return $id;
     }
 }

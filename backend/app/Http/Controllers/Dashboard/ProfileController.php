@@ -94,6 +94,7 @@ class ProfileController extends DashboardController
         $data = $this->validated($request, [
             'cr'                        => ['sometimes', 'regex:/^\d{10}$/'],
             'iban'                      => ['sometimes', 'regex:/^SA\d{22}$/'],
+            'nationalIdFileId'          => ['sometimes', 'nullable', 'string'],
             'authorizationLetterFileId' => ['sometimes', 'nullable', 'string'],
             'vatCertificateFileId'      => ['sometimes', 'nullable', 'string'],
             'operatorLicenseFileId'     => ['sometimes', 'nullable', 'string'],
@@ -103,7 +104,7 @@ class ProfileController extends DashboardController
         ]);
 
         // Each referenced file must be an upload owned by THIS partner (§0.2).
-        foreach (['authorizationLetterFileId', 'vatCertificateFileId', 'operatorLicenseFileId'] as $field) {
+        foreach (['authorizationLetterFileId', 'vatCertificateFileId', 'operatorLicenseFileId', 'nationalIdFileId'] as $field) {
             if (! empty($data[$field]) && ! DashboardUpload::whereKey($data[$field])
                 ->where('user_id', $user->id)->where('status', 'stored')->exists()) {
                 $this->fail('VALIDATION', 'بيانات غير صالحة', 400, [$field => 'ملف غير موجود']);
@@ -113,6 +114,7 @@ class ProfileController extends DashboardController
         $user->partnerDetail()->updateOrCreate(['user_id' => $user->id], array_filter([
             'cr_number'                 => $data['cr'] ?? null,
             'iban'                      => $data['iban'] ?? null,
+            'national_id_file'          => $data['nationalIdFileId'] ?? null,
             'authorization_letter_file' => $data['authorizationLetterFileId'] ?? null,
             'vat_certificate_file'      => $data['vatCertificateFileId'] ?? null,
             'operator_license_file'     => $data['operatorLicenseFileId'] ?? null,
@@ -187,6 +189,7 @@ class ProfileController extends DashboardController
         $docs = [
             'cr'                        => $d?->cr_number,
             'iban'                      => $d?->iban,
+            'nationalIdFileId'          => $d?->national_id_file,
             'authorizationLetterFileId' => $d?->authorization_letter_file,
             'vatCertificateFileId'      => $d?->vat_certificate_file,
             'operatorLicenseFileId'     => $d?->operator_license_file,

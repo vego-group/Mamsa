@@ -350,7 +350,7 @@ class PartnersController extends Controller
             $docs[] = $mk('vat_certificate', 'شهادة ضريبة القيمة المضافة', null, $d->vat_certificate_file);
             $docs[] = $mk('operator_license', 'رخصة تشغيل', null, $d->operator_license_file);
         } else {
-            $docs[] = $mk('national_id', 'الهوية الوطنية', $d->national_id, null);
+            $docs[] = $mk('national_id', 'الهوية الوطنية', $d->national_id, $d->national_id_file);
         }
         $docs[] = $mk('authorization_letter', 'خطاب تفويض', null, $d->authorization_letter_file);
         $docs[] = $mk('iban', 'رقم الآيبان', $d->iban, null);
@@ -360,7 +360,11 @@ class PartnersController extends Controller
 
     private function documentsComplete(PartnerDetail $d): bool
     {
-        $required = $d->type === 'company' ? ['cr_number', 'iban'] : ['national_id', 'iban'];
+        // An individual's KYC is not complete on a typed number alone — the
+        // identity scan is what an admin actually reviews.
+        $required = $d->type === 'company'
+            ? ['cr_number', 'iban']
+            : ['national_id', 'national_id_file', 'iban'];
 
         $present = collect($required)->every(fn (string $c) => filled($d->{$c}));
 

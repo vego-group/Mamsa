@@ -59,6 +59,8 @@ class ReadEndpointsTest extends TestCase
             'type'        => 'individual',
             'status'      => PartnerDetail::STATUS_APPROVED,
             'national_id' => '1098765432',
+            // An individual's KYC now also needs the identity scan on file.
+            'national_id_file' => 'file_test_identity',
             'iban'        => 'SA0380000000608010167519',
             'reviewed_at' => now(),
         ]);

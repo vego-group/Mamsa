@@ -27,6 +27,10 @@ class PartnerRegisterRequest extends FormRequest
             'email'       => ['required', 'email', 'max:150'],
             // National ID only for individuals, CR number only for companies.
             'national_id' => ['required_if:type,individual', 'nullable', 'string', 'max:20'],
+            // Scan of the identity document. Registration is already OTP-verified
+            // at this point, so accepting the file directly is safe and spares the
+            // client an authenticated presign round-trip it cannot make yet.
+            'national_id_file' => ['required_if:type,individual', 'nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
             'cr_number'   => ['required_if:type,company', 'nullable', 'string', 'max:20'],
             'device'      => ['nullable', 'string', 'max:255'],
         ];

@@ -15,6 +15,7 @@ class PartnerDetail extends Model
         'user_id',
         'type',
         'national_id',
+        'national_id_file',
         'cr_number',
         'iban',
         'authorization_letter_file',
