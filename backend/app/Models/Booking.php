@@ -61,6 +61,7 @@ class Booking extends Model
         'commission_rate',
         'commission_amount',
         'partner_share',
+        'payout_id',
         'total_amount',
         'status',
         'cancellation_snapshot',

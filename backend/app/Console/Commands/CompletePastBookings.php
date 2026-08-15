@@ -19,11 +19,22 @@ class CompletePastBookings extends Command
 
     public function handle(): int
     {
-        // end_date strictly before today = the guest has checked out.
-        $count = Booking::query()
+        $count = 0;
+
+        // Saved one at a time rather than by a mass UPDATE: completion is what
+        // credits the partner's wallet, and a mass update fires no model events,
+        // so every finished stay would silently go unpaid.
+        Booking::query()
             ->where('status', Booking::STATUS_CONFIRMED)
+            // end_date strictly before today = the guest has checked out.
             ->whereDate('end_date', '<', now()->toDateString())
-            ->update(['status' => Booking::STATUS_COMPLETED]);
+            ->with('unit')
+            ->chunkById(200, function ($bookings) use (&$count) {
+                foreach ($bookings as $booking) {
+                    $booking->update(['status' => Booking::STATUS_COMPLETED]);
+                    $count++;
+                }
+            });
 
         $this->info("Marked {$count} booking(s) as completed.");
 

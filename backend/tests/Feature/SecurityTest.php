@@ -295,8 +295,16 @@ class SecurityTest extends TestCase
         // The stubs return fixture money data. They are registered only outside
         // production; this pins the guard itself, because a route list built in
         // the test environment cannot observe production's boot.
+        //
+        // Keyed on whether a file still WIRES a stub, so replacing stubs with
+        // real controllers cannot leave a rule asserting a guard that no longer
+        // needs to exist — and adding a stub back re-arms the check.
         foreach (['routes/admin-panel.php', 'routes/dashboard.php'] as $file) {
             $source = file_get_contents(base_path($file));
+
+            if (! str_contains($source, 'Stub\\')) {
+                continue;
+            }
 
             $this->assertStringContainsString(
                 '! app()->isProduction()',
@@ -305,9 +313,17 @@ class SecurityTest extends TestCase
             );
         }
 
-        // And they really are reachable in a non-production environment.
+        // The admin-panel fixtures really are reachable outside production.
         $this->assertTrue(Route::has('ap.payouts.eligible'));
+
+        // The partner wallet is no longer a stub: it is database-backed and
+        // must be registered in EVERY environment, production included.
         $this->assertTrue(Route::has('pd.wallet'));
+        $this->assertStringNotContainsString(
+            'Stub\\',
+            file_get_contents(base_path('routes/dashboard.php')),
+            'the partner dashboard must serve no fixture money data',
+        );
     }
 
     /* ========== 6. the payout amount can never come from the client ========== */

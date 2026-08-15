@@ -31,6 +31,19 @@ class PartnerWallet extends Model
         'lifetime_paid_out' => 'float',
     ];
 
+    /**
+     * Column defaults are a DB-side concept: a freshly created instance holds
+     * only what was passed, so a wallet created with just an id read back null
+     * balances and any arithmetic on them blew up.
+     */
+    protected $attributes = [
+        'available_balance' => 0,
+        'pending_balance'   => 0,
+        'lifetime_earnings' => 0,
+        'lifetime_paid_out' => 0,
+        'currency'          => 'SAR',
+    ];
+
     public function partner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'partner_user_id');

@@ -27,6 +27,9 @@ class AppServiceProvider extends ServiceProvider
         // longer-lived sessions are maintained via custom refresh tokens.
         config(['sanctum.expiration' => (int) config('tokens.access_minutes', 60)]);
 
+        // A finished stay credits the partner's wallet (wallet contract §5).
+        \App\Models\Booking::observe(\App\Observers\BookingEarningObserver::class);
+
         // Partner-dashboard OTP sends: 3 per phone per 10 minutes (contract
         // §0.6); the per-day caps live in OtpService::enforceDailyCaps().
         RateLimiter::for('pd-otp', function (Request $request) {
