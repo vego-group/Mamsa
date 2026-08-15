@@ -330,13 +330,40 @@ class SecurityTest extends TestCase
 
     public function test_payout_record_ignores_client_supplied_amount_and_iban(): void
     {
-        $admin = $this->admin();
+        $admin   = $this->admin();
+        $partner = $this->partner();
+
+        \App\Models\BankDetail::create([
+            'partner_user_id'     => $partner->id,
+            'iban'                => 'SA0380000000608010167519',
+            'account_holder_name' => 'شريك',
+            'bank_name'           => 'مصرف الراجحي',
+            'verified'            => true,
+            'verified_at'         => now(),
+        ]);
+
+        $unit = $this->unit($partner);
+
+        \App\Models\Booking::create([
+            'unit_id'           => $unit->id,
+            'user_id'           => User::factory()->create()->id,
+            'code'              => 'BK-SEC-1',
+            'start_date'        => now()->subDays(5),
+            'end_date'          => now()->subDays(2),
+            'guests'            => 2,
+            'subtotal'          => 3000.00,
+            'taxes'             => 450.00,
+            'commission_amount' => 60.00,
+            'partner_share'     => 2940.00,
+            'total_amount'      => 3450.00,
+            'status'            => \App\Models\Booking::STATUS_COMPLETED,
+        ]);
 
         // The core control of the payout feature: the accountant records a
         // transfer, they never state its size or destination.
         $this->actingAs($admin, 'admin-panel')
             ->postJson('/admin/payouts/record', [
-                'partnerId'     => 'prt_101',
+                'partnerId'     => 'prt_'.$partner->id,
                 'bankReference' => 'FT-SEC-0001',
                 'amount'        => 999999.99,
                 'iban'          => 'SA0000000000000000000000',
@@ -346,6 +373,12 @@ class SecurityTest extends TestCase
             // Nothing the client sent may be echoed back as authoritative.
             ->assertJsonMissing(['amount' => 999999.99])
             ->assertJsonMissing(['iban' => 'SA0000000000000000000000']);
+
+        // And the recorded transfer is what the SERVER computed, not what was
+        // asked for — the assertion the fixture version could never make.
+        $payout = \App\Models\Payout::firstOrFail();
+        $this->assertEqualsWithDelta(2940.00, $payout->amount, 0.001);
+        $this->assertSame('••••7519', $payout->iban_masked);
     }
 
     /* ========== 7. the money ledger is append-only ========== */

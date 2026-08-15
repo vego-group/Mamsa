@@ -93,6 +93,16 @@ class User extends Authenticatable
         return $this->hasOne(PartnerDetail::class);
     }
 
+    public function partnerWallet(): HasOne
+    {
+        return $this->hasOne(PartnerWallet::class, 'partner_user_id');
+    }
+
+    public function bankDetail(): HasOne
+    {
+        return $this->hasOne(BankDetail::class, 'partner_user_id');
+    }
+
     public function units(): HasMany
     {
         return $this->hasMany(Unit::class);

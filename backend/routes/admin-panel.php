@@ -92,17 +92,14 @@ Route::prefix('admin')->group(function () {
         Route::post('approvals/{id}/approve', [AdminPanel\ApprovalsController::class, 'approve'])->middleware('admin.can:approvals.manage')->name('ap.approvals.approve');
         Route::post('approvals/{id}/reject', [AdminPanel\ApprovalsController::class, 'reject'])->middleware('admin.can:approvals.manage')->name('ap.approvals.reject');
 
-        /* ---- Wallets & Payouts — STUBS (contract v2.2 §5.1/§5.2) ----
-         * Fixture-backed, registered on non-production ONLY so prod never
-         * serves fixtures. Real controllers replace these in Phase 4/6. */
-        if (! app()->isProduction()) {
-            Route::get('payouts/eligible', [AdminPanel\Stub\PayoutStubController::class, 'eligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.eligible');
-            Route::get('payouts/ineligible', [AdminPanel\Stub\PayoutStubController::class, 'ineligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.ineligible');
-            Route::post('payouts/record', [AdminPanel\Stub\PayoutStubController::class, 'record'])->middleware('admin.can:payouts.execute')->name('ap.payouts.record');
+        /* ---- Wallets & Payouts (contract v2.2 §5.1/§5.2) ----
+         * Real and database-backed; replaced the non-prod fixture stubs. */
+        Route::get('payouts/eligible', [AdminPanel\PayoutsController::class, 'eligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.eligible');
+        Route::get('payouts/ineligible', [AdminPanel\PayoutsController::class, 'ineligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.ineligible');
+        Route::post('payouts/record', [AdminPanel\PayoutsController::class, 'record'])->middleware('admin.can:payouts.execute')->name('ap.payouts.record');
 
-            Route::get('wallets', [AdminPanel\Stub\WalletStubController::class, 'index'])->middleware('admin.can:wallets.view')->name('ap.wallets.index');
-            Route::get('wallets/{partnerId}/ledger', [AdminPanel\Stub\WalletStubController::class, 'ledger'])->middleware('admin.can:wallets.view')->name('ap.wallets.ledger');
-            Route::get('wallets/{partnerId}', [AdminPanel\Stub\WalletStubController::class, 'show'])->middleware('admin.can:wallets.view')->name('ap.wallets.show');
-        }
+        Route::get('wallets', [AdminPanel\WalletsController::class, 'index'])->middleware('admin.can:wallets.view')->name('ap.wallets.index');
+        Route::get('wallets/{partnerId}/ledger', [AdminPanel\WalletsController::class, 'ledger'])->middleware('admin.can:wallets.view')->name('ap.wallets.ledger');
+        Route::get('wallets/{partnerId}', [AdminPanel\WalletsController::class, 'show'])->middleware('admin.can:wallets.view')->name('ap.wallets.show');
     });
 });
