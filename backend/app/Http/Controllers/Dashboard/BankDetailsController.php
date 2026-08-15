@@ -51,8 +51,14 @@ class BankDetailsController extends DashboardController
             ]);
         }
 
-        $bank     = BankDetail::firstOrNew(['partner_user_id' => $user->id]);
-        $ibanKept = $bank->exists && Iban::normalize($bank->iban) === $iban;
+        $bank = BankDetail::firstOrNew(['partner_user_id' => $user->id]);
+
+        // Did anything about the ACCOUNT change? The holder name counts: a bank
+        // rejects a transfer whose beneficiary name does not match, so finance
+        // verified that name as much as the number.
+        $changed = ! $bank->exists
+            || Iban::normalize($bank->iban) !== $iban
+            || trim((string) $bank->account_holder_name) !== $holder;
 
         $bank->fill([
             'iban'                => $iban,
@@ -60,13 +66,18 @@ class BankDetailsController extends DashboardController
             'bank_name'           => Iban::bankName($iban),
         ]);
 
-        // Any change of account number drops verification, server-side. Finance
-        // verifies one specific account; carrying the flag across a change would
-        // mean an unchecked account inheriting a checked one's status.
-        if (! $ibanKept) {
-            $bank->verified         = false;
-            $bank->verified_at      = null;
-            $bank->rejection_reason = null;
+        // Any edit is a resubmission: verification drops and the old rejection
+        // is cleared. Keeping the rejection would strand a partner who fixed
+        // exactly what they were told to fix — "الاسم لا يطابق" is corrected by
+        // changing the NAME, and if that left the account rejected there would
+        // be no way out and no signal to the reviewer that anything happened.
+        //
+        // An identical re-save changes nothing and leaves verification intact.
+        if ($changed) {
+            $bank->verified             = false;
+            $bank->verified_at          = null;
+            $bank->verified_by_admin_id = null;
+            $bank->rejection_reason     = null;
         }
 
         $bank->save();

@@ -200,7 +200,11 @@ class WalletsController extends Controller
             'amount'       => round($e->amount, 2),
             'balanceAfter' => round($e->balance_after, 2),
             'refType'      => $e->ref_type,
-            'refId'        => $e->ref_type === 'booking' ? 'b_'.$e->ref_id : 'po_'.$e->ref_id,
+            // 'pay_' to match this surface's payout id, so a ledger row
+            // deep-links to a payout that actually resolves. (The partner
+            // surface uses 'po_' throughout — each surface is internally
+            // consistent; the ids are not shared between them.)
+            'refId'        => $e->ref_type === 'booking' ? 'b_'.$e->ref_id : 'pay_'.$e->ref_id,
             'refCode'      => $e->ref_code ?? '',
             'description'  => $e->description ?? '',
             'createdAt'    => $e->created_at?->toIso8601ZuluString(),

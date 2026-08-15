@@ -84,6 +84,16 @@ class PartnersController extends Controller
         $commission = $this->money((float) $u->subtotal_sum * Booking::COMMISSION_RATE);
         $bookings   = (int) $u->bookings_count;
 
+        // The partner's earnings are the SUM of the frozen per-booking share,
+        // not revenue − commission. `revenue` is VAT-inclusive gross and the VAT
+        // is remitted to ZATCA, so subtracting only the commission credits the
+        // partner the guest's VAT. On one staging partner that reported
+        // 108,454.35 against a true 88,566.96 — a 19,887 SAR overstatement, and
+        // a number the wallet would never pay.
+        $earning = (float) Booking::query()->revenue()
+            ->whereHas('unit', fn ($q) => $q->where('user_id', $u->id))
+            ->sum('partner_share');
+
         return response()->json(array_merge($this->row($u), [
             'nationalId'       => $d->national_id,
             'tourismPermitNo'  => null,                 // tourism permit is per-unit, not on the partner
@@ -92,7 +102,7 @@ class PartnersController extends Controller
             'documents'        => $this->documents($d),
             'documentsComplete'=> $this->documentsComplete($d),
             'commissionPaid'   => $commission,
-            'partnerEarning'   => $this->money($revenue - $commission),
+            'partnerEarning'   => $this->money($earning),
             'avgPerBooking'    => $bookings > 0 ? $this->money($revenue / $bookings) : 0.0,
             'rejectionReason'  => $d->rejection_reason,
         ]));

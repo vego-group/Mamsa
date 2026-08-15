@@ -78,9 +78,20 @@ class PayoutController extends DashboardController
         ];
     }
 
-    /** Ids go out prefixed (`po_7`); accept them back either way. */
+    /**
+     * Ids go out prefixed (`po_7`); accept them back in any form.
+     *
+     * `pay_` is tolerated too: the admin surface uses that prefix for the same
+     * record, and an id copied between the two must not 404.
+     */
     private function unprefix(string $id): string
     {
-        return str_starts_with($id, 'po_') ? substr($id, 3) : $id;
+        foreach (['po_', 'pay_'] as $prefix) {
+            if (str_starts_with($id, $prefix)) {
+                return substr($id, strlen($prefix));
+            }
+        }
+
+        return $id;
     }
 }

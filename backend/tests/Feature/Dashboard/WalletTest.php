@@ -302,7 +302,7 @@ class WalletTest extends TestCase
         $this->assertNull($body['verifiedAt']);
     }
 
-    public function test_re_saving_the_same_iban_keeps_verification(): void
+    public function test_changing_only_the_holder_name_also_requires_re_verification(): void
     {
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
@@ -314,7 +314,48 @@ class WalletTest extends TestCase
             'iban' => 'SA0380000000608010167519', 'accountHolderName' => 'اسم جديد',
         ])->assertOk()->json();
 
-        $this->assertTrue($body['verified'], 'only the account NUMBER changing invalidates it');
+        $this->assertFalse(
+            $body['verified'],
+            'the holder name is part of what finance verified — a bank rejects a name mismatch',
+        );
+    }
+
+    /**
+     * A partner told "the holder name does not match" fixes the NAME, not the
+     * IBAN. If that left the rejection standing they would be stuck with a
+     * permanent error and the reviewer would get no signal that anything was
+     * resubmitted.
+     */
+    public function test_fixing_only_the_holder_name_clears_the_rejection(): void
+    {
+        BankDetail::create([
+            'partner_user_id' => $this->partner->id,
+            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'اسم خاطئ',
+            'verified' => false, 'rejection_reason' => 'اسم صاحب الحساب لا يطابق اسم الشريك',
+        ]);
+
+        $body = $this->actingAs($this->partner, 'dashboard')->putJson('/me/bank-details', [
+            'iban' => 'SA0380000000608010167519',     // unchanged
+            'accountHolderName' => 'الاسم الصحيح',      // the thing they were told to fix
+        ])->assertOk()->json();
+
+        $this->assertNull($body['rejectionReason'], 'the correction must clear the rejection');
+        $this->assertFalse($body['verified'], 'and return the account to awaiting review');
+    }
+
+    public function test_an_identical_re_save_keeps_verification(): void
+    {
+        BankDetail::create([
+            'partner_user_id' => $this->partner->id,
+            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك',
+            'verified' => true, 'verified_at' => now(),
+        ]);
+
+        $body = $this->actingAs($this->partner, 'dashboard')->putJson('/me/bank-details', [
+            'iban' => 'SA0380000000608010167519', 'accountHolderName' => 'شريك',
+        ])->assertOk()->json();
+
+        $this->assertTrue($body['verified'], 'nothing changed, so nothing is invalidated');
     }
 
     public function test_a_bad_checksum_is_rejected(): void
