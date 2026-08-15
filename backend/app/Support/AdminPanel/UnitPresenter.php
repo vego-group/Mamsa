@@ -96,6 +96,9 @@ class UnitPresenter
             'unitId'            => (string) $u->id,
             'unitName'          => $u->unit_name,
             'unitType'          => $this->unitType($u->unit_type),
+            // Cover photo so the queue is scannable; falls back to the shared
+            // default image, so this is never null.
+            'coverImage'        => $this->coverImage($u),
             'city'              => $u->city ?? '',
             'partnerId'         => (string) ($u->user_id ?? ''),
             'partnerName'       => $owner?->name ?? '',

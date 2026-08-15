@@ -186,4 +186,61 @@ class ApprovalsTest extends TestCase
             ->assertStatus(409)
             ->assertJsonPath('code', 'CONFLICT');
     }
+
+    /* ---- range on stats (frontend request 2026-08-15) ---- */
+
+    public function test_stats_defaults_to_today_and_echoes_the_range(): void
+    {
+        $this->actingAs($this->admin(), 'admin-panel')->getJson('/admin/approvals/stats')
+            ->assertOk()
+            ->assertJsonStructure(['pendingReview', 'approved', 'rejected', 'avgReviewHours', 'range'])
+            ->assertJsonPath('range', 'today');
+    }
+
+    public function test_stats_accepts_the_three_ranges_and_echoes_each(): void
+    {
+        $admin = $this->admin();
+
+        foreach (['today', '7d', '30d'] as $range) {
+            $this->actingAs($admin, 'admin-panel')->getJson("/admin/approvals/stats?range={$range}")
+                ->assertOk()->assertJsonPath('range', $range);
+        }
+    }
+
+    public function test_unknown_range_falls_back_to_today(): void
+    {
+        $this->actingAs($this->admin(), 'admin-panel')->getJson('/admin/approvals/stats?range=all-time')
+            ->assertOk()->assertJsonPath('range', 'today');
+    }
+
+    public function test_decision_counters_are_scoped_by_range_but_pending_is_not(): void
+    {
+        $admin = $this->admin();
+
+        // Decided 10 days ago: inside 30d, outside 7d and today.
+        $old = $this->makeUnit('old-decision', ['approval_status' => 'approved']);
+        $old->forceFill(['updated_at' => now()->subDays(10)])->saveQuietly();
+
+        // Still awaiting review — must be counted regardless of range.
+        $this->makeUnit('pending');
+
+        $today = $this->actingAs($admin, 'admin-panel')->getJson('/admin/approvals/stats?range=today')->json();
+        $d30   = $this->actingAs($admin, 'admin-panel')->getJson('/admin/approvals/stats?range=30d')->json();
+
+        $this->assertSame(0, $today['approved'], 'a 10-day-old decision must not count as today');
+        $this->assertSame(1, $d30['approved'], 'a 10-day-old decision must count in 30d');
+
+        // Queue depth answers "what is on my desk now" — identical in both.
+        $this->assertSame($today['pendingReview'], $d30['pendingReview']);
+        $this->assertGreaterThanOrEqual(1, $today['pendingReview']);
+    }
+
+    public function test_list_rows_carry_a_cover_image(): void
+    {
+        $this->makeUnit('pending');
+
+        $this->actingAs($this->admin(), 'admin-panel')->getJson('/admin/approvals')
+            ->assertOk()
+            ->assertJsonStructure(['items' => [['id', 'code', 'unitName', 'coverImage']]]);
+    }
 }

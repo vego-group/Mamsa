@@ -24,7 +24,7 @@ class ApprovalsController extends Controller
     public function index(Request $request): JsonResponse
     {
         $args  = $this->listArgs($request);
-        $query = Unit::query()->with('owner.partnerDetail')->where('approval_status', 'pending');
+        $query = Unit::query()->with(['owner.partnerDetail', 'images'])->where('approval_status', 'pending');
 
         if ($rt = $this->cleanParam($request->query('requestType'))) {
             match ($rt) {
@@ -50,17 +50,71 @@ class ApprovalsController extends Controller
         return $this->items($page, fn (Unit $u) => $this->units->approvalRow($u));
     }
 
-    public function stats(): JsonResponse
+    /**
+     * GET /admin/approvals/stats?range=today|7d|30d
+     *
+     * `pendingReview` is deliberately NOT scoped by range — it answers "how much
+     * work is on my desk right now", not "how much arrived this week". The
+     * decision counters and the average ARE scoped, by decision time.
+     */
+    public function stats(Request $request): JsonResponse
     {
+        $range = $this->approvalsRange($request->query('range'));
+        [$from, $to] = $this->rangeWindow($range);
+
+        // A decided unit's `updated_at` is its decision time (units carry no
+        // dedicated reviewed_at column — see the note in the response docs).
+        $decided = fn (string $status) => Unit::where('approval_status', $status)
+            ->whereBetween('updated_at', [$from, $to])->count();
+
         $avg = (float) Unit::whereIn('approval_status', ['approved', 'rejected'])
+            ->whereBetween('updated_at', [$from, $to])
             ->selectRaw($this->avgHoursSql('created_at', 'updated_at').' as h')->value('h');
 
+        $approved = $decided('approved');
+        $rejected = $decided('rejected');
+
         return response()->json([
-            'pendingReview' => Unit::where('approval_status', 'pending')->count(),
-            'approvedToday' => Unit::where('approval_status', 'approved')->whereDate('updated_at', today())->count(),
-            'rejectedToday' => Unit::where('approval_status', 'rejected')->whereDate('updated_at', today())->count(),
-            'avgReviewHours'=> round($avg, 1),
+            'pendingReview'  => Unit::where('approval_status', 'pending')->count(),
+            'approved'       => $approved,
+            'rejected'       => $rejected,
+            'avgReviewHours' => round($avg, 1),
+            'range'          => $range,
+
+            // Legacy keys — kept so a client that predates `range` keeps working.
+            // They mirror the requested window rather than always "today", which
+            // is only a difference when range !== 'today'.
+            'approvedToday'  => $approved,
+            'rejectedToday'  => $rejected,
         ]);
+    }
+
+    /** Whitelist the range; anything unknown or absent means today. */
+    private function approvalsRange(mixed $raw): string
+    {
+        return in_array($raw, ['today', '7d', '30d'], true) ? (string) $raw : 'today';
+    }
+
+    /**
+     * `today` is the calendar day in Asia/Riyadh — not a rolling 24 hours, and
+     * not the UTC day the app otherwise runs in. `7d`/`30d` roll back from now.
+     *
+     * @return array{0:\Illuminate\Support\Carbon, 1:\Illuminate\Support\Carbon}
+     */
+    private function rangeWindow(string $range): array
+    {
+        $tz = 'Asia/Riyadh';
+
+        return match ($range) {
+            '7d'  => [now()->subDays(7), now()],
+            '30d' => [now()->subDays(30), now()],
+            // Convert the Riyadh day boundaries into the UTC instants the
+            // timestamps are actually stored in.
+            default => [
+                now($tz)->startOfDay()->setTimezone('UTC'),
+                now($tz)->endOfDay()->setTimezone('UTC'),
+            ],
+        };
     }
 
     public function show(string $id): JsonResponse

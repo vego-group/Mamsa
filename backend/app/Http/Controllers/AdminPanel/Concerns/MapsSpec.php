@@ -152,6 +152,9 @@ trait MapsSpec
     {
         return DB::connection()->getDriverName() === 'sqlite'
             ? "AVG((julianday({$end}) - julianday({$start})) * 24)"
-            : "AVG(TIMESTAMPDIFF(HOUR, {$start}, {$end}))";
+            // MINUTE/60, not HOUR: TIMESTAMPDIFF(HOUR, …) truncates, so MySQL
+            // would report 14 where sqlite (and the UI's SLA colouring) expects
+            // 14.2 — a silent behaviour difference between tests and production.
+            : "AVG(TIMESTAMPDIFF(MINUTE, {$start}, {$end}) / 60)";
     }
 }
