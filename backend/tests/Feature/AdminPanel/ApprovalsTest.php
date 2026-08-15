@@ -235,13 +235,36 @@ class ApprovalsTest extends TestCase
         $this->assertGreaterThanOrEqual(1, $today['pendingReview']);
     }
 
-    public function test_list_rows_carry_a_cover_image(): void
+    public function test_list_rows_carry_the_units_own_cover_image(): void
     {
-        $this->makeUnit('pending');
+        $unit = $this->makeUnit('with-photo');
+        $unit->images()->create(['path' => 'units/real-photo.jpg', 'is_main' => true]);
 
-        $this->actingAs($this->admin(), 'admin-panel')->getJson('/admin/approvals')
-            ->assertOk()
-            ->assertJsonStructure(['items' => [['id', 'code', 'unitName', 'coverImage']]]);
+        // The queue is ordered oldest-submission-first, so find our own row.
+        $items = $this->actingAs($this->admin(), 'admin-panel')->getJson('/admin/approvals')
+            ->assertOk()->json('items');
+        $row = collect($items)->firstWhere('unitId', (string) $unit->id);
+
+        $this->assertNotNull($row, 'the pending unit must be in the queue');
+        $this->assertStringContainsString('units/real-photo.jpg', $row['coverImage']);
+    }
+
+    /**
+     * "This listing has no photos" is review-relevant, so absence must reach the
+     * reviewer as absence — a shared default would make an empty listing look
+     * photographed.
+     */
+    public function test_a_unit_with_no_photo_reports_a_null_cover_image(): void
+    {
+        $unit = $this->makeUnit('no-photo');
+
+        $items = $this->actingAs($this->admin(), 'admin-panel')->getJson('/admin/approvals')
+            ->assertOk()->json('items');
+        $row = collect($items)->firstWhere('unitId', (string) $unit->id);
+
+        $this->assertNotNull($row, 'the pending unit must be in the queue');
+        $this->assertArrayHasKey('coverImage', $row, 'the key must still be sent');
+        $this->assertNull($row['coverImage']);
     }
 
     /* ---- submitted_at (review-SLA basis) ---- */

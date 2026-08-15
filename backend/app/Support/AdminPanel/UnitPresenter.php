@@ -96,9 +96,9 @@ class UnitPresenter
             'unitId'            => (string) $u->id,
             'unitName'          => $u->unit_name,
             'unitType'          => $this->unitType($u->unit_type),
-            // Cover photo so the queue is scannable; falls back to the shared
-            // default image, so this is never null.
-            'coverImage'        => $this->coverImage($u),
+            // Null when the listing has no photo of its own: the reviewer needs
+            // to see that, and a shared default would hide it (frontend §3).
+            'coverImage'        => $this->realCoverImage($u),
             'city'              => $u->city ?? '',
             'partnerId'         => (string) ($u->user_id ?? ''),
             'partnerName'       => $owner?->name ?? '',
@@ -129,13 +129,26 @@ class UnitPresenter
         ]);
     }
 
-    private function coverImage(Unit $u): string
+    /**
+     * The unit's own photo, or null when it has none.
+     *
+     * "Has no photos" is review-relevant, so the reviewer queue must be able to
+     * show absence as absence — a shared default there would make empty
+     * listings look photographed and identical rows look alike anyway.
+     */
+    private function realCoverImage(Unit $u): ?string
     {
         $img = $u->images->firstWhere('is_main', true) ?? $u->images->first();
 
         return $img && filled($img->path) && $img->path !== Media::defaultImagePath()
             ? $img->url
-            : Media::defaultImageUrl();
+            : null;
+    }
+
+    /** Never null — the browse/list surfaces render a card either way. */
+    private function coverImage(Unit $u): string
+    {
+        return $this->realCoverImage($u) ?? Media::defaultImageUrl();
     }
 
     /** @return array<int, string> */
