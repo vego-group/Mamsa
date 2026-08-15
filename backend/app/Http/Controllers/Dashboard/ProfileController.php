@@ -189,13 +189,18 @@ class ProfileController extends DashboardController
         $docs = [
             'cr'                        => $d?->cr_number,
             'iban'                      => $d?->iban,
-            'nationalIdFileId'          => $d?->national_id_file,
             'authorizationLetterFileId' => $d?->authorization_letter_file,
             'vatCertificateFileId'      => $d?->vat_certificate_file,
             'operatorLicenseFileId'     => $d?->operator_license_file,
         ];
 
+        // Computed BEFORE the identity scan is added: `complete` gates company
+        // unit submission, and a company is identified by its CR, not by a
+        // national id. Including it here would block every company from
+        // submitting a unit over a document they are never asked for.
         $docs['complete'] = ! in_array(null, $docs, true) && ! in_array('', $docs, true);
+
+        $docs['nationalIdFileId'] = $d?->national_id_file;
 
         return $docs;
     }

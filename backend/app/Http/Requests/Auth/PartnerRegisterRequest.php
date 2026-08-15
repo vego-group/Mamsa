@@ -30,7 +30,12 @@ class PartnerRegisterRequest extends FormRequest
             // Scan of the identity document. Registration is already OTP-verified
             // at this point, so accepting the file directly is safe and spares the
             // client an authenticated presign round-trip it cannot make yet.
-            'national_id_file' => ['required_if:type,individual', 'nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+            // Whether it may be OMITTED is per-environment (see the config note);
+            // the type/size checks below always apply to a supplied file.
+            'national_id_file' => [
+                config('dashboard.require_identity_file') ? 'required_if:type,individual' : 'nullable',
+                'nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120',
+            ],
             'cr_number'   => ['required_if:type,company', 'nullable', 'string', 'max:20'],
             'device'      => ['nullable', 'string', 'max:255'],
         ];

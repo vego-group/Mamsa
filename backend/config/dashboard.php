@@ -16,4 +16,18 @@ return [
 
     // Max upload size for presigned files (bytes) — contract §9.1: 10MB.
     'upload_max_bytes' => 10 * 1024 * 1024,
+
+    /*
+     * Is the identity scan mandatory for an individual partner registration?
+     *
+     * Making it required is a breaking change to a live client contract: the
+     * form must send multipart with `national_id_file` or signup 422s. The flag
+     * exists so the server side can ship everywhere first and the requirement
+     * be switched on per environment once each frontend has shipped its form —
+     * rather than forking the validation rules per environment.
+     *
+     * The file is ALWAYS validated (type/size) when supplied; this only governs
+     * whether omitting it is allowed.
+     */
+    'require_identity_file' => filter_var(env('PARTNER_REQUIRE_IDENTITY_FILE', true), FILTER_VALIDATE_BOOL),
 ];

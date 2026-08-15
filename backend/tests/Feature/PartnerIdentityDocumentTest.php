@@ -80,6 +80,28 @@ class PartnerIdentityDocumentTest extends TestCase
         ]))->assertStatus(422)->assertJsonValidationErrors(['national_id_file']);
     }
 
+    /**
+     * The requirement ships switched off where the client form has not landed
+     * yet, so the server side can be deployed everywhere ahead of the frontend.
+     */
+    public function test_the_requirement_can_be_rolled_out_per_environment(): void
+    {
+        config(['dashboard.require_identity_file' => false]);
+        $this->requestOtp();
+
+        $this->post('/api/v1/auth/partner/register', $this->payload())->assertCreated();
+    }
+
+    public function test_a_supplied_file_is_validated_even_where_it_is_optional(): void
+    {
+        config(['dashboard.require_identity_file' => false]);
+        $this->requestOtp();
+
+        $this->post('/api/v1/auth/partner/register', $this->payload([
+            'national_id_file' => UploadedFile::fake()->create('id.exe', 100, 'application/x-msdownload'),
+        ]))->assertStatus(422)->assertJsonValidationErrors(['national_id_file']);
+    }
+
     public function test_a_company_does_not_need_an_identity_image(): void
     {
         $this->requestOtp('512345679');
@@ -90,6 +112,33 @@ class PartnerIdentityDocumentTest extends TestCase
             'national_id' => null,
             'cr_number'   => '1010101010',
         ]))->assertCreated();
+    }
+
+    /**
+     * Regression: `complete` gates COMPANY unit submission (UnitController §4).
+     * The identity scan is an individual-only document, so folding it into that
+     * computation would block every company from submitting a unit over a file
+     * they are never asked for.
+     */
+    public function test_the_identity_scan_does_not_gate_company_payout_completeness(): void
+    {
+        $company = User::factory()->create(['is_active' => true]);
+        $company->assignRole('Company');
+        $company->partnerDetail()->create([
+            'type'                      => 'company',
+            'cr_number'                 => '1010101010',
+            'iban'                      => 'SA'.str_repeat('3', 22),
+            'authorization_letter_file' => 'file_auth',
+            'vat_certificate_file'      => 'file_vat',
+            'operator_license_file'     => 'file_op',
+            'national_id_file'          => null,
+        ]);
+
+        $body = $this->actingAs($company, 'dashboard')
+            ->getJson('/me/company-docs')->assertOk()->json();
+
+        $this->assertTrue($body['complete'], 'a company with every company doc must read as complete');
+        $this->assertNull($body['nationalIdFileId'], 'the field is still reported');
     }
 
     public function test_admin_sees_the_identity_scan_on_the_document_row(): void
