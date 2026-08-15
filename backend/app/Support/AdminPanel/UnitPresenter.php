@@ -84,7 +84,7 @@ class UnitPresenter
 
     /**
      * @return array<string, mixed> ApprovalRequest (queue row) — §6. A request is
-     * a unit awaiting review; submittedAt uses updated_at. Expects owner loaded.
+     * a unit awaiting review; submittedAt uses submitted_at. Expects owner loaded.
      */
     public function approvalRow(Unit $u): array
     {
@@ -103,7 +103,9 @@ class UnitPresenter
             'partnerId'         => (string) ($u->user_id ?? ''),
             'partnerName'       => $owner?->name ?? '',
             'partnerType'       => $owner?->partnerDetail?->type ?? 'individual',
-            'submittedAt'       => $this->iso($u->updated_at),
+            // True submission time where known; updated_at is the historical
+            // proxy for rows that predate the submitted_at column.
+            'submittedAt'       => $this->iso($u->submitted_at ?? $u->updated_at),
             'requestType'       => $u->rejection_reason ? 'resubmission' : 'new',
             'previousRejection' => $u->rejection_reason
                 ? ['reason' => $u->rejection_reason, 'at' => $this->iso($u->updated_at)]

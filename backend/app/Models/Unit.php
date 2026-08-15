@@ -37,6 +37,7 @@ class Unit extends Model
         'tourism_permit_file',
         'company_license_no',
         'approval_status',
+        'submitted_at',
         'rejection_reason',
         'status',
         'is_featured',
@@ -50,6 +51,7 @@ class Unit extends Model
     ];
 
     protected $casts = [
+        'submitted_at' => 'datetime',
         'price'        => 'float',
         'lat'          => 'float',
         'lng'      => 'float',

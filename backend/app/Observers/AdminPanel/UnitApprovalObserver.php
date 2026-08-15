@@ -15,6 +15,21 @@ class UnitApprovalObserver
 {
     use NotifiesAdmins;
 
+    /**
+     * Stamp the moment a unit enters review — the basis for review-time SLA.
+     *
+     * Done here rather than at the four call sites that set `pending` (partner
+     * submit and edit-reverts-to-pending, on both the dashboard and /api/v1)
+     * so no path can forget it, including ones added later. `saving` runs
+     * before the write, so this costs no extra query and cannot recurse.
+     */
+    public function saving(Unit $unit): void
+    {
+        if ($unit->isDirty('approval_status') && $unit->approval_status === 'pending') {
+            $unit->submitted_at = now();
+        }
+    }
+
     public function created(Unit $unit): void
     {
         if ($unit->approval_status === 'pending') {

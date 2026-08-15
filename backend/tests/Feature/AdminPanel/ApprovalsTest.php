@@ -243,4 +243,50 @@ class ApprovalsTest extends TestCase
             ->assertOk()
             ->assertJsonStructure(['items' => [['id', 'code', 'unitName', 'coverImage']]]);
     }
+
+    /* ---- submitted_at (review-SLA basis) ---- */
+
+    public function test_submitted_at_is_stamped_when_a_unit_enters_review(): void
+    {
+        $unit = $this->makeUnit('fresh', ['approval_status' => 'draft']);
+        $this->assertNull($unit->submitted_at, 'a draft has not been submitted');
+
+        $unit->update(['approval_status' => 'pending']);
+
+        $this->assertNotNull($unit->fresh()->submitted_at, 'entering review must stamp submitted_at');
+    }
+
+    public function test_submitted_at_is_restamped_on_resubmission(): void
+    {
+        $unit = $this->makeUnit('resub', ['approval_status' => 'pending']);
+        $first = $unit->fresh()->submitted_at;
+
+        // rejected, then submitted again
+        $unit->update(['approval_status' => 'rejected', 'rejection_reason' => 'صور غير واضحة']);
+        $this->travel(2)->hours();
+        $unit->update(['approval_status' => 'pending']);
+
+        $this->assertTrue(
+            $unit->fresh()->submitted_at->greaterThan($first),
+            'a resubmission restarts the review clock'
+        );
+    }
+
+    public function test_avg_review_hours_measures_submission_to_decision_not_draft_time(): void
+    {
+        // Created 10 days ago, submitted 2 hours ago, decided now.
+        // Measured from created_at this would read ~240h; from submitted_at, ~2h.
+        $unit = $this->makeUnit('slow-draft', ['approval_status' => 'draft']);
+        $unit->forceFill(['created_at' => now()->subDays(10)])->saveQuietly();
+
+        $unit->update(['approval_status' => 'pending']);
+        $unit->forceFill(['submitted_at' => now()->subHours(2)])->saveQuietly();
+        $unit->update(['approval_status' => 'approved']);
+
+        $avg = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/approvals/stats?range=30d')->json('avgReviewHours');
+
+        $this->assertLessThan(24, $avg, "draft time must not count as review time (got {$avg}h)");
+        $this->assertGreaterThan(1, $avg);
+    }
 }

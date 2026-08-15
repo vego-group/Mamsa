@@ -13,11 +13,15 @@ use Illuminate\Http\Request;
 /**
  * Approvals (unit review queue) — BACKEND_SPEC §5.7. A request is a unit in
  * `pending` (pending_review). Default order: oldest submittedAt first (SLA).
- * submittedAt / approvedAt use updated_at (units carry no reviewed_at column).
+ * submittedAt uses the stamped submitted_at; approvedAt uses updated_at
+ * (units carry no reviewed_at column).
  */
 class ApprovalsController extends Controller
 {
-    private const SORT = ['submittedAt' => 'updated_at'];
+    // Oldest submission first is the SLA order, so sort by the real submission
+    // time. Every pending row has it: backfilled for existing rows, stamped by
+    // the observer for new ones.
+    private const SORT = ['submittedAt' => 'submitted_at'];
 
     public function __construct(private readonly UnitPresenter $units) {}
 
@@ -45,7 +49,7 @@ class ApprovalsController extends Controller
             });
         }
 
-        $page = $this->queryList($query, $args, [], self::SORT, ['updated_at', 'asc']);
+        $page = $this->queryList($query, $args, [], self::SORT, ['submitted_at', 'asc']);
 
         return $this->items($page, fn (Unit $u) => $this->units->approvalRow($u));
     }
@@ -67,9 +71,14 @@ class ApprovalsController extends Controller
         $decided = fn (string $status) => Unit::where('approval_status', $status)
             ->whereBetween('updated_at', [$from, $to])->count();
 
+        // Real reviewer latency: submission → decision. Rows with no
+        // submitted_at are pre-migration decisions whose submission time is
+        // unrecoverable; they are excluded rather than counted from created_at,
+        // which would fold draft time into the SLA.
         $avg = (float) Unit::whereIn('approval_status', ['approved', 'rejected'])
             ->whereBetween('updated_at', [$from, $to])
-            ->selectRaw($this->avgHoursSql('created_at', 'updated_at').' as h')->value('h');
+            ->whereNotNull('submitted_at')
+            ->selectRaw($this->avgHoursSql('submitted_at', 'updated_at').' as h')->value('h');
 
         $approved = $decided('approved');
         $rejected = $decided('rejected');
