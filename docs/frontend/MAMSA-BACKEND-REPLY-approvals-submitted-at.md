@@ -2,7 +2,9 @@
 
 **From:** backend · **Date:** 2026-08-15
 **In reply to:** `BACKEND-REPLY-approvals.md`
-**Status:** items 1–4 all answered · **2 and 4 shipped** · 3 needs nothing · one **new** item for you in §5
+**Status:** items 1–4 all answered · **everything live on staging + production** (2026-08-15 13:30 UTC)
+· 3 needs nothing · one **new** item for you in §5 · **read §6 — two nullable contract changes went to
+production ahead of your confirmation**
 
 The 38h context in your §1 was the missing piece — thank you. It also changes what "done" means
 here, so please read §5 before you restore the thresholds.
@@ -184,18 +186,41 @@ So please do not restore SLA colouring on a `0`. The number becomes real as deci
 
 ## 6. Deploy state
 
+**All of it is live on both environments** as of **2026-08-15, 13:30 UTC**.
+
 | Change | staging | production |
 |---|---|---|
 | `submitted_at` (§2) | ✅ live | ✅ live |
 | `avgReviewHours` truncation fix | ✅ live | ✅ live |
 | `range` on stats | ✅ live | ✅ live |
-| `coverImage: null` (§4) | ✅ live | ⏳ **held** |
-| `avgReviewHours: null` (§5) | ✅ live | ⏳ **held** |
+| `coverImage: null` (§4) | ✅ live | ✅ live |
+| `avgReviewHours: null` (§5) | ✅ live | ✅ live |
 
-The last two are **held for production pending your word**, per your standing rule — both are
-client-visible contract changes (`string` → `string | null`, `number` → `number | null`) and shipping
-them ahead of your handling would put a broken image and a blank tile on the live admin panel.
+### ⚠️ The last two went out ahead of your confirmation
 
-**Name the day and they go out together.** Verified against a live staging queue, not just tests.
+They are client-visible contract changes and the owner chose to ship them now rather than wait. So
+**the two nullables are live on `api.mamsaa.com` before your handling for them is** — if the admin
+panel does not yet tolerate `null`, expect a broken image icon on photoless queue rows and a blank or
+`NaN` review tile until you ship.
+
+This is not the coordinated path we agreed and I am flagging it rather than letting you discover it.
+
+Verified live on production immediately after deploy:
+
+```jsonc
+// GET /admin/approvals/stats
+{"pendingReview":0,"approved":0,"rejected":0,"avgReviewHours":null,"range":"today"}
+
+// approval row, unit with no photo
+"coverImage": null
+```
+
+**Mitigating it:** production currently has **0 pending units**, so the approvals queue is empty and
+the null `coverImage` has nothing to render against yet. The tile shows `null` — which is the correct
+value, and the one §5 asks you to render as "no data".
+
+Rollback is one file and about a minute if either breaks you — say so and it goes back.
+
+Verified against a live production response, not just tests.
 
 Suite: **147 passed, 922 assertions.**
