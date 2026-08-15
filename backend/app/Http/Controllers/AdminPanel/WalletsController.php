@@ -52,6 +52,8 @@ class WalletsController extends Controller
                 'bankName'          => $bank->bank_name,
                 'verified'          => (bool) $bank->verified,
                 'verifiedAt'        => $bank->verified_at?->toIso8601ZuluString(),
+                // Additive: who approved this destination, for the audit trail.
+                'verifiedBy'        => $bank->verifiedByAdmin?->name,
                 'rejectionReason'   => $bank->rejection_reason,
                 'updatedAt'         => $bank->updated_at?->toIso8601ZuluString(),
             ] : null,
@@ -102,6 +104,64 @@ class WalletsController extends Controller
             'hasMore'    => $hasMore,
             'nextCursor' => $hasMore ? $items->last()?->created_at?->toIso8601ZuluString() : null,
         ]);
+    }
+
+    /**
+     * POST /admin/wallets/{partnerId}/bank/verify
+     *
+     * The control that lets money leave the platform toward a specific account
+     * number. Deliberately NOT available to the finance role: finance records
+     * transfers, so letting the same role also approve destinations would put
+     * both halves of a payment in one pair of hands.
+     */
+    public function verifyBank(Request $request, string $partnerId): JsonResponse
+    {
+        $bank = $this->bank($partnerId);
+
+        $bank->update([
+            'verified'             => true,
+            'verified_at'          => now(),
+            'verified_by_admin_id' => $request->user()?->id,
+            'rejection_reason'     => null,
+        ]);
+
+        return $this->ok();
+    }
+
+    /**
+     * POST /admin/wallets/{partnerId}/bank/reject — { reason }
+     *
+     * The reason reaches the partner verbatim on GET /me/bank-details, so it
+     * has to say what to fix: this is the only channel telling them why they
+     * are not being paid.
+     */
+    public function rejectBank(Request $request, string $partnerId): JsonResponse
+    {
+        $data = $this->validate($request, [
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
+        ], ['reason.required' => 'سبب الرفض مطلوب']);
+
+        $bank = $this->bank($partnerId);
+
+        $bank->update([
+            'verified'             => false,
+            'verified_at'          => null,
+            'verified_by_admin_id' => null,
+            'rejection_reason'     => $data['reason'],
+        ]);
+
+        return $this->ok();
+    }
+
+    private function bank(string $partnerId): \App\Models\BankDetail
+    {
+        $bank = $this->partner($partnerId)->bankDetail;
+
+        if (! $bank) {
+            $this->fail('NOT_FOUND', 'لا يوجد حساب بنكي لهذا الشريك', 404);
+        }
+
+        return $bank;
     }
 
     /* ---- transformers ---- */

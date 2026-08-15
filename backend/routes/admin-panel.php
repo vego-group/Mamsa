@@ -98,6 +98,11 @@ Route::prefix('admin')->group(function () {
         Route::get('payouts/ineligible', [AdminPanel\PayoutsController::class, 'ineligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.ineligible');
         Route::post('payouts/record', [AdminPanel\PayoutsController::class, 'record'])->middleware('admin.can:payouts.execute')->name('ap.payouts.record');
 
+        // Approving a payout DESTINATION is wallets.adjust, not wallets.view:
+        // finance records transfers, so it must not also approve where they go.
+        Route::post('wallets/{partnerId}/bank/verify', [AdminPanel\WalletsController::class, 'verifyBank'])->middleware('admin.can:wallets.adjust')->name('ap.wallets.bank.verify');
+        Route::post('wallets/{partnerId}/bank/reject', [AdminPanel\WalletsController::class, 'rejectBank'])->middleware('admin.can:wallets.adjust')->name('ap.wallets.bank.reject');
+
         Route::get('wallets', [AdminPanel\WalletsController::class, 'index'])->middleware('admin.can:wallets.view')->name('ap.wallets.index');
         Route::get('wallets/{partnerId}/ledger', [AdminPanel\WalletsController::class, 'ledger'])->middleware('admin.can:wallets.view')->name('ap.wallets.ledger');
         Route::get('wallets/{partnerId}', [AdminPanel\WalletsController::class, 'show'])->middleware('admin.can:wallets.view')->name('ap.wallets.show');

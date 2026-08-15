@@ -299,6 +299,122 @@ class PayoutRunTest extends TestCase
         $this->assertEqualsWithDelta(5880.00, $summary['availableBalance'], 0.001);
     }
 
+    /* ---- bank verification ---- */
+
+    public function test_verifying_a_bank_account_makes_the_partner_payable(): void
+    {
+        BankDetail::create([
+            'partner_user_id' => $this->partner->id,
+            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك الاختبار',
+            'bank_name' => 'مصرف الراجحي',   // saved by the partner, unverified
+        ]);
+        $this->earned(2);
+
+        // Before: on the run, but blocked on verification.
+        $rows = $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/payouts/ineligible')->assertOk()->json();
+        $this->assertSame(
+            'bank_unverified',
+            collect($rows)->firstWhere('partnerId', 'prt_'.$this->partner->id)['reason'],
+        );
+
+        $this->actingAs($this->admin, 'admin-panel')
+            ->postJson('/admin/wallets/prt_'.$this->partner->id.'/bank/verify')
+            ->assertOk()->assertJsonPath('ok', true);
+
+        // After: eligible, with the money attached.
+        $eligible = $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/payouts/eligible')->assertOk()->json();
+        $row = collect($eligible)->firstWhere('partnerId', 'prt_'.$this->partner->id);
+
+        $this->assertNotNull($row, 'verification is what unblocks the payout run');
+        $this->assertEqualsWithDelta(5880.00, $row['amount'], 0.001);
+    }
+
+    public function test_verification_records_who_approved_the_destination(): void
+    {
+        BankDetail::create([
+            'partner_user_id' => $this->partner->id,
+            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك الاختبار',
+        ]);
+
+        $this->actingAs($this->admin, 'admin-panel')
+            ->postJson('/admin/wallets/prt_'.$this->partner->id.'/bank/verify')->assertOk();
+
+        $bank = BankDetail::firstOrFail();
+        $this->assertSame($this->admin->id, $bank->verified_by_admin_id);
+        $this->assertNotNull($bank->verified_at);
+
+        $detail = $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/wallets/prt_'.$this->partner->id)->assertOk()->json();
+
+        $this->assertSame($this->admin->name, $detail['bankDetails']['verifiedBy']);
+    }
+
+    public function test_rejecting_an_account_tells_the_partner_what_to_fix(): void
+    {
+        BankDetail::create([
+            'partner_user_id' => $this->partner->id,
+            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'اسم مختلف',
+            'verified' => true, 'verified_at' => now(),
+        ]);
+
+        $this->actingAs($this->admin, 'admin-panel')
+            ->postJson('/admin/wallets/prt_'.$this->partner->id.'/bank/reject', [
+                'reason' => 'اسم صاحب الحساب لا يطابق اسم الشريك',
+            ])->assertOk();
+
+        // The partner's own screen is the only channel that explains this.
+        $body = $this->actingAs($this->partner, 'dashboard')
+            ->getJson('/me/bank-details')->assertOk()->json();
+
+        $this->assertFalse($body['verified']);
+        $this->assertSame('اسم صاحب الحساب لا يطابق اسم الشريك', $body['rejectionReason']);
+        $this->assertNull($body['verifiedAt']);
+    }
+
+    public function test_a_rejection_requires_a_reason(): void
+    {
+        BankDetail::create([
+            'partner_user_id' => $this->partner->id,
+            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك',
+        ]);
+
+        $this->actingAs($this->admin, 'admin-panel')
+            ->postJson('/admin/wallets/prt_'.$this->partner->id.'/bank/reject', [])
+            ->assertStatus(422)->assertJsonPath('code', 'VALIDATION_ERROR');
+    }
+
+    public function test_verifying_a_partner_with_no_account_is_a_404(): void
+    {
+        $this->actingAs($this->admin, 'admin-panel')
+            ->postJson('/admin/wallets/prt_'.$this->partner->id.'/bank/verify')
+            ->assertStatus(404);
+    }
+
+    /**
+     * Separation of duties: finance records transfers, so it must not also
+     * approve where they go — one compromised finance session would otherwise
+     * be able to point a payout at its own account and pay it.
+     */
+    public function test_finance_cannot_verify_a_bank_account(): void
+    {
+        Role::findOrCreate('finance', 'web');
+        $finance = User::factory()->create(['is_active' => true]);
+        $finance->assignRole('finance');
+
+        BankDetail::create([
+            'partner_user_id' => $this->partner->id,
+            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك',
+        ]);
+
+        $this->actingAs($finance, 'admin-panel')
+            ->postJson('/admin/wallets/prt_'.$this->partner->id.'/bank/verify')
+            ->assertForbidden()->assertJsonPath('code', 'INSUFFICIENT_PERMISSION');
+
+        $this->assertFalse(BankDetail::firstOrFail()->verified);
+    }
+
     /* ---- admin wallets ---- */
 
     public function test_the_admin_wallet_list_reflects_real_balances(): void
