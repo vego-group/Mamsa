@@ -250,6 +250,32 @@ class ApprovalsTest extends TestCase
     }
 
     /**
+     * The detail page gates Approve behind a "photos reviewed" step. A padded
+     * placeholder let a reviewer tick it on a listing that has no photos.
+     */
+    public function test_a_unit_with_no_photos_reports_an_empty_image_array(): void
+    {
+        $unit = $this->makeUnit('no-photos');
+
+        $detail = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson("/admin/approvals/{$unit->id}")->assertOk()->json('unit.images');
+
+        $this->assertSame([], $detail, 'absence must not be padded with a default image');
+    }
+
+    public function test_a_units_own_photos_are_listed(): void
+    {
+        $unit = $this->makeUnit('with-photos');
+        $unit->images()->create(['path' => 'units/a.jpg', 'is_main' => true]);
+        $unit->images()->create(['path' => 'units/b.jpg']);
+
+        $images = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson("/admin/approvals/{$unit->id}")->assertOk()->json('unit.images');
+
+        $this->assertCount(2, $images);
+    }
+
+    /**
      * "This listing has no photos" is review-relevant, so absence must reach the
      * reviewer as absence — a shared default would make an empty listing look
      * photographed.

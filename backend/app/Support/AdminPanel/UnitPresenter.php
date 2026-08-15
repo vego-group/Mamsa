@@ -151,14 +151,23 @@ class UnitPresenter
         return $this->realCoverImage($u) ?? Media::defaultImageUrl();
     }
 
-    /** @return array<int, string> */
+    /**
+     * The unit's own photos — EMPTY when it has none, never padded with the
+     * shared default.
+     *
+     * The approval detail page gates its Approve button behind a "photos
+     * reviewed" checklist step. A placeholder made a photoless listing look
+     * photographed, so a reviewer could tick that step and approve a listing
+     * with no photos onto the public site — defeating the control meant to
+     * prevent exactly that.
+     *
+     * @return array<int, string>
+     */
     private function images(Unit $u): array
     {
-        $imgs = $u->images
+        return $u->images
             ->filter(fn ($i) => filled($i->path) && $i->path !== Media::defaultImagePath())
             ->map(fn ($i) => $i->url)->values()->all();
-
-        return $imgs !== [] ? $imgs : [Media::defaultImageUrl()];
     }
 
     private function publicUrl(Unit $u): ?string
