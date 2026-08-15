@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
 use App\Http\Controllers\Api\V1\Auth\PartnerAuthController;
 use App\Http\Controllers\Api\V1\BookingController;
+use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OfferController;
@@ -154,6 +155,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/', [BookingController::class, 'store'])->name('store');
             Route::get('{booking}', [BookingController::class, 'show'])->name('show');
             Route::get('{booking}/cancellation-preview', [BookingController::class, 'cancellationPreview'])->name('cancellation-preview');
+            // Tax invoice — §7.1. Issued in Mamsa's name (supplier of record).
+            Route::get('{booking}/invoice', [InvoiceController::class, 'show'])->name('invoice');
             Route::post('{booking}/cancel', [BookingController::class, 'cancel'])->name('cancel');
         });
 
