@@ -94,31 +94,52 @@ class ProfileController extends DashboardController
         $data = $this->validated($request, [
             'cr'                        => ['sometimes', 'regex:/^\d{10}$/'],
             'iban'                      => ['sometimes', 'regex:/^SA\d{22}$/'],
+            'crFileId'                  => ['sometimes', 'nullable', 'string'],
             'nationalIdFileId'          => ['sometimes', 'nullable', 'string'],
             'authorizationLetterFileId' => ['sometimes', 'nullable', 'string'],
             'vatCertificateFileId'      => ['sometimes', 'nullable', 'string'],
             'operatorLicenseFileId'     => ['sometimes', 'nullable', 'string'],
+            'logoFileId'                => ['sometimes', 'nullable', 'string'],
         ], [
             'cr.regex'   => 'السجل التجاري يجب أن يكون 10 أرقام',
             'iban.regex' => 'الآيبان يجب أن يبدأ بـ SA متبوعاً بـ 22 رقماً',
         ]);
 
         // Each referenced file must be an upload owned by THIS partner (§0.2).
-        foreach (['authorizationLetterFileId', 'vatCertificateFileId', 'operatorLicenseFileId', 'nationalIdFileId'] as $field) {
+        foreach (['authorizationLetterFileId', 'vatCertificateFileId', 'operatorLicenseFileId', 'nationalIdFileId', 'crFileId', 'logoFileId'] as $field) {
             if (! empty($data[$field]) && ! DashboardUpload::whereKey($data[$field])
                 ->where('user_id', $user->id)->where('status', 'stored')->exists()) {
                 $this->fail('VALIDATION', 'بيانات غير صالحة', 400, [$field => 'ملف غير موجود']);
             }
         }
 
+        // The logo has to be an image upload, not any file the partner owns:
+        // without this, a `company_doc` PDF id passed here renders as a broken
+        // tile on every listing the company owns.
+        if (! empty($data['logoFileId']) && DashboardUpload::whereKey($data['logoFileId'])->value('kind') !== 'logo') {
+            $this->fail('VALIDATION', 'بيانات غير صالحة', 400, ['logoFileId' => 'يجب رفع الشعار كصورة']);
+        }
+
+        if (array_key_exists('logoFileId', $data) && $user->partnerDetail?->type !== 'company') {
+            $this->fail('LOGO_COMPANY_ONLY', 'الشعار متاح لحسابات الشركات فقط', 422);
+        }
+
         $user->partnerDetail()->updateOrCreate(['user_id' => $user->id], array_filter([
             'cr_number'                 => $data['cr'] ?? null,
+            'cr_file'                   => $data['crFileId'] ?? null,
             'iban'                      => $data['iban'] ?? null,
             'national_id_file'          => $data['nationalIdFileId'] ?? null,
             'authorization_letter_file' => $data['authorizationLetterFileId'] ?? null,
             'vat_certificate_file'      => $data['vatCertificateFileId'] ?? null,
             'operator_license_file'     => $data['operatorLicenseFileId'] ?? null,
         ], fn ($v) => $v !== null));
+
+        // Written outside the array_filter above, which drops nulls and so
+        // cannot express "remove it". The logo is optional, so a partner who
+        // uploaded the wrong image needs a way back to having none.
+        if (array_key_exists('logoFileId', $data)) {
+            $user->partnerDetail->update(['logo_file' => $data['logoFileId'] ?: null]);
+        }
 
         return $this->ok(self::docs($user->fresh()));
     }
@@ -201,6 +222,19 @@ class ProfileController extends DashboardController
         $docs['complete'] = ! in_array(null, $docs, true) && ! in_array('', $docs, true);
 
         $docs['nationalIdFileId'] = $d?->national_id_file;
+
+        // Also added AFTER `complete`, and for the same reason as the identity
+        // scan above: the logo is branding, not evidence. Folding it in would
+        // block a company from submitting a unit over an image nobody reviews.
+        $docs['logoFileId'] = $d?->logo_file;
+        $docs['logoUrl']    = DashboardUpload::resolveUrl($d?->logo_file);
+
+        // Likewise after `complete`. The CR SCAN is new; `cr` above (the typed
+        // number) is what completeness has always meant, and every company
+        // already registered has a number and no scan. Gating on the file would
+        // freeze all of them out of unit submission on the day it deployed.
+        $docs['crFileId'] = $d?->cr_file;
+        $docs['crUrl']    = DashboardUpload::resolveUrl($d?->cr_file);
 
         return $docs;
     }
