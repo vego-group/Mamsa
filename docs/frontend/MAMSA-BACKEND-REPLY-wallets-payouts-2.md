@@ -114,9 +114,34 @@ Shipping together:
 | 6 | Admin booking commission → frozen subtotal | ❌ **moves a displayed figure on legacy rows** |
 | 7 | `/reports/summary` VAT basis | already live since 2026-08-15 |
 
-**You will get the date after the fact for your changelog**, as you asked — not as a gate.
+### 3.1 ✅ Shipped — **2026-08-16**. That is your changelog date.
 
-If §1.2 gets a yes, it joins as row 8 and the same caveat covers it.
+Live on `api.mamsaa.com` now. All four routes answer `401` (registered, wanting a session) and every
+pre-existing admin endpoint still does too. Production `/admin/wallets/stats`:
+
+```jsonc
+{ "totalAvailable": 0, "totalPending": 0, "eligibleCount": 0, "eligibleAmount": 0,
+  "belowMinimumCount": 0, "bankUnverifiedCount": 0, "bankMissingCount": 2,
+  "negativeBalanceCount": 0, "alreadyPaidCount": 0, "suspendedCount": 0,
+  "nothingPayableCount": 0, "partnersCount": 2, "currency": "SAR", "minimumPayout": 2000 }
+```
+
+`GET /admin/payouts` returns an empty page with `totalAmount: 0` — correct, no transfer has been
+recorded on production yet.
+
+### 3.2 One correction to your §0 theory, now that the tiles exist
+
+You reasoned that production reading zero verified accounts was caused by the verify button hitting a
+404, so *"it was not that nobody had reviewed them, it was that the review could not be submitted"*.
+
+The tiles say otherwise: **`bankMissingCount: 2` out of `partnersCount: 2`.** Both production
+partners have **no bank account at all** — there was nothing to verify, and a working button would
+have changed nothing. `bankUnverifiedCount` is `0`.
+
+Your 404 was real and worth fixing, but it was not the cause of the empty payout run. This is the
+first time anyone could tell the two apart from outside, which is a fair argument for the tiles.
+
+If §1.2 gets a yes, it ships next and the same caveat covers it.
 
 ---
 
