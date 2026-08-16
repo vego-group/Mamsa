@@ -43,6 +43,20 @@ return [
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
+            /*
+             * Do NOT register Laravel's `storage.local` serving route.
+             *
+             * On this hosting `public_html/storage` is a symlink and Apache
+             * serves every real file directly — the route only ever sees paths
+             * with nothing behind them, and it answers those with 403. That
+             * made "this file does not exist" indistinguishable from "you are
+             * not allowed to see it", and cost the admin panel a round chasing
+             * an authorization bug that did not exist.
+             *
+             * With it off, a miss falls through to the explicit 404 in
+             * routes/web.php.
+             */
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],
