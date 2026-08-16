@@ -27,18 +27,30 @@ class ReportsController extends Controller
         $revenue        = Booking::query()->revenue()->where('created_at', '>=', $since);
         $grossSum       = (float) (clone $revenue)->sum('total_amount');
         $totalRevenue   = $this->money($grossSum);
-        // VAT split (contract §5.4). Derived as total − taxes rather than by
-        // summing `subtotal`, so it stays exact under BOTH pricing models and
-        // still reconciles for the historical fee bookings.
-        // Invariant: netRevenue + vatCollected === totalRevenue.
         $vatSum         = (float) (clone $revenue)->sum('taxes');
+
+        // The VAT-exclusive base, read from the FROZEN `subtotal` column — the
+        // same basis as the wallet, the payout engine and the partner
+        // dashboard's /reports/summary.
+        //
+        // This was `gross − taxes`, which is NOT the base on legacy rows: those
+        // carry abolished service and cleaning fees, so `gross − taxes` is
+        // `subtotal + fees`. An admin and a partner looking at the same period
+        // got different netRevenue figures, and neither screen said why.
+        $netSum         = (float) (clone $revenue)->sum('subtotal');
+
+        // The remainder, so the tiles still add up on screen:
+        //   netRevenue + vatCollected + fees === totalRevenue, always.
+        // Zero on every modern range — hide the tile when it is.
+        $feesSum        = round($grossSum - $netSum - $vatSum, 2);
         $occupancy      = $this->analytics->occupancySeries($months);
         $occupancyAvg   = $occupancy !== [] ? (int) round(array_sum(array_column($occupancy, 'value')) / count($occupancy)) : 0;
 
         return response()->json([
             'totalRevenue'        => $totalRevenue,
-            'netRevenue'          => $this->money($grossSum - $vatSum),
+            'netRevenue'          => $this->money($netSum),
             'vatCollected'        => $this->money($vatSum),
+            'fees'                => $feesSum,
             'totalCommission'     => $this->money($this->commissionSum((clone $revenue))),
             'totalBookings'       => Booking::where('created_at', '>=', $since)->count(),
             'avgMonthlyRevenue'   => $this->money($totalRevenue / $months),
