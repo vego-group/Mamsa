@@ -28,10 +28,6 @@ class UploadController extends DashboardController
         // identity scan, so a PDF-only rule here left partners who registered
         // earlier unable to supply the same file through the dashboard.
         'company_doc' => ['pdf/png/jpg', ["%PDF", "\x89PNG", "\xFF\xD8\xFF"]],
-        // Images only, unlike company_doc: a logo is rendered in an <img> on
-        // the storefront, and a PDF there would show as a broken tile on every
-        // listing the company owns.
-        'logo'        => ['png/jpg', ["\x89PNG", "\xFF\xD8\xFF"]],
     ];
 
     public function presign(Request $request): JsonResponse

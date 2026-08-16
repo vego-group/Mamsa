@@ -109,9 +109,6 @@ class PartnersController extends Controller
             // at a suspended partner could not see why, which is the one thing
             // they open the page for. Cleared by /reactivate.
             'suspensionReason' => $d->suspension_reason,
-            // Branding, not a KYC document — deliberately outside `documents[]`
-            // so it never appears in the review queue or affects the decision.
-            'logoUrl'          => $this->fileUrl($d->logo_file),
         ]));
     }
 
@@ -389,12 +386,7 @@ class PartnersController extends Controller
 
         $docs = [];
         if ($d->type === 'company') {
-            // The scan, not just the typed number. This entry carried
-            // `fileUrl: null` since it was written, so a reviewer approving a
-            // company's السجل التجاري was approving ten digits with nothing
-            // behind them — the CR states the legal name and the licensed
-            // activity, which is the whole reason it is reviewed.
-            $docs[] = $mk('commercial_registration', 'السجل التجاري', $d->cr_number, $d->cr_file);
+            $docs[] = $mk('commercial_registration', 'السجل التجاري', $d->cr_number, null);
             $docs[] = $mk('vat_certificate', 'شهادة ضريبة القيمة المضافة', null, $d->vat_certificate_file);
             $docs[] = $mk('operator_license', 'رخصة تشغيل', null, $d->operator_license_file);
         } else {

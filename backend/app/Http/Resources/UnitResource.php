@@ -86,17 +86,8 @@ class UnitResource extends JsonResource
                 // individual | company — companies were showing as "مالك فردي".
                 'type'        => $this->owner->partnerDetail?->type ?? 'individual',
                 'is_verified' => $this->owner->partnerDetail?->status === \App\Models\PartnerDetail::STATUS_APPROVED,
-                // No personal avatar storage — null so the UI keeps its initials
-                // fallback. A COMPANY's brand logo is a different thing and has
-                // its own field below; prefer `logo_url` and fall back to
-                // initials, never the other way round.
+                // No avatar storage yet — null so the UI keeps its initials fallback.
                 'avatar_url'  => null,
-                // Optional, company-only, and null for individuals — every
-                // consumer must render the initials fallback for null, because
-                // most partners will never upload one.
-                'logo_url'    => \App\Models\DashboardUpload::resolveUrl(
-                    $this->owner->partnerDetail?->logo_file
-                ),
             ]),
         ];
     }

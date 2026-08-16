@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Storage;
 
 class DashboardUpload extends Model
 {
-    public const KINDS = ['unit_photo', 'license_pdf', 'company_doc', 'logo'];
+    public const KINDS = ['unit_photo', 'license_pdf', 'company_doc'];
 
     public $incrementing = false;
 
