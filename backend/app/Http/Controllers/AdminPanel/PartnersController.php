@@ -381,14 +381,30 @@ class PartnersController extends Controller
             : 'pending_review';
         $verified = (array) ($d->verified_documents ?? []);
 
-        $mk = fn (string $kind, string $label, ?string $value, ?string $file) => [
-            'id'      => $kind,
-            'kind'    => $kind,
-            'label'   => $label,
-            'fileUrl' => $this->fileUrl($file),
-            'value'   => $value,
-            'status'  => in_array($kind, $verified, true) ? 'verified' : $default,
-        ];
+        return array_map(fn (array $row) => [
+            'id'      => $row['kind'],
+            'kind'    => $row['kind'],
+            'label'   => $row['label'],
+            'fileUrl' => $this->fileUrl($row['file']),
+            'value'   => $row['value'],
+            'status'  => in_array($row['kind'], $verified, true) ? 'verified' : $default,
+        ], $this->documentRows($d));
+    }
+
+    /**
+     * The KYC rows, before presentation — `file` is the STORED reference, not a
+     * resolved URL.
+     *
+     * documentsComplete() folds over this rather than over the public shape on
+     * purpose: `fileUrl` is null both when nothing was uploaded and when an
+     * upload row has gone missing, and those are different facts. Completeness
+     * asks "was it supplied", which only the raw column can answer.
+     *
+     * @return list<array{kind: string, label: string, value: ?string, file: ?string}>
+     */
+    private function documentRows(PartnerDetail $d): array
+    {
+        $mk = fn (string $kind, string $label, ?string $value, ?string $file) => compact('kind', 'label', 'value', 'file');
 
         $docs = [];
         if ($d->type === 'company') {
@@ -404,17 +420,29 @@ class PartnersController extends Controller
         return $docs;
     }
 
+    /**
+     * "Has this partner SUBMITTED everything required?" — and nothing else.
+     *
+     * Derived from the very rows in `documents[]`: every kind that can carry a
+     * file has one, every value-backed kind has a value. The two therefore
+     * cannot contradict each other on screen, which they used to — this read
+     * unrelated columns AND required KYC approval, so `false` sat above five
+     * green rows and neither field was wrong about its own question.
+     *
+     * Approval status is deliberately NOT part of it: whether the documents
+     * were *reviewed* is a separate claim, folded client-side over
+     * `documents[].status`. One fact per field, each owned by the side that can
+     * establish it.
+     */
     private function documentsComplete(PartnerDetail $d): bool
     {
-        // An individual's KYC is not complete on a typed number alone — the
-        // identity scan is what an admin actually reviews.
-        $required = $d->type === 'company'
-            ? ['cr_number', 'iban']
-            : ['national_id', 'national_id_file', 'iban'];
-
-        $present = collect($required)->every(fn (string $c) => filled($d->{$c}));
-
-        return $present && $d->status === PartnerDetail::STATUS_APPROVED;
+        return collect($this->documentRows($d))->every(
+            // A row is satisfied by whichever of the two it is backed by:
+            // `commercial_registration` and `iban` are numbers with no file and
+            // can never have one, so requiring a file would make a complete
+            // company permanently incomplete.
+            fn (array $doc) => filled($doc['file']) || filled($doc['value']),
+        );
     }
 
     private function fileUrl(?string $path): ?string

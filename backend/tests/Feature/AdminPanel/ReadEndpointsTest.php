@@ -61,6 +61,10 @@ class ReadEndpointsTest extends TestCase
             'national_id' => '1098765432',
             // An individual's KYC now also needs the identity scan on file.
             'national_id_file' => 'file_test_identity',
+            // `documentsComplete` folds over the rows the admin actually sees,
+            // and the authorization letter is one of them for BOTH partner
+            // types — so a fixture without it is legitimately incomplete.
+            'authorization_letter_file' => 'file_test_authorization',
             'iban'        => 'SA0380000000608010167519',
             'reviewed_at' => now(),
         ]);

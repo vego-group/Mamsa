@@ -193,6 +193,62 @@ class SearchAndBadgesTest extends TestCase
             'verifying one document must not verify the rest');
     }
 
+    /* ---- documentsComplete: submission only, folded over documents[] ---- */
+
+    /**
+     * The contradiction this replaced: `documentsComplete: false` printed above
+     * five rows that all read verified. It read unrelated columns AND required
+     * KYC approval, so neither field was wrong about its own question and the
+     * screen still disagreed with itself.
+     */
+    public function test_documents_complete_is_a_fold_over_the_rows_shown(): void
+    {
+        $detail = $this->partner->partnerDetail;
+
+        // A company with its CR and IBAN typed but no files uploaded.
+        $this->assertFalse($this->partnerDetail()['documentsComplete']);
+
+        $detail->update([
+            'iban'                      => 'SA0380000000608010167519',
+            'vat_certificate_file'      => 'file_vat',
+            'operator_license_file'     => 'file_licence',
+            'authorization_letter_file' => 'file_auth',
+        ]);
+
+        $body = $this->partnerDetail();
+
+        $this->assertTrue($body['documentsComplete']);
+
+        // Deliberately NOT folded over the public `fileUrl` here: that resolves
+        // through the uploads table and is null both for "never uploaded" and
+        // "upload row missing". Completeness reads the stored reference, which
+        // is the only thing that answers "was it supplied".
+        $this->assertCount(5, $body['documents']);
+    }
+
+    /** Approval is a separate claim and must not feed completeness. */
+    public function test_documents_complete_does_not_depend_on_kyc_approval(): void
+    {
+        $this->partner->partnerDetail->update([
+            'iban'                      => 'SA0380000000608010167519',
+            'vat_certificate_file'      => 'file_vat',
+            'operator_license_file'     => 'file_licence',
+            'authorization_letter_file' => 'file_auth',
+            'status'                    => PartnerDetail::STATUS_PENDING,
+        ]);
+
+        $this->assertTrue(
+            $this->partnerDetail()['documentsComplete'],
+            'everything is on file; whether anyone reviewed it is the other question',
+        );
+    }
+
+    private function partnerDetail(): array
+    {
+        return $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/partners/'.$this->partner->id)->assertOk()->json();
+    }
+
     /* ---- city filter ---- */
 
     /**
