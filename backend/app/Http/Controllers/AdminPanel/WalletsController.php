@@ -166,7 +166,16 @@ class WalletsController extends Controller
             ->orderByDesc('created_at')->orderByDesc('id');
 
         if ($before = $request->query('before')) {
-            $query->where('created_at', '<', Carbon::parse($before));
+            // `before` is a TIMESTAMP cursor (nextCursor), not a row id. An
+            // unparseable value used to reach Carbon::parse() and throw a 500 —
+            // staging logs are full of `Could not parse 'led_28'` from a client
+            // sending the ledger row id. A bad cursor is a client mistake, and
+            // it should say so rather than look like the server fell over.
+            try {
+                $query->where('created_at', '<', Carbon::parse($before));
+            } catch (\Throwable) {
+                $this->fail('VALIDATION_ERROR', 'قيمة المؤشر غير صالحة — استخدم nextCursor', 422);
+            }
         }
 
         // One extra row answers "is there another page" without a second count
