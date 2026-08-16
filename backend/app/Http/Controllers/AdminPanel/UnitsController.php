@@ -42,7 +42,7 @@ class UnitsController extends Controller
             $query->where('unit_type', $type === 'hotel_room' ? 'hotel' : $type);
         }
         if ($city = $this->cleanParam($request->query('city'))) {
-            $query->where('city', $city);
+            \App\Support\City::filter($query, 'city', $city);
         }
         if ($partnerId = $this->cleanParam($request->query('partnerId'))) {
             $query->where('user_id', $partnerId);

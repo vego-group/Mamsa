@@ -193,6 +193,44 @@ class SearchAndBadgesTest extends TestCase
             'verifying one document must not verify the rest');
     }
 
+    /* ---- city filter ---- */
+
+    /**
+     * `units.city` stores `مكة المكرمة`. A client sending English got an empty
+     * list — no error, just "no results", which reads as real data.
+     */
+    public function test_english_city_names_resolve_to_the_stored_arabic(): void
+    {
+        $this->unit->update(['city' => 'مكة المكرمة']);
+
+        foreach (['Makkah', 'makkah', 'Mecca', 'مكة المكرمة'] as $term) {
+            $body = $this->actingAs($this->admin, 'admin-panel')
+                ->getJson('/admin/units?city='.urlencode($term))->assertOk()->json();
+
+            $this->assertSame(1, $body['total'], "city filter failed for: {$term}");
+        }
+    }
+
+    public function test_an_unknown_city_still_filters_rather_than_matching_everything(): void
+    {
+        $body = $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/units?city=Atlantis')->assertOk()->json();
+
+        $this->assertSame(0, $body['total']);
+    }
+
+    public function test_the_cities_endpoint_serves_the_shared_vocabulary(): void
+    {
+        $rows = $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/cities')->assertOk()->json();
+
+        $byKey = collect($rows)->keyBy('key');
+
+        $this->assertSame('مكة المكرمة', $byKey['makkah']['ar']);
+        $this->assertSame('Makkah', $byKey['makkah']['en']);
+        $this->assertSame('الرياض', $byKey['riyadh']['ar']);
+    }
+
     /** A rejected partner still marks its documents rejected — not a false review claim. */
     public function test_a_rejected_partner_marks_its_documents_rejected(): void
     {

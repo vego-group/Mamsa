@@ -26,6 +26,19 @@ class DashboardController extends Controller
         private readonly CancellationPresenter $cancellations,
     ) {}
 
+    /**
+     * GET /admin/cities → [{ key, en, ar }]
+     *
+     * The vocabulary for every `city=` filter. `units.city` stores Arabic free
+     * text (`مكة المكرمة`), so a client hardcoding either language is guessing
+     * at our data — and a spelling variant fails as an empty list rather than
+     * an error. Populate the filter from this and neither side keeps a list.
+     */
+    public function cities(): JsonResponse
+    {
+        return response()->json(\App\Support\City::all());
+    }
+
     public function summary(): JsonResponse
     {
         [$monthStart, $prevStart, $prevEnd] = [

@@ -80,6 +80,11 @@ class PayoutsController extends Controller
             'page'     => $page->currentPage(),
             'pageSize' => $page->perPage(),
 
+            // Same applied-sort echo as every other list — null means the
+            // requested sortBy was not recognised and the default order ran.
+            'sortBy'   => $this->appliedSortBy(),
+            'sortDir'  => $this->appliedSortDir(),
+
             'totalAmount'        => round((float) $totals->amount, 2),
             'totalBookingsCount' => (int) $totals->bookings,
         ]);

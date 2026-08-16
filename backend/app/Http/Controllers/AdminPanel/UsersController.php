@@ -43,7 +43,7 @@ class UsersController extends Controller
             };
         }
         if ($city = $this->cleanParam($request->query('city'))) {
-            $query->whereHas('bookings', fn ($b) => $b->whereHas('unit', fn ($u) => $u->where('city', $city)));
+            $query->whereHas('bookings', fn ($b) => $b->whereHas('unit', fn ($u) => \App\Support\City::filter($u, 'city', $city)));
         }
 
         $page = $this->queryList($query, $args, ['name', 'phone', 'email'], self::SORT, ['created_at', 'desc']);

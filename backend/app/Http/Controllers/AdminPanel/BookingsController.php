@@ -40,7 +40,7 @@ class BookingsController extends Controller
             $query->where('user_id', $userId);
         }
         if ($city = $this->cleanParam($request->query('city'))) {
-            $query->whereHas('unit', fn ($u) => $u->where('city', $city));
+            $query->whereHas('unit', fn ($u) => \App\Support\City::filter($u, 'city', $city));
         }
         if ($partnerId = $this->cleanParam($request->query('partnerId'))) {
             $query->whereHas('unit', fn ($u) => $u->where('user_id', $partnerId));

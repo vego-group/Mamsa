@@ -71,6 +71,25 @@ abstract class Controller extends BaseController
     /** Set by queryList(); null when the request's sortBy was not honoured. */
     private ?array $appliedSort = null;
 
+    /**
+     * The applied sort, for controllers that build their own envelope.
+     *
+     * The echo is UNCONDITIONAL: both keys are present on every paginated list
+     * response, sort requested or not. A client distinguishes an absent key
+     * ("this build cannot tell me") from an explicit null ("your column was
+     * ignored"), so dropping it anywhere would silently return them to
+     * trusting a sort that did nothing.
+     */
+    protected function appliedSortBy(): ?string
+    {
+        return $this->appliedSort['sortBy'] ?? null;
+    }
+
+    protected function appliedSortDir(): ?string
+    {
+        return $this->appliedSort['sortDir'] ?? null;
+    }
+
     /** Mutation response — BACKEND_SPEC §2.8. */
     protected function ok(int $status = 200): JsonResponse
     {

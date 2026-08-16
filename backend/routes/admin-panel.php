@@ -31,6 +31,10 @@ Route::prefix('admin')->group(function () {
         /* Dashboard — §5.3 */
         Route::get('dashboard/summary', [AdminPanel\DashboardController::class, 'summary'])->middleware('admin.can:dashboard.view')->name('ap.dashboard.summary');
 
+        /* Cities — the vocabulary for every city filter. Neither side
+         * hardcodes a list, and adding one is a row rather than two releases. */
+        Route::get('cities', [AdminPanel\DashboardController::class, 'cities'])->middleware('admin.can:dashboard.view')->name('ap.cities');
+
         /* Reports — §5.10 */
         Route::get('reports/summary', [AdminPanel\ReportsController::class, 'summary'])->middleware('admin.can:reports.financial')->name('ap.reports.summary');
 
