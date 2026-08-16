@@ -62,6 +62,7 @@ Route::prefix('admin')->group(function () {
         Route::post('partners/{id}/approve', [AdminPanel\PartnersController::class, 'approve'])->middleware('admin.can:partners.manage')->name('ap.partners.approve');
         Route::post('partners/{id}/reject', [AdminPanel\PartnersController::class, 'reject'])->middleware('admin.can:partners.manage')->name('ap.partners.reject');
         Route::post('partners/{id}/suspend', [AdminPanel\PartnersController::class, 'suspend'])->middleware('admin.can:partners.manage')->name('ap.partners.suspend');
+        Route::post('partners/{id}/reactivate', [AdminPanel\PartnersController::class, 'reactivate'])->middleware('admin.can:partners.manage')->name('ap.partners.reactivate');
         Route::post('partners/{id}/verify', [AdminPanel\PartnersController::class, 'verify'])->middleware('admin.can:partners.manage')->name('ap.partners.verify');
         Route::post('partners/{id}/revoke-verification', [AdminPanel\PartnersController::class, 'revokeVerification'])->middleware('admin.can:partners.manage')->name('ap.partners.revoke-verification');
         Route::post('partners/{partnerId}/documents/{documentId}/verify', [AdminPanel\PartnersController::class, 'verifyDocument'])->middleware('admin.can:partners.manage')->name('ap.partners.documents.verify');
@@ -94,6 +95,7 @@ Route::prefix('admin')->group(function () {
 
         /* ---- Wallets & Payouts (contract v2.2 §5.1/§5.2) ----
          * Real and database-backed; replaced the non-prod fixture stubs. */
+        Route::get('payouts', [AdminPanel\PayoutsController::class, 'index'])->middleware('admin.can:payouts.view')->name('ap.payouts.index');
         Route::get('payouts/eligible', [AdminPanel\PayoutsController::class, 'eligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.eligible');
         Route::get('payouts/ineligible', [AdminPanel\PayoutsController::class, 'ineligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.ineligible');
         Route::post('payouts/record', [AdminPanel\PayoutsController::class, 'record'])->middleware('admin.can:payouts.execute')->name('ap.payouts.record');
@@ -104,6 +106,10 @@ Route::prefix('admin')->group(function () {
         Route::post('wallets/{partnerId}/bank/reject', [AdminPanel\WalletsController::class, 'rejectBank'])->middleware('admin.can:wallets.adjust')->name('ap.wallets.bank.reject');
 
         Route::get('wallets', [AdminPanel\WalletsController::class, 'index'])->middleware('admin.can:wallets.view')->name('ap.wallets.index');
+        // BEFORE wallets/{partnerId} — otherwise "stats" is read as a partner id
+        // and 404s *after* auth, which looks alive from outside and dies quietly
+        // for a signed-in admin.
+        Route::get('wallets/stats', [AdminPanel\WalletsController::class, 'stats'])->middleware('admin.can:wallets.view')->name('ap.wallets.stats');
         Route::get('wallets/{partnerId}/ledger', [AdminPanel\WalletsController::class, 'ledger'])->middleware('admin.can:wallets.view')->name('ap.wallets.ledger');
         Route::get('wallets/{partnerId}', [AdminPanel\WalletsController::class, 'show'])->middleware('admin.can:wallets.view')->name('ap.wallets.show');
     });

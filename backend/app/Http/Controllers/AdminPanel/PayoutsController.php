@@ -30,6 +30,89 @@ class PayoutsController extends Controller
         private readonly PartnerWalletService $wallet,
     ) {}
 
+    /**
+     * GET /admin/payouts?periodMonth=&partnerId=&status=&page=&pageSize=
+     *
+     * The month-level view of what was transferred. `recentPayouts` on a wallet
+     * answers "what did we pay THIS partner"; reconciling a month asks the other
+     * question, and there was no way to ask it.
+     *
+     * Standard paginated envelope plus two aggregates over the WHOLE filter (not
+     * the page) — an accountant closing a month needs the month's figure, and it
+     * has to exclude reversed transfers because that money came back.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $args  = $this->listArgs($request);
+        $query = Payout::query()->with('partner:id,name');
+
+        if ($month = $this->cleanParam($request->query('periodMonth'))) {
+            // A malformed month silently matches nothing, and "no rows" reads as
+            // "we paid nobody in July" — a wrong answer to a reconciliation
+            // question is worse than an error.
+            if (! preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
+                $this->fail('VALIDATION_ERROR', 'صيغة الشهر غير صالحة (YYYY-MM)', 422);
+            }
+            $query->where('period_month', $month);
+        }
+
+        if ($partnerId = $this->cleanParam($request->query('partnerId'))) {
+            $query->where('partner_user_id', (int) (str_starts_with($partnerId, 'prt_') ? substr($partnerId, 4) : $partnerId));
+        }
+
+        if ($status = $this->cleanParam($request->query('status'))) {
+            $query->where('status', $status);
+        }
+
+        $totals = (clone $query)->where('status', Payout::STATUS_PAID)
+            ->selectRaw('COALESCE(SUM(amount),0) as amount, COALESCE(SUM(bookings_count),0) as bookings')
+            ->first();
+
+        $page = $this->queryList($query, $args, ['reference', 'bank_reference'], [
+            'paidAt'      => 'paid_at',
+            'amount'      => 'amount',
+            'periodMonth' => 'period_month',
+        ], ['paid_at', 'desc']);
+
+        return response()->json([
+            'items'    => collect($page->items())->map(fn (Payout $p) => $this->payoutRow($p))->values(),
+            'total'    => $page->total(),
+            'page'     => $page->currentPage(),
+            'pageSize' => $page->perPage(),
+
+            'totalAmount'        => round((float) $totals->amount, 2),
+            'totalBookingsCount' => (int) $totals->bookings,
+        ]);
+    }
+
+    /**
+     * One payout row shape, shared with `recentPayouts` on the wallet detail so
+     * the two surfaces cannot drift.
+     *
+     * @return array<string, mixed>
+     */
+    public static function payoutRow(Payout $p, ?string $partnerName = null): array
+    {
+        return [
+            'id'            => 'pay_'.$p->id,
+            'reference'     => $p->reference,
+            'partnerId'     => 'prt_'.$p->partner_user_id,
+            'partnerName'   => $partnerName ?? $p->partner?->name ?? '',
+            'periodMonth'   => $p->period_month,
+            'amount'        => round($p->amount, 2),
+            'bookingsCount' => (int) $p->bookings_count,
+            'currency'      => $p->currency,
+            'status'        => $p->status,
+            'paidAt'        => $p->paid_at?->toIso8601ZuluString(),
+            'bankReference' => $p->bank_reference,
+            // Where it went, frozen at payout time — a transfer record without a
+            // destination is half a record when a payment is disputed.
+            'ibanMasked'    => $p->iban_masked,
+            'bankName'      => $p->bank_name,
+            'note'          => $p->note,
+        ];
+    }
+
     /** GET /admin/payouts/eligible → EligiblePartner[] (bare array). */
     public function eligible(): JsonResponse
     {

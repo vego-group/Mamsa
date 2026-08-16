@@ -39,6 +39,90 @@ class WalletsController extends Controller
         return $this->items($page, fn (User $u) => $this->row($u));
     }
 
+    /**
+     * GET /admin/wallets/stats → the KPI row above the wallets table.
+     *
+     * Every count comes from the SAME PayoutEligibility service as
+     * /admin/payouts/ineligible, and `eligibleAmount` from the same payable()
+     * the run actually pays — so a tile can never promise a row the run does
+     * not list. A separately-computed version of these numbers would be worse
+     * than no tiles at all.
+     *
+     * Must stay registered BEFORE wallets/{partnerId}, or it resolves as a
+     * partner with the id "stats" and dies as NOT_FOUND after authentication —
+     * alive from outside, silently broken for a signed-in admin.
+     */
+    public function stats(): JsonResponse
+    {
+        $partners = User::query()->whereHas('partnerDetail')
+            ->with(['partnerWallet', 'bankDetail'])->get();
+
+        $t = [
+            'totalAvailable' => 0.0, 'totalPending' => 0.0, 'eligibleAmount' => 0.0,
+            'eligibleCount' => 0, 'belowMinimumCount' => 0, 'bankUnverifiedCount' => 0,
+            'bankMissingCount' => 0, 'negativeBalanceCount' => 0, 'alreadyPaidCount' => 0,
+            'suspendedCount' => 0, 'nothingPayableCount' => 0,
+        ];
+
+        foreach ($partners as $partner) {
+            $wallet = $partner->partnerWallet ?? PartnerWallet::firstOrCreate(['partner_user_id' => $partner->id]);
+
+            $t['totalAvailable'] += (float) $wallet->available_balance;
+            $t['totalPending']   += $this->wallet->pendingBalance($partner->id);
+
+            $reason = $this->eligibility->reason($partner, $wallet, $partner->bankDetail, adminView: true);
+
+            if ($reason !== null) {
+                $t[match ($reason) {
+                    'already_paid_this_month' => 'alreadyPaidCount',
+                    'partner_suspended'       => 'suspendedCount',
+                    'negative_balance'        => 'negativeBalanceCount',
+                    'bank_missing'            => 'bankMissingCount',
+                    'bank_unverified'         => 'bankUnverifiedCount',
+                    default                   => 'belowMinimumCount',
+                }]++;
+
+                continue;
+            }
+
+            // Eligible on balance but with no finished stay left to attach the
+            // money to. /admin/payouts/eligible drops these, so the tile has to
+            // as well — an unbacked payout is not a payout.
+            $payable = $this->eligibility->payable($partner->id);
+
+            if ($payable['amount'] <= 0) {
+                $t['nothingPayableCount']++;
+
+                continue;
+            }
+
+            $t['eligibleCount']++;
+            $t['eligibleAmount'] += $payable['amount'];
+        }
+
+        return response()->json([
+            'totalAvailable'       => round($t['totalAvailable'], 2),
+            'totalPending'         => round($t['totalPending'], 2),
+            'eligibleCount'        => $t['eligibleCount'],
+            'eligibleAmount'       => round($t['eligibleAmount'], 2),
+            'belowMinimumCount'    => $t['belowMinimumCount'],
+            'bankUnverifiedCount'  => $t['bankUnverifiedCount'],
+            'bankMissingCount'     => $t['bankMissingCount'],
+            'negativeBalanceCount' => $t['negativeBalanceCount'],
+
+            // Additive: without these three the buckets do not sum, and a row
+            // of counts that does not add up to the partner count is a row an
+            // accountant stops trusting.
+            'alreadyPaidCount'     => $t['alreadyPaidCount'],
+            'suspendedCount'       => $t['suspendedCount'],
+            'nothingPayableCount'  => $t['nothingPayableCount'],
+            'partnersCount'        => $partners->count(),
+
+            'currency'             => config('wallet.currency'),
+            'minimumPayout'        => (float) config('wallet.min_payout_amount'),
+        ]);
+    }
+
     /** GET /admin/wallets/{partnerId} → PartnerWalletDetail. */
     public function show(Request $request, string $partnerId): JsonResponse
     {
@@ -63,20 +147,12 @@ class WalletsController extends Controller
                 ->orderByDesc('created_at')->orderByDesc('id')->limit(10)->get()
                 ->map(fn ($e) => $this->entry($e))->values(),
 
+            // Same row shape as GET /admin/payouts, built by the same function:
+            // two shapes for one thing is how a client ends up with two
+            // renderers and a field that exists on only one of them.
             'recentPayouts' => Payout::where('partner_user_id', $partner->id)
                 ->orderByDesc('paid_at')->limit(10)->get()
-                ->map(fn (Payout $p) => [
-                    'id'            => 'pay_'.$p->id,
-                    'reference'     => $p->reference,
-                    'partnerId'     => 'prt_'.$partner->id,
-                    'periodMonth'   => $p->period_month,
-                    'amount'        => round($p->amount, 2),
-                    'bookingsCount' => (int) $p->bookings_count,
-                    'currency'      => $p->currency,
-                    'status'        => $p->status,
-                    'paidAt'        => $p->paid_at?->toIso8601ZuluString(),
-                    'bankReference' => $p->bank_reference,
-                ])->values(),
+                ->map(fn (Payout $p) => PayoutsController::payoutRow($p, $partner->name))->values(),
         ]);
     }
 

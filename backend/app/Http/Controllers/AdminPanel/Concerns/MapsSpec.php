@@ -32,11 +32,18 @@ trait MapsSpec
         return round((float) $v, 2);
     }
 
-    /** Commission is a frozen 2% of total; partner keeps the rest (§7). A stored
-     *  0/null means it was never frozen (historical booking) → compute 2%. */
-    protected function commissionOf(float $total, ?float $stored = null): float
+    /**
+     * Mamsa's 2%, on the VAT-EXCLUSIVE base (§7). A stored 0/null means it was
+     * never frozen (historical booking) → impute from the base.
+     *
+     * `$base` is the subtotal, never `total_amount`: the VAT is remitted to
+     * ZATCA and was never Mamsa's to take a percentage of. This must impute
+     * exactly what Booking::commissionExpr() does, or one booking's commission
+     * row disagrees with the commission total summed above it.
+     */
+    protected function commissionOf(float $base, ?float $stored = null): float
     {
-        return $this->money(($stored !== null && $stored > 0) ? $stored : round($total * 0.02, 2));
+        return $this->money(($stored !== null && $stored > 0) ? $stored : round($base * Booking::COMMISSION_RATE, 2));
     }
 
     /**

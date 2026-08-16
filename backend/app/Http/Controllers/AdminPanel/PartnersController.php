@@ -105,6 +105,10 @@ class PartnersController extends Controller
             'partnerEarning'   => $this->money($earning),
             'avgPerBooking'    => $bookings > 0 ? $this->money($revenue / $bookings) : 0.0,
             'rejectionReason'  => $d->rejection_reason,
+            // Recorded on suspend and never surfaced until now: an admin looking
+            // at a suspended partner could not see why, which is the one thing
+            // they open the page for. Cleared by /reactivate.
+            'suspensionReason' => $d->suspension_reason,
         ]));
     }
 
@@ -149,6 +153,32 @@ class PartnersController extends Controller
 
         $u->update(['is_active' => false]);
         $u->partnerDetail->update(['suspension_reason' => $data['reason']]);
+
+        return $this->ok();
+    }
+
+    /**
+     * POST /admin/partners/:id/reactivate — suspended → active.
+     *
+     * Exists because PATCH /admin/users/:id/status flips `is_active` and leaves
+     * the stored suspension reason behind, so a reactivated partner keeps a
+     * stale "why they were suspended" on their record forever and reads as
+     * suspended to the next admin who opens it. Clearing the reason is the
+     * whole point of a separate endpoint.
+     */
+    public function reactivate(string $id): JsonResponse
+    {
+        $u = $this->partner($id);
+
+        // Deliberately not a general "activate": an invited partner who never
+        // completed KYC is inactive too, and turning them on here would skip
+        // the review entirely.
+        if ($u->is_active || $u->partnerDetail->status !== PartnerDetail::STATUS_APPROVED) {
+            $this->fail('CONFLICT', 'لا يمكن إعادة تفعيل هذا الشريك في حالته الحالية', 409);
+        }
+
+        $u->update(['is_active' => true]);
+        $u->partnerDetail->update(['suspension_reason' => null]);
 
         return $this->ok();
     }

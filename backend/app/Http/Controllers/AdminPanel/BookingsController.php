@@ -114,8 +114,12 @@ class BookingsController extends Controller
     /** @return array<string, mixed> */
     private function row(Booking $b): array
     {
-        $total      = (float) $b->total_amount;
-        $commission = $this->commissionOf($total, $b->commission_amount);
+        $total = (float) $b->total_amount;
+
+        // Imputed from the SUBTOTAL, matching Booking::commissionExpr() and the
+        // commission total on the stats row above this table. Imputing from
+        // gross made a legacy row read 23.00 where the aggregate counted 20.00.
+        $commission = $this->commissionOf((float) $b->subtotal, $b->commission_amount);
 
         // The partner's share is the frozen column, NOT total − commission.
         // `total` is VAT-INCLUSIVE gross, and the VAT is remitted to ZATCA — it
