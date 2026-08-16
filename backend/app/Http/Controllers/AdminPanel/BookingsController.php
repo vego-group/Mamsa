@@ -52,13 +52,25 @@ class BookingsController extends Controller
             $query->whereDate('start_date', '<=', $to);
         }
         if ($args['search'] !== null) {
-            $s = $args['search'];
-            $query->where(function ($q) use ($s) {
-                if (ctype_digit($s)) {
-                    $q->orWhere('id', (int) $s);
-                }
-                $q->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$s}%")->orWhere('phone', 'like', "%{$s}%"))
-                  ->orWhereHas('unit', fn ($u) => $u->where('unit_name', 'like', "%{$s}%"));
+            $s     = $args['search'];
+            $id    = $this->codeTerm($s);      // accepts BKG-0231 as well as 231
+            $phone = $this->phoneTerm($s);
+
+            $query->where(function ($q) use ($s, $id, $phone) {
+                // Code first: an admin copies BKG-0231 off the row, and that
+                // string exists in no column — it is derived from the id.
+                $id !== null
+                    ? $q->where('bookings.id', $id)
+                    : $q->whereRaw('1 = 0');
+
+                $q->orWhereHas('user', function ($u) use ($s, $phone) {
+                    $u->where('name', 'like', "%{$s}%");
+                    $phone !== null
+                        ? $u->orWhere('phone', 'like', "%{$phone}")
+                        : $u->orWhere('phone', 'like', "%{$s}%");
+                })
+                    ->orWhereHas('unit', fn ($u) => $u->where('unit_name', 'like', "%{$s}%")
+                        ->orWhereHas('owner', fn ($o) => $o->where('name', 'like', "%{$s}%")));
             });
         }
 
@@ -158,7 +170,10 @@ class BookingsController extends Controller
             'moyasarRef'    => $b->payment?->moyasar_id,
             'status'        => (string) $b->status,
             'createdAt'     => $this->iso($b->created_at),
-            'mamsaOwned'    => false,
+            // Was a hardcoded `false`, so the admin panel's commission-split
+            // branch never fired once — including on genuinely Mamsa-owned
+            // units, which are exactly the rows it exists for.
+            'mamsaOwned'    => (bool) $b->unit?->mamsa_owned,
         ];
     }
 

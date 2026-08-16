@@ -366,13 +366,19 @@ class PartnersController extends Controller
     /** @return array<int, array<string, mixed>> */
     private function documents(PartnerDetail $d): array
     {
-        // KYC-level status is the default; a doc explicitly checked via
-        // documents/:id/verify is 'verified' regardless of the KYC state.
-        $default = match ($d->status) {
-            PartnerDetail::STATUS_APPROVED => 'verified',
-            PartnerDetail::STATUS_REJECTED => 'rejected',
-            default                        => 'pending_review',
-        };
+        // `verified` now means ONE thing: an admin checked this document via
+        // documents/:id/verify. It used to fall back to the partner-level KYC
+        // status, so approving a partner turned every row green at once —
+        // including rows with no file behind them at all. A reviewer then read
+        // a badge that recorded somebody's decision about the *partner* as
+        // though it recorded a review of the *document*.
+        //
+        // A rejected partner still marks its documents rejected: that is not a
+        // false claim of review, and 'pending_review' on a rejected file would
+        // read as "still with us" when it is not.
+        $default = $d->status === PartnerDetail::STATUS_REJECTED
+            ? 'rejected'
+            : 'pending_review';
         $verified = (array) ($d->verified_documents ?? []);
 
         $mk = fn (string $kind, string $label, ?string $value, ?string $file) => [
