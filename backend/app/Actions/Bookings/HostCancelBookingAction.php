@@ -50,7 +50,16 @@ class HostCancelBookingAction
             }
 
             $payment = $booking->payment;
-            $refundTotal = (float) $booking->total_amount;
+
+            // 100% of what the guest is still owed — which is the full total on
+            // every ordinary booking, but NOT more than was actually captured.
+            // Refunding the whole total on top of an earlier partial refund
+            // would push refunded_amount past the payment and hand back more
+            // than the guest ever paid. (The admin retry path has always capped
+            // this way; this one did not.)
+            $refundTotal = $payment
+                ? min((float) $booking->total_amount, $payment->refundableAmount())
+                : (float) $booking->total_amount;
 
             // Run the gateway refund BEFORE the DB transaction (network call
             // outside the tx). Skipped in test mode or with no captured payment.
