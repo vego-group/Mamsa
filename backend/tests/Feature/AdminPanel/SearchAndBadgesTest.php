@@ -249,6 +249,56 @@ class SearchAndBadgesTest extends TestCase
             ->getJson('/admin/partners/'.$this->partner->id)->assertOk()->json();
     }
 
+    /**
+     * The regression this pins: an "either will do" fold let a typed national
+     * ID satisfy the row on its own, undoing the rule that the SCAN is what an
+     * admin reviews. The row declares it expects both.
+     */
+    public function test_an_individual_is_incomplete_on_the_id_number_alone(): void
+    {
+        $individual = User::factory()->create(['is_active' => true]);
+        $individual->assignRole('Individual');
+        $detail = $individual->partnerDetail()->create([
+            'type' => 'individual', 'status' => PartnerDetail::STATUS_APPROVED,
+            'national_id' => '1098765432',
+            'iban' => 'SA0380000000608010167519',
+            'authorization_letter_file' => 'file_auth',
+        ]);
+
+        $read = fn () => $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/partners/'.$individual->id)->assertOk()->json('documentsComplete');
+
+        $this->assertFalse($read(), 'the number without the scan is not complete');
+
+        $detail->update(['national_id_file' => 'file_identity']);
+
+        $this->assertTrue($read());
+    }
+
+    /**
+     * A company is complete on its CR NUMBER today — there is nowhere to put
+     * the scan. Shipping a cr_file column must not silently flip every existing
+     * company to incomplete; that becomes true only when the row is changed to
+     * expect a file, after partners can upload one.
+     */
+    public function test_a_company_is_complete_on_the_cr_number_today(): void
+    {
+        $this->partner->partnerDetail->update([
+            'iban'                      => 'SA0380000000608010167519',
+            'vat_certificate_file'      => 'file_vat',
+            'operator_license_file'     => 'file_licence',
+            'authorization_letter_file' => 'file_auth',
+        ]);
+
+        $body = $this->partnerDetail();
+
+        $this->assertTrue($body['documentsComplete']);
+
+        $cr = collect($body['documents'])->firstWhere('kind', 'commercial_registration');
+        $this->assertNull($cr['fileUrl'], 'no file slot exists for the CR yet');
+        $this->assertSame('1010101010', $cr['value']);
+    }
+
     /* ---- city filter ---- */
 
     /**

@@ -404,18 +404,29 @@ class PartnersController extends Controller
      */
     private function documentRows(PartnerDetail $d): array
     {
-        $mk = fn (string $kind, string $label, ?string $value, ?string $file) => compact('kind', 'label', 'value', 'file');
+        // `expects` is DECLARED, never inferred from what happens to be filled.
+        // Inferring is how the individual rule was lost: `national_id` carries
+        // both a number and a scan, and an "either will do" fold let the typed
+        // number alone satisfy it — the exact thing the scan requirement exists
+        // to prevent.
+        $mk = fn (string $kind, string $label, ?string $value, ?string $file, array $expects) => compact('kind', 'label', 'value', 'file', 'expects');
 
         $docs = [];
         if ($d->type === 'company') {
-            $docs[] = $mk('commercial_registration', 'السجل التجاري', $d->cr_number, null);
-            $docs[] = $mk('vat_certificate', 'شهادة ضريبة القيمة المضافة', null, $d->vat_certificate_file);
-            $docs[] = $mk('operator_license', 'رخصة تشغيل', null, $d->operator_license_file);
+            // ⚠️ Expects the VALUE only. When a company can actually upload its
+            // CR (partner-side presign + PUT /me/company-docs { crFileId }),
+            // add 'file' here — one word, deliberately visible, and the moment
+            // every existing company flips to incomplete. Not before: an
+            // unclearable finding is one reviewers learn to scroll past.
+            $docs[] = $mk('commercial_registration', 'السجل التجاري', $d->cr_number, null, ['value']);
+            $docs[] = $mk('vat_certificate', 'شهادة ضريبة القيمة المضافة', null, $d->vat_certificate_file, ['file']);
+            $docs[] = $mk('operator_license', 'رخصة تشغيل', null, $d->operator_license_file, ['file']);
         } else {
-            $docs[] = $mk('national_id', 'الهوية الوطنية', $d->national_id, $d->national_id_file);
+            // Both: a national ID is not reviewed on a typed number.
+            $docs[] = $mk('national_id', 'الهوية الوطنية', $d->national_id, $d->national_id_file, ['value', 'file']);
         }
-        $docs[] = $mk('authorization_letter', 'خطاب تفويض', null, $d->authorization_letter_file);
-        $docs[] = $mk('iban', 'رقم الآيبان', $d->iban, null);
+        $docs[] = $mk('authorization_letter', 'خطاب تفويض', null, $d->authorization_letter_file, ['file']);
+        $docs[] = $mk('iban', 'رقم الآيبان', $d->iban, null, ['value']);
 
         return $docs;
     }
@@ -437,11 +448,11 @@ class PartnersController extends Controller
     private function documentsComplete(PartnerDetail $d): bool
     {
         return collect($this->documentRows($d))->every(
-            // A row is satisfied by whichever of the two it is backed by:
-            // `commercial_registration` and `iban` are numbers with no file and
-            // can never have one, so requiring a file would make a complete
-            // company permanently incomplete.
-            fn (array $doc) => filled($doc['file']) || filled($doc['value']),
+            // Every part the row DECLARES it expects must be present. A
+            // value-only kind (`iban`) needs its value; a file-only kind needs
+            // its file; `national_id` needs both, because a scan is what an
+            // admin actually reviews.
+            fn (array $doc) => collect($doc['expects'])->every(fn (string $part) => filled($doc[$part])),
         );
     }
 
