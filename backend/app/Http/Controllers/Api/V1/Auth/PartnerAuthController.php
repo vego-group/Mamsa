@@ -45,8 +45,9 @@ class PartnerAuthController extends Controller
         // Read outside the transaction: the uploaded file belongs to the request,
         // not the closure.
         $identity = $request->file('national_id_file');
+        $crScan   = $request->file('cr_file');
 
-        $user = DB::transaction(function () use ($data, $phone, $role, $identity) {
+        $user = DB::transaction(function () use ($data, $phone, $role, $identity, $crScan) {
             $user = User::firstOrCreate(['phone' => $phone], ['is_active' => true]);
 
             // Don't let an admin account be silently downgraded to a partner.
@@ -76,7 +77,14 @@ class PartnerAuthController extends Controller
             // Only overwrite when a new file is supplied — a re-submitting
             // applicant must not lose the document already on file.
             if ($identity) {
-                $attrs['national_id_file'] = $this->storeIdentityFile($user->id, $identity);
+                $attrs['national_id_file'] = $this->storeKycFile($user->id, $identity, 'national_id');
+            }
+
+            // The company counterpart. Same rule: only overwrite when a new file
+            // is supplied, so a re-submitting applicant does not lose the
+            // document already on file.
+            if ($crScan) {
+                $attrs['cr_file'] = $this->storeKycFile($user->id, $crScan, 'commercial_registration');
             }
 
             $detail = $user->partnerDetail()->updateOrCreate(['user_id' => $user->id], $attrs);
@@ -122,11 +130,20 @@ class PartnerAuthController extends Controller
      * Reuses the KYC upload table so the admin panel resolves the URL, and the
      * document verify/reject flow works, with no changes on that side.
      */
-    private function storeIdentityFile(int $userId, \Illuminate\Http\UploadedFile $file): string
+    /**
+     * Persist a KYC scan supplied at registration as a DashboardUpload, so the
+     * admin's existing document resolution and verify/reject flow pick it up
+     * unchanged.
+     *
+     * Registration is already OTP-verified here, so taking the bytes directly
+     * is safe and spares the client an authenticated presign round-trip it
+     * cannot make yet.
+     */
+    private function storeKycFile(int $userId, \Illuminate\Http\UploadedFile $file, string $folder): string
     {
         $id   = 'file_'.\Illuminate\Support\Str::ulid();
         $ext  = strtolower($file->getClientOriginalExtension() ?: $file->guessExtension() ?: 'jpg');
-        $path = "dashboard/national_id/{$id}.{$ext}";
+        $path = "dashboard/{$folder}/{$id}.{$ext}";
 
         \Illuminate\Support\Facades\Storage::disk('public')->put($path, file_get_contents($file->getRealPath()));
 

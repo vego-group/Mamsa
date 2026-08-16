@@ -418,7 +418,7 @@ class PartnersController extends Controller
             // add 'file' here — one word, deliberately visible, and the moment
             // every existing company flips to incomplete. Not before: an
             // unclearable finding is one reviewers learn to scroll past.
-            $docs[] = $mk('commercial_registration', 'السجل التجاري', $d->cr_number, null, ['value']);
+            $docs[] = $mk('commercial_registration', 'السجل التجاري', $d->cr_number, $d->cr_file, ['value']);
             $docs[] = $mk('vat_certificate', 'شهادة ضريبة القيمة المضافة', null, $d->vat_certificate_file, ['file']);
             $docs[] = $mk('operator_license', 'رخصة تشغيل', null, $d->operator_license_file, ['file']);
         } else {

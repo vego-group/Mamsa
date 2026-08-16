@@ -30,4 +30,12 @@ return [
      * whether omitting it is allowed.
      */
     'require_identity_file' => filter_var(env('PARTNER_REQUIRE_IDENTITY_FILE', true), FILTER_VALIDATE_BOOL),
+
+    /*
+     * Whether a COMPANY must supply its commercial-registration scan at
+     * registration. Deliberately separate from require_identity_file: turning
+     * it on before the registration form can send `cr_file` would 422 every
+     * company signup. Flip it once the client ships the field.
+     */
+    'require_cr_file' => (bool) env('DASHBOARD_REQUIRE_CR_FILE', false),
 ];

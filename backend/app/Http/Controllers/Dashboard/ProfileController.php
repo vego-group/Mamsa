@@ -94,6 +94,7 @@ class ProfileController extends DashboardController
         $data = $this->validated($request, [
             'cr'                        => ['sometimes', 'regex:/^\d{10}$/'],
             'iban'                      => ['sometimes', 'regex:/^SA\d{22}$/'],
+            'crFileId'                  => ['sometimes', 'nullable', 'string'],
             'nationalIdFileId'          => ['sometimes', 'nullable', 'string'],
             'authorizationLetterFileId' => ['sometimes', 'nullable', 'string'],
             'vatCertificateFileId'      => ['sometimes', 'nullable', 'string'],
@@ -104,7 +105,7 @@ class ProfileController extends DashboardController
         ]);
 
         // Each referenced file must be an upload owned by THIS partner (§0.2).
-        foreach (['authorizationLetterFileId', 'vatCertificateFileId', 'operatorLicenseFileId', 'nationalIdFileId'] as $field) {
+        foreach (['authorizationLetterFileId', 'vatCertificateFileId', 'operatorLicenseFileId', 'nationalIdFileId', 'crFileId'] as $field) {
             if (! empty($data[$field]) && ! DashboardUpload::whereKey($data[$field])
                 ->where('user_id', $user->id)->where('status', 'stored')->exists()) {
                 $this->fail('VALIDATION', 'بيانات غير صالحة', 400, [$field => 'ملف غير موجود']);
@@ -113,6 +114,7 @@ class ProfileController extends DashboardController
 
         $user->partnerDetail()->updateOrCreate(['user_id' => $user->id], array_filter([
             'cr_number'                 => $data['cr'] ?? null,
+            'cr_file'                   => $data['crFileId'] ?? null,
             'iban'                      => $data['iban'] ?? null,
             'national_id_file'          => $data['nationalIdFileId'] ?? null,
             'authorization_letter_file' => $data['authorizationLetterFileId'] ?? null,
@@ -201,6 +203,13 @@ class ProfileController extends DashboardController
         $docs['complete'] = ! in_array(null, $docs, true) && ! in_array('', $docs, true);
 
         $docs['nationalIdFileId'] = $d?->national_id_file;
+
+        // Added AFTER `complete` is computed, like the identity scan above:
+        // every company already registered has a CR number and no scan, so
+        // folding it into completeness would freeze all of them out of unit
+        // submission on the day it deployed.
+        $docs['crFileId'] = $d?->cr_file;
+        $docs['crUrl']    = DashboardUpload::resolveUrl($d?->cr_file);
 
         return $docs;
     }
