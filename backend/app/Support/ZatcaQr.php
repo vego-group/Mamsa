@@ -39,6 +39,15 @@ final class ZatcaQr
             return null;
         }
 
+        // And nothing that is merely non-empty: a ZATCA VAT number is 15 digits
+        // beginning and ending with 3. A typo in an env var would otherwise
+        // print a scannable code on every invoice carrying a number that does
+        // not resolve — which is worse than the "preparing" state, because it
+        // looks finished and only fails on audit.
+        if (! self::isValidVatNumber($vatNumber)) {
+            return null;
+        }
+
         return base64_encode(
             self::tlv(1, $sellerName)
             .self::tlv(2, $vatNumber)
@@ -46,6 +55,12 @@ final class ZatcaQr
             .self::tlv(4, number_format($totalGross, 2, '.', ''))
             .self::tlv(5, number_format($totalVat, 2, '.', ''))
         );
+    }
+
+    /** ZATCA VAT registration number: exactly 15 digits, first and last are 3. */
+    public static function isValidVatNumber(string $vatNumber): bool
+    {
+        return (bool) preg_match('/^3\d{13}3$/', trim($vatNumber));
     }
 
     /** tag + byte-length + value. */

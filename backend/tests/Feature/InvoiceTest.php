@@ -123,6 +123,27 @@ class InvoiceTest extends TestCase
         $this->assertStringContainsString('300000000000003', $decoded);
     }
 
+    /**
+     * A typo in an env var must not print a scannable code carrying a number
+     * that does not resolve — that looks finished and only fails on audit,
+     * which is worse than the "preparing" state the client already renders.
+     */
+    public function test_a_malformed_vat_number_emits_no_qr(): void
+    {
+        foreach (['30000000000000', '3000000000000033', '400000000000003', '300000000000004', '30000000000000x'] as $bad) {
+            $this->assertNull(
+                ZatcaQr::forInvoice('منصة ممسى', $bad, now(), 1000.00, 130.43),
+                "{$bad} must not produce a QR",
+            );
+        }
+    }
+
+    /** The real registered number, so the guard cannot reject production. */
+    public function test_the_configured_company_vat_number_is_accepted(): void
+    {
+        $this->assertTrue(ZatcaQr::isValidVatNumber('311806920200003'));
+    }
+
     public function test_tlv_lengths_count_bytes_not_characters(): void
     {
         // The seller name is Arabic. A character count would understate the
