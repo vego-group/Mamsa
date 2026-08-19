@@ -35,6 +35,9 @@ export const partnerApi = {
 
   // Bookings
   listBookings: (page = 1) => http.get('/partner/bookings', { params: { page } }),
+  // Host cancellation — the guest is refunded 100% and the partner forfeits
+  // their share. Irreversible, so the UI confirms before calling.
+  cancelBooking: (id, reason) => http.post(`/partner/bookings/${id}/cancel`, { reason }),
 
   // Profile
   getProfile: () => http.get('/partner/profile'),

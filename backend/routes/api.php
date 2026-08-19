@@ -200,6 +200,9 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::get('bookings', [Partner\BookingController::class, 'index'])->name('bookings.index');
+            // Host cancellation — guest refunded 100%, partner forfeits their
+            // share. Same action the partner dashboard uses.
+            Route::post('bookings/{booking}/cancel', [Partner\BookingController::class, 'cancel'])->name('bookings.cancel');
 
             Route::prefix('notifications')->name('notifications.')->group(function () {
                 Route::get('/', [NotificationController::class, 'index'])->name('index');

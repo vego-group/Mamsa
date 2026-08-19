@@ -266,6 +266,59 @@ class HostCancelRefundTest extends TestCase
         );
     }
 
+    /* ---- the same rule through the /api/v1 partner surface ---- */
+
+    /**
+     * The Vue partner app had no cancel control because there was no endpoint
+     * behind it. It shares HostCancelBookingAction with the dashboard — two
+     * refund paths would eventually disagree about how much a guest gets back.
+     */
+    public function test_the_v1_partner_endpoint_refunds_the_guest_in_full(): void
+    {
+        $booking = $this->paidBooking();
+
+        $this->actingAs($this->partner, 'sanctum')
+            ->postJson("/api/v1/partner/bookings/{$booking->id}/cancel", [
+                'reason' => 'الوحدة محجوزة في منصة أخرى',
+            ])
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $booking->refresh()->load('refunds', 'payment');
+
+        $this->assertSame(Booking::STATUS_CANCELLED, $booking->status);
+        $this->assertSame('partner', $booking->cancelled_by);
+        $this->assertEqualsWithDelta(3450.00, (float) $booking->refunds->first()->amount, 0.01);
+        $this->assertEqualsWithDelta(3450.00, (float) $booking->payment->refunded_amount, 0.01);
+    }
+
+    public function test_the_v1_endpoint_requires_a_reason(): void
+    {
+        $booking = $this->paidBooking();
+
+        $this->actingAs($this->partner, 'sanctum')
+            ->postJson("/api/v1/partner/bookings/{$booking->id}/cancel", ['reason' => ''])
+            ->assertStatus(422);
+
+        $this->assertSame(Booking::STATUS_CONFIRMED, $booking->refresh()->status);
+    }
+
+    /** A partner must not be able to cancel — or probe — someone else's booking. */
+    public function test_the_v1_endpoint_hides_another_partners_booking(): void
+    {
+        $booking = $this->paidBooking();
+
+        $other = User::factory()->create(['is_active' => true]);
+        $other->assignRole('Individual');
+        $other->partnerDetail()->create(['type' => 'individual', 'national_id' => '1099999999']);
+
+        $this->actingAs($other, 'sanctum')
+            ->postJson("/api/v1/partner/bookings/{$booking->id}/cancel", ['reason' => 'محاولة'])
+            ->assertStatus(404);
+
+        $this->assertSame(Booking::STATUS_CONFIRMED, $booking->refresh()->status);
+    }
+
     public function test_another_partner_cannot_cancel_this_booking(): void
     {
         $booking = $this->paidBooking();
