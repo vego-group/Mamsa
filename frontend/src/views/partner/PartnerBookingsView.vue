@@ -169,8 +169,17 @@ async function confirmCancel() {
     else if (i !== -1) bookings.value[i].status = 'cancelled'
     cancelTarget.value = null
   } catch (e) {
+    // Three envelopes reach this screen: Laravel validation ({message, errors}),
+    // the v1 wrapper ({message}) and the dashboard one ({error:{code,message}}).
+    // Reading only the first two turned "the payment gateway refused the
+    // refund" into a generic "try again", which sent someone hunting for a bug
+    // that the API had already named precisely.
     const r = e?.response?.data
-    cancelError.value = r?.message || r?.errors?.reason?.[0] || 'تعذّر إلغاء الحجز، حاول مرة أخرى'
+    cancelError.value =
+      r?.error?.message ||
+      r?.message ||
+      r?.errors?.reason?.[0] ||
+      'تعذّر إلغاء الحجز، حاول مرة أخرى'
   } finally {
     cancelling.value = false
   }
