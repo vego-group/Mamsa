@@ -50,10 +50,17 @@ class WebhookController extends Controller
         if ($payment) {
             // Snapshot the rows being flipped so the settlement email fires
             // once per refund — a replayed webhook finds nothing processing.
-            $settledAmount = (float) $payment->refunds()->where('status', 'processing')->sum('amount');
+            //
+            // 'pending', NOT 'processing'. The refunds enum is
+            // pending|succeeded|failed, so a row could never hold 'processing'
+            // — this matched nothing, every gateway refund stayed unsettled
+            // forever and the settlement email never fired. Same wrong value
+            // the write side used; fixing one without the other would have
+            // left refunds silently stuck.
+            $settledAmount = (float) $payment->refunds()->where('status', 'pending')->sum('amount');
 
             $flipped = $payment->refunds()
-                ->where('status', 'processing')
+                ->where('status', 'pending')
                 ->update(['status' => 'succeeded']);
 
             Log::info('Moyasar refund webhook settled', ['payment_id' => $payment->id, 'type' => $type]);

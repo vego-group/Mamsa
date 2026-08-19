@@ -307,6 +307,41 @@ class HostCancelRefundTest extends TestCase
         $this->assertEqualsWithDelta(3450.00, (float) $booking->payment->fresh()->refunded_amount, 0.01);
     }
 
+    /**
+     * The other half of the same bug: the webhook that settles a refund looked
+     * for status 'processing', which the enum can never hold. It matched
+     * nothing, so every gateway refund stayed unsettled forever and the guest's
+     * "refund processed" notice never fired. Fixing the write side alone would
+     * have left refunds silently stuck at pending.
+     */
+    public function test_the_webhook_settles_a_pending_gateway_refund(): void
+    {
+        config(['moyasar.secret_key' => 'sk_test_fake']);
+
+        $this->mock(\App\Services\MoyasarService::class, function ($mock) {
+            $mock->shouldReceive('refund')->once()->andReturn(['id' => 'ref_x', 'status' => 'refunded']);
+        });
+
+        $booking = $this->paidBooking();
+        $booking->payment->update(['moyasar_id' => 'pay_xyz']);
+
+        $this->hostCancel($booking)->assertOk();
+        $this->assertSame('pending', $booking->refresh()->refunds->first()->status);
+
+        // Moyasar calls back once the refund settles. The endpoint fails closed
+        // on a blank secret, so the test configures one.
+        config(['moyasar.webhook_secret' => 'whsec_test']);
+
+        $this->postJson('/webhooks/moyasar', [
+            'type'         => 'refund.updated',
+            'secret_token' => 'whsec_test',
+            'data'         => ['id' => 'pay_xyz'],
+        ])->assertOk();
+
+        $this->assertSame('succeeded', $booking->refresh()->refunds->first()->status,
+            'a settled gateway refund must stop reading as pending');
+    }
+
     /* ---- the same rule through the /api/v1 partner surface ---- */
 
     /**
