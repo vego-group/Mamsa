@@ -68,31 +68,51 @@ class HostCancelBookingAction
                 $gatewayResult = $this->refundGateway($payment, $refundTotal);
             }
 
-            DB::transaction(function () use ($booking, $partner, $reason, $payment, $refundTotal, $gatewayResult) {
-                $booking->update([
-                    'status'              => Booking::STATUS_CANCELLED,
-                    'cancelled_at'        => now(),
-                    'cancelled_by'        => 'partner',
-                    'cancellation_reason' => $reason,
-                ]);
+            // The gateway call above already moved real money. If anything below
+            // fails, the transaction rolls back and we are left with a guest who
+            // has been refunded and a booking that says otherwise — the state
+            // that has to be reconciled by hand. Make it findable rather than
+            // silent: a live run hit exactly this when an invalid enum value
+            // threw on insert.
+            try {
+                DB::transaction(function () use ($booking, $partner, $reason, $payment, $refundTotal, $gatewayResult) {
+                    $booking->update([
+                        'status'              => Booking::STATUS_CANCELLED,
+                        'cancelled_at'        => now(),
+                        'cancelled_by'        => 'partner',
+                        'cancellation_reason' => $reason,
+                    ]);
 
-                if ($payment && $refundTotal > 0) {
-                    $this->recordRefund($booking, $payment, $refundTotal, $gatewayResult);
+                    if ($payment && $refundTotal > 0) {
+                        $this->recordRefund($booking, $payment, $refundTotal, $gatewayResult);
+                    }
+
+                    // §6.1.4 — block the freed dates so they aren't instantly rebooked.
+                    $booking->unit?->blockedDates()->create([
+                        'start_date' => $booking->start_date->toDateString(),
+                        'end_date'   => $booking->end_date->toDateString(),
+                        'source'     => UnitBlockedDate::SOURCE_MANUAL,
+                        'note'       => 'إلغاء المضيف — '.\Illuminate\Support\Str::limit($reason, 100),
+                    ]);
+
+                    AuditLog::record($booking, 'booking.host_cancelled', ['status' => Booking::STATUS_CONFIRMED], [
+                        'status' => Booking::STATUS_CANCELLED,
+                        'refund' => $refundTotal,
+                    ], $partner->id);
+                });
+            } catch (\Throwable $e) {
+                if ($gatewayResult) {
+                    Log::critical('Host-cancel refunded at the gateway but the local write failed — RECONCILE BY HAND', [
+                        'booking_id'        => $booking->id,
+                        'payment_id'        => $payment?->id,
+                        'amount'            => $refundTotal,
+                        'moyasar_refund_id' => $gatewayResult['id'] ?? null,
+                        'error'             => $e->getMessage(),
+                    ]);
                 }
 
-                // §6.1.4 — block the freed dates so they aren't instantly rebooked.
-                $booking->unit?->blockedDates()->create([
-                    'start_date' => $booking->start_date->toDateString(),
-                    'end_date'   => $booking->end_date->toDateString(),
-                    'source'     => UnitBlockedDate::SOURCE_MANUAL,
-                    'note'       => 'إلغاء المضيف — '.\Illuminate\Support\Str::limit($reason, 100),
-                ]);
-
-                AuditLog::record($booking, 'booking.host_cancelled', ['status' => Booking::STATUS_CONFIRMED], [
-                    'status' => Booking::STATUS_CANCELLED,
-                    'refund' => $refundTotal,
-                ], $partner->id);
-            });
+                throw $e;
+            }
 
             $this->notifyGuest($booking, $refundTotal);
             $this->notifyPartner($booking, $partner);
@@ -129,7 +149,14 @@ class HostCancelBookingAction
             'refund_percent'    => 100,
             'tier_label'        => 'إلغاء المضيف',
             // Webhook flips this to succeeded; test-mode/simulated is immediate.
-            'status'            => $gatewayResult ? 'processing' : 'succeeded',
+            //
+            // MUST be one of the refunds enum: pending|succeeded|failed. This
+            // said 'processing', which is not a member — MySQL truncated it and
+            // the insert threw, rolling back the whole cancellation AFTER the
+            // gateway had already refunded the guest. The money moved and the
+            // system did not know. Only reachable with a real gateway result,
+            // which is why simulated and test-mode runs never saw it.
+            'status'            => $gatewayResult ? 'pending' : 'succeeded',
             'moyasar_refund_id' => $gatewayResult['id'] ?? null,
             'moyasar_response'  => $gatewayResult ?? ['test' => true, 'simulated' => true],
         ]);

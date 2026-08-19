@@ -266,6 +266,47 @@ class HostCancelRefundTest extends TestCase
         );
     }
 
+    /* ---- the REAL gateway path ---- */
+
+    /**
+     * The bug a live staging run found and every automated test missed.
+     *
+     * With no secret key configured the gateway is skipped and the refund is
+     * written as `succeeded`. Only a REAL gateway result took the other branch,
+     * which wrote `processing` — not a member of the refunds enum
+     * (pending|succeeded|failed). MySQL truncated it, the insert threw, and the
+     * whole cancellation rolled back AFTER Moyasar had already refunded the
+     * guest: the money moved and the system did not know.
+     */
+    public function test_a_real_gateway_refund_is_recorded_with_a_valid_status(): void
+    {
+        config(['moyasar.secret_key' => 'sk_test_fake']);   // → not test mode
+
+        $this->mock(\App\Services\MoyasarService::class, function ($mock) {
+            $mock->shouldReceive('refund')->once()->andReturn([
+                'id' => 'ref_live_abc123', 'status' => 'refunded', 'refunded' => 345000,
+            ]);
+        });
+
+        $booking = $this->paidBooking();
+        $booking->payment->update(['moyasar_id' => 'pay_abc123']);
+
+        $this->hostCancel($booking)->assertOk();
+
+        $refund = $booking->refresh()->refunds->first();
+
+        $this->assertNotNull($refund, 'the refund row must survive the insert');
+        $this->assertContains($refund->status, ['pending', 'succeeded', 'failed'],
+            'status must be a member of the refunds enum');
+        $this->assertSame('pending', $refund->status, 'a gateway refund settles via webhook');
+        $this->assertSame('ref_live_abc123', $refund->moyasar_refund_id);
+        $this->assertEqualsWithDelta(3450.00, (float) $refund->amount, 0.01);
+
+        // And the cancellation itself must have committed, not rolled back.
+        $this->assertSame(Booking::STATUS_CANCELLED, $booking->status);
+        $this->assertEqualsWithDelta(3450.00, (float) $booking->payment->fresh()->refunded_amount, 0.01);
+    }
+
     /* ---- the same rule through the /api/v1 partner surface ---- */
 
     /**
