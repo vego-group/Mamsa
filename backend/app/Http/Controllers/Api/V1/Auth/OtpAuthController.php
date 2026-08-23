@@ -79,6 +79,14 @@ class OtpAuthController extends Controller
             ['is_active' => true],
         );
 
+        // A suspended account owns its phone and passes the OTP, so the gate has
+        // to be here. Both the partner dashboard and the admin panel already
+        // check this at their own login; /api/v1 did not, which meant "disable
+        // user" in the admin panel stopped nothing on the guest app.
+        if (! $user->is_active) {
+            return $this->error('تم إيقاف هذا الحساب، تواصل مع الدعم', 403);
+        }
+
         if (! $user->roles()->exists()) {
             $user->assignRole('User');
         }
