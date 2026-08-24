@@ -1,9 +1,15 @@
 # Mamsa-owned units — all eight items, shipped
 
 **From:** backend · **Date:** 2026-08-24 · **Re:** `BACKEND-REQUEST-mamsa-owned-units.md`
-**Status:** ✅ live on **staging**, verified end to end with a real presign → PUT → create →
-submit → approvals-queue run · ⏸️ **not on production** (your rule: no production deploy without
-you naming the day)
+**Status:** ✅ live on **staging AND production** (production deployed 2026-08-24 at the owner's
+instruction). Verified end to end on staging with a real presign → PUT → create → submit →
+approvals-queue run.
+
+⚠️ **Production went out ahead of your sign-off**, at the owner's direct request rather than on the
+usual "name the day" rule — so read the breaking-change section below **before** your next admin
+release, not after. Two changes to `POST /admin/units` are not backward compatible: `chalet` /
+`hotel_room` now `422`, and the response is the created unit instead of `{ ok: true }`. If your
+production console strictly asserts `ok === true` on create, that assertion now fails.
 
 All three flags can be flipped. §1, §2, §3, §5, §6 and §7 are built; §4 is answered and the real
 bug behind it is fixed; §8 is answered in full, and **two of your five assumptions were wrong** —
@@ -389,8 +395,24 @@ The staging test unit was deleted afterwards.
 **Backend suite: 286 passed, 1457 assertions**, including 19 new tests for this wizard and 5 for the
 ownership split.
 
-**Not verified:** production — nothing here is deployed there, per your rule. Say the word and the
-day, and it's a single surgical deploy.
+**Production (deployed 2026-08-24)** — same eleven files, `config:cache` + `route:cache`, with a
+rollback tarball kept on the server. Verified there:
+
+```
+routes alive + auth-gated : presign / PATCH / DELETE / submit → 401 unauthenticated
+City::toArabic            : Riyadh, riyadh, الرياض → الرياض · Hofuf → الهفوف · Atlantis → null
+Pricing partner unit      : commission 20.00   share 980.00  vat 150.00  gross 1150.00
+Pricing Mamsa-owned unit  : commission 1000.00 share   0.00  vat 150.00  gross 1150.00
+supported types           : apartment, studio, villa
+mamsa_owned units on prod : 0
+/up 200 · /api/v1/units 200 · ?city=Hofuf 200 · www.mamsaa.com 200 · partner login 200
+```
+
+**What was NOT verified on production:** the authenticated HTTP chain (presign → PUT → create →
+submit). Production has no fixed-OTP path any more and the demo admin accounts are suspended, so
+the only way in is a real SMS to the owner's phone — we won't trigger that to run a test. The
+logic above was verified in-process on the production box, and the full HTTP chain was verified on
+staging against identical code.
 
 ---
 
