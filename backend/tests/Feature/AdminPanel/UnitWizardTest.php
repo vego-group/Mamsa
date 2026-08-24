@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature\AdminPanel;
 
+use App\Models\CancellationPolicy;
 use App\Models\DashboardUpload;
 use App\Models\Unit;
 use App\Models\User;
+use Database\Seeders\CancellationPolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
@@ -31,6 +33,11 @@ class UnitWizardTest extends TestCase
         parent::setUp();
 
         Storage::fake('public');
+
+        // The presets are real reference data: without them
+        // `cancellationPolicy` resolves to null everywhere and the read-side
+        // assertions below pass vacuously.
+        $this->seed(CancellationPolicySeeder::class);
 
         foreach (['Admin', 'SuperAdmin', 'Individual', 'User'] as $r) {
             Role::findOrCreate($r, 'web');
@@ -340,6 +347,100 @@ class UnitWizardTest extends TestCase
         $this->as()->deleteJson("/admin/units/{$id}")
             ->assertStatus(409)->assertJsonPath('code', 'CONFLICT');
         $this->assertNotNull(Unit::find($id));
+    }
+
+    /* ---------- the read side: everything the write side accepts ---------- */
+
+    public function test_read_returns_every_field_the_write_side_accepts(): void
+    {
+        // An edit form that cannot read a field renders a DEFAULT in its place —
+        // a screen stating something untrue about the unit. `address` is the
+        // sharp one: it is required at submit, so a blank box either stalls the
+        // edit or silently rewrites the stored address when retyped.
+        $photo   = $this->upload('unit_photo');
+        $licence = $this->upload('license_pdf');
+
+        $id = $this->as()->postJson('/admin/units', $this->fullBody([
+            'description'          => 'وصف كامل للوحدة يزيد عن عشرة أحرف.',
+            'amenities'            => ['wifi', 'ac'],
+            'cancellationPolicy'   => 'strict',
+            'checkIn'              => '16:00',
+            'checkOut'             => '11:00',
+            'beds'                 => 3,
+            'lat'                  => 24.7136,
+            'lng'                  => 46.6753,
+            'address'              => 'حي العليا، الرياض',
+            'tourismLicenseNumber' => 'TL-2025-00042',
+            'tourismLicenseFileId' => $licence->id,
+            'photoFileIds'         => [$photo->id],
+        ]))->json('id');
+
+        $this->as()->getJson("/admin/units/{$id}")->assertOk()
+            ->assertJsonPath('address', 'حي العليا، الرياض')
+            ->assertJsonPath('beds', 3)
+            ->assertJsonPath('checkIn', '16:00')
+            ->assertJsonPath('checkOut', '11:00')
+            // Not the platform default — the value the unit actually carries.
+            ->assertJsonPath('cancellationPolicy', 'strict')
+            ->assertJsonPath('tourismLicenseFileId', $licence->id)
+            ->assertJsonPath('cityKey', 'riyadh')
+            ->assertJsonPath('city', 'الرياض')
+            ->assertJsonPath('amenityKeys', ['wifi', 'ac'])
+            ->assertJsonPath('photos.0.id', $photo->id)
+            ->assertJsonPath('photos.0.isCover', true);
+    }
+
+    public function test_a_unit_with_no_chosen_policy_reports_the_one_the_engine_applies(): void
+    {
+        // null would read as "no cancellation policy". The engine falls back to
+        // the platform default, so that is what the screen must say.
+        $id = $this->as()->postJson('/admin/units', $this->fullBody())->json('id');
+
+        $policy = $this->as()->getJson("/admin/units/{$id}")->json('cancellationPolicy');
+
+        $this->assertSame('moderate', CancellationPolicy::where('is_default', true)->value('key'));
+        $this->assertSame('moderate', $policy);
+    }
+
+    public function test_an_edit_can_add_one_photo_without_destroying_the_gallery(): void
+    {
+        // This is the whole point of returning ids: `photoFileIds` is
+        // authoritative, so without a way to name the photos already attached,
+        // adding one means sending only that one — and deleting the rest.
+        $a = $this->upload('unit_photo');
+        $b = $this->upload('unit_photo');
+        $c = $this->upload('unit_photo');
+
+        $id = $this->as()->postJson('/admin/units', $this->fullBody([
+            'photoFileIds' => [$a->id, $b->id],
+            'coverFileId'  => $b->id,
+        ]))->json('id');
+
+        // Read the existing set back, append, send the union — the client flow.
+        $existing = collect($this->as()->getJson("/admin/units/{$id}")->json('photos'))
+            ->pluck('id')->all();
+        $this->assertSame([$a->id, $b->id], $existing);
+
+        $this->as()->patchJson("/admin/units/{$id}", [
+            'photoFileIds' => [...$existing, $c->id],
+            'coverFileId'  => $b->id,
+        ])->assertOk();
+
+        $after = collect($this->as()->getJson("/admin/units/{$id}")->json('photos'));
+        $this->assertSame([$a->id, $b->id, $c->id], $after->pluck('id')->all());
+        $this->assertSame($b->id, $after->firstWhere('isCover', true)['id'], 'The cover moved during an append.');
+    }
+
+    public function test_placeholder_rows_never_appear_as_photos(): void
+    {
+        $id   = $this->as()->postJson('/admin/units', $this->fullBody())->json('id');
+        $unit = Unit::find($id);
+
+        $unit->images()->create(['path' => \App\Support\Media::defaultImagePath(), 'is_main' => true]);
+
+        $body = $this->as()->getJson("/admin/units/{$id}")->json();
+        $this->assertSame([], $body['photos'], 'A shared-default row was offered as a real photo.');
+        $this->assertSame([], $body['images']);
     }
 
     /* ---------- permissions ---------- */

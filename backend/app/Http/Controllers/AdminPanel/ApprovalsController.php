@@ -139,7 +139,7 @@ class ApprovalsController extends Controller
 
     public function show(string $id): JsonResponse
     {
-        $u = $this->units->baseQuery()->with(['features', 'owner.partnerDetail'])->whereKey($id)->first();
+        $u = $this->units->baseQuery()->with(['features', 'owner.partnerDetail', 'cancellationPolicy'])->whereKey($id)->first();
 
         if (! $u) {
             $this->fail('NOT_FOUND', 'الطلب غير موجود', 404);

@@ -7,6 +7,7 @@ namespace App\Support\AdminPanel;
 use App\Http\Controllers\AdminPanel\Concerns\MapsSpec;
 use App\Models\Booking;
 use App\Models\Unit;
+use App\Support\Dashboard\Maps;
 use App\Support\Media;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -122,20 +123,97 @@ class UnitPresenter
         ];
     }
 
-    /** @return array<string, mixed> UnitDetail — §6. Expects features + owner.partnerDetail loaded. */
+    /**
+     * @return array<string, mixed> UnitDetail — §6. Expects features +
+     *                              owner.partnerDetail loaded.
+     *
+     * Everything `PATCH /admin/units/{id}` accepts must be readable here, or an
+     * edit form cannot show an admin what they are about to change — and a
+     * field it renders from a default rather than from the record is a screen
+     * stating something untrue about the unit.
+     */
     public function detail(Unit $u): array
     {
+        $u->loadMissing('cancellationPolicy');
+
         return array_merge($this->card($u), [
             'description'     => $u->description ?? '',
             'images'          => $this->images($u),
+            // Same photos, re-sendable: `id` is the upload id that goes back in
+            // `photoFileIds`, so an edit can add one photo without replacing the
+            // gallery. `images` stays as display URLs and is not going away.
+            'photos'          => $this->photos($u),
             'amenities'       => $u->relationLoaded('features') ? $u->features->pluck('name')->filter()->values()->all() : [],
+            // The write side takes KEYS (`wifi`); `amenities` above are the
+            // stored Arabic labels. Without this the round trip needs a
+            // hardcoded label→key table on the client, which drifts the day a
+            // label is reworded.
+            'amenityKeys'     => Maps::amenitiesToKeys($u->relationLoaded('features') ? $u->features->pluck('name') : collect()),
+            // `city` is the stored Arabic label. The slug is here so a locale
+            // toggle doesn't have to match on the label.
+            'cityKey'         => Maps::cityToSlug($u->city ?? ''),
+            'address'         => $u->address,
+            'beds'            => $u->beds !== null ? (int) $u->beds : null,
+            'checkIn'         => self::hm($u->checkin_time),
+            'checkOut'        => self::hm($u->checkout_time),
+            // Preset slug. A unit that never chose one inherits the platform
+            // default, so echo what the engine would actually apply rather than
+            // null — null would be read as "no policy".
+            'cancellationPolicy' => $u->cancellationPolicy?->key ?? self::defaultPolicyKey(),
             'lat'             => $u->lat !== null ? (float) $u->lat : 0.0,
             'lng'             => $u->lng !== null ? (float) $u->lng : 0.0,
             'publicUrl'       => $this->publicUrl($u),
             'tourismPermitNo' => $u->tourism_permit_no,
             'permitFileUrl'   => $this->fileUrl($u->tourism_permit_file),
+            // The id, not the URL — this is what goes back in the write body.
+            'tourismLicenseFileId' => $u->tourism_permit_file,
             'ownerIdNumber'   => $u->owner?->partnerDetail?->national_id,
         ]);
+    }
+
+    /**
+     * Photos in a form an edit can send back.
+     *
+     * `id` is the upload id from the presign flow. It is **null** for a row
+     * written before that flow existed: such a photo has no re-sendable
+     * identity, so a client merging a gallery must fall back to "this replaces
+     * everything" for that unit. There are currently no such rows on either
+     * server.
+     *
+     * Placeholder rows are excluded for the same reason as {@see images()} — a
+     * reviewer must see "no photos" as no photos.
+     *
+     * @return array<int, array{id: ?string, url: string, isCover: bool}>
+     */
+    private function photos(Unit $u): array
+    {
+        $real  = $u->images->filter(fn ($i) => filled($i->path) && $i->path !== Media::defaultImagePath());
+        $cover = $real->firstWhere('is_main', true) ?? $real->first();
+
+        return $real->map(fn ($i) => [
+            'id'      => filled($i->file_id) ? $i->file_id : null,
+            'url'     => $i->url,
+            'isCover' => $cover && $i->id === $cover->id,
+        ])->values()->all();
+    }
+
+    /** Per-request memo so a unit list doesn't re-query the default N times. */
+    private static ?string $defaultPolicyKey = null;
+
+    private static function defaultPolicyKey(): ?string
+    {
+        return self::$defaultPolicyKey ??= \App\Models\CancellationPolicy::query()
+            ->orderByDesc('is_default')->value('key');
+    }
+
+    /** `15:00:00` / a Carbon time → `15:00`, the format the write side takes. */
+    private static function hm(mixed $time): ?string
+    {
+        if (blank($time)) {
+            return null;
+        }
+
+        return substr((string) $time, 0, 5) ?: null;
     }
 
     /**

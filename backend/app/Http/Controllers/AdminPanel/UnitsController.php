@@ -71,7 +71,7 @@ class UnitsController extends Controller
 
     public function show(string $id): JsonResponse
     {
-        $u = $this->units->baseQuery()->with(['features', 'owner.partnerDetail'])->whereKey($id)->first();
+        $u = $this->units->baseQuery()->with(['features', 'owner.partnerDetail', 'cancellationPolicy'])->whereKey($id)->first();
 
         if (! $u) {
             $this->fail('NOT_FOUND', 'الوحدة غير موجودة', 404);
@@ -245,7 +245,7 @@ class UnitsController extends Controller
     private function reload(Unit $unit): Unit
     {
         return $this->units->baseQuery()
-            ->with(['features', 'owner.partnerDetail'])
+            ->with(['features', 'owner.partnerDetail', 'cancellationPolicy'])
             ->whereKey($unit->getKey())
             ->first() ?? $unit;
     }
