@@ -111,10 +111,13 @@ abstract class Controller extends BaseController
         ]);
     }
 
-    /** @return never */
-    protected function fail(string $code, string $message, int $status = 400): void
+    /**
+     * @param  array<string, string>|null  $fields
+     * @return never
+     */
+    protected function fail(string $code, string $message, int $status = 400, ?array $fields = null): void
     {
-        throw new AdminPanelException($code, $message, $status);
+        throw new AdminPanelException($code, $message, $status, $fields);
     }
 
     /**
@@ -133,6 +136,10 @@ abstract class Controller extends BaseController
                 'VALIDATION_ERROR',
                 (string) $validator->errors()->first(),
                 422,
+                // Additive: `message` is unchanged, so existing screens keep
+                // working; `fields` lets a multi-step form point at the step
+                // that actually failed instead of showing one toast.
+                array_map(fn (array $msgs) => (string) ($msgs[0] ?? ''), $validator->errors()->messages()),
             );
         }
 

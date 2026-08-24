@@ -76,7 +76,13 @@ Route::prefix('admin')->group(function () {
         Route::get('units/stats', [AdminPanel\UnitsController::class, 'stats'])->middleware('admin.can:units.view')->name('ap.units.stats');
         Route::post('units', [AdminPanel\UnitsController::class, 'store'])->middleware('admin.can:units.manage')->name('ap.units.store');
         Route::get('units/{id}', [AdminPanel\UnitsController::class, 'show'])->middleware('admin.can:units.view')->name('ap.units.show');
+        Route::patch('units/{id}', [AdminPanel\UnitsController::class, 'update'])->middleware('admin.can:units.manage')->name('ap.units.update');
+        Route::delete('units/{id}', [AdminPanel\UnitsController::class, 'destroy'])->middleware('admin.can:units.manage')->name('ap.units.destroy');
+        Route::post('units/{id}/submit', [AdminPanel\UnitsController::class, 'submit'])->middleware('admin.can:units.manage')->name('ap.units.submit');
         Route::post('units/{id}/unpublish', [AdminPanel\UnitsController::class, 'unpublish'])->middleware('admin.can:units.manage')->name('ap.units.unpublish');
+
+        /* Uploads (presign → signed PUT) — the partner flow on an admin session */
+        Route::post('uploads/presign', [AdminPanel\UploadsController::class, 'presign'])->middleware('admin.can:units.manage')->name('ap.uploads.presign');
 
         /* Bookings (read-only) — §5.8 */
         Route::get('bookings', [AdminPanel\BookingsController::class, 'index'])->middleware('admin.can:bookings.view')->name('ap.bookings.index');

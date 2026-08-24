@@ -228,10 +228,15 @@ class MutationsTest extends TestCase
 
     public function test_create_mamsa_owned_unit_starts_draft(): void
     {
+        // Returns the created unit, not { ok: true }: without an id the caller
+        // cannot submit it, open it, or link to it.
         $this->as()->postJson('/admin/units', [
-            'name' => 'شاليه ممسى', 'type' => 'chalet', 'city' => 'أبها', 'district' => 'السد',
+            'name' => 'شاليه ممسى', 'type' => 'villa', 'city' => 'أبها', 'district' => 'السد',
             'pricePerNight' => 750, 'bedrooms' => 3, 'bathrooms' => 2, 'capacity' => 8, 'sizeSqm' => 200,
-        ])->assertStatus(201)->assertExactJson(['ok' => true]);
+        ])->assertStatus(201)
+            ->assertJsonPath('mamsaOwned', true)
+            ->assertJsonPath('status', 'draft')
+            ->assertJsonStructure(['id', 'code', 'name']);
 
         $unit = Unit::where('unit_name', 'شاليه ممسى')->first();
         $this->assertNotNull($unit);

@@ -35,8 +35,13 @@ final class City
         'al_baha'        => 'baha',
         'al_ula'         => 'alula',
         'ula'            => 'alula',
-        'hofuf'          => 'ahsa',
-        'al_hasa'        => 'ahsa',
+        // The canonical slug is `hofuf`; Al-Ahsa is the governorate it sits in
+        // and is what people often type. Pointing `hofuf` AT `ahsa` (which is
+        // not a key) made a listed city resolve to null, so `?city=Hofuf`
+        // filtered on the literal string and matched nothing, silently.
+        'ahsa'           => 'hofuf',
+        'al_ahsa'        => 'hofuf',
+        'al_hasa'        => 'hofuf',
         'qassim'         => 'buraydah',
         'jizan'          => 'jazan',
         'khamis'         => 'khamis_mushait',

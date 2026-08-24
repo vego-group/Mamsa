@@ -123,7 +123,9 @@ class BookingController extends Controller
         }
 
         $nights  = (int) now()->parse($data['start_date'])->diffInDays($data['end_date']);
-        $pricing = Pricing::breakdown((float) $unit->price, $nights);
+        // The split is frozen here for the life of the booking, so the
+        // ownership flag has to be read at this moment — not inferred later.
+        $pricing = Pricing::breakdown((float) $unit->price, $nights, (bool) $unit->mamsa_owned);
 
         $booking = Booking::create([
             'unit_id'           => $unit->id,

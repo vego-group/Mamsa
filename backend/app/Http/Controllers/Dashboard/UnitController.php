@@ -4,16 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dashboard;
 
-use App\Models\DashboardUpload;
-use App\Models\Feature;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
-use App\Support\Dashboard\Maps;
 use App\Support\Dashboard\UnitPresenter;
+use App\Support\Units\UnitWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
@@ -143,109 +140,19 @@ class UnitController extends DashboardController
 
     private function validateUnit(Request $request, bool $required): array
     {
-        $req = $required ? 'required' : 'sometimes';
-
-        return $this->validated($request, [
-            'name'                 => [$req, 'string', 'min:2', 'max:150'],
-            'type'                 => [$req, 'in:apartment,studio,villa'],
-            'pricePerNight'        => [$req, 'numeric', 'gt:0'],
-            // cleaningFee (abolished 2026-07-18) is deliberately absent: an
-            // old client still sending it is silently ignored, not 422'd.
-            'cancellationPolicy'   => ['sometimes', 'in:flexible,moderate,strict'],
-            'capacity'             => [$req, 'integer', 'min:1'],
-            'bedrooms'             => ['sometimes', 'integer', 'min:0'],
-            // beds (عدد الأسرّة) / bathrooms (دورات المياه) — optional on
-            // draft, required at submit (assertSubmittable). Ranges per the
-            // frontend contract (2026-07-21).
-            'beds'                 => ['sometimes', 'nullable', 'integer', 'min:1', 'max:20'],
-            'bathrooms'            => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10'],
-            'city'                 => [$req, 'string', 'in:'.implode(',', array_keys(Maps::CITIES))],
-            'district'             => ['sometimes', 'nullable', 'string', 'max:150'],
-            'description'          => ['sometimes', 'nullable', 'string', 'max:500'],
-            'amenities'            => ['sometimes', 'array'],
-            'amenities.*'          => ['string', 'in:'.implode(',', array_keys(Maps::AMENITIES))],
-            'checkIn'              => ['sometimes', 'nullable', 'date_format:H:i'],
-            'checkOut'             => ['sometimes', 'nullable', 'date_format:H:i'],
-            'lat'                  => ['sometimes', 'nullable', 'numeric'],
-            'lng'                  => ['sometimes', 'nullable', 'numeric'],
-            'address'              => ['sometimes', 'nullable', 'string', 'max:255'],
-            'tourismLicenseNumber' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'tourismLicenseFileId' => ['sometimes', 'nullable', 'string'],
-            // Photos are attached by referencing fileIds from POST /uploads/presign,
-            // in display order; coverFileId marks the main image.
-            'photoFileIds'         => ['sometimes', 'array', 'max:10'],
-            'photoFileIds.*'       => ['string'],
-            'coverFileId'          => ['sometimes', 'nullable', 'string'],
-        ]);
+        return $this->validated($request, UnitWriter::rules($required));
     }
 
-    /** Map contract keys → DB columns; sanitize free text (§10.5). */
+    /** @param array<string, mixed> $data */
     private function toColumns(array $data): array
     {
-        $map = [
-            'name'                 => fn ($v) => ['unit_name' => strip_tags($v)],
-            'type'                 => fn ($v) => ['unit_type' => $v],
-            'pricePerNight'        => fn ($v) => ['price' => $v],
-            // Preset slug → FK. Only affects FUTURE bookings: paid bookings
-            // carry a frozen snapshot the engine reads exclusively (FR-036).
-            'cancellationPolicy'   => fn ($v) => [
-                'cancellation_policy_id' => \App\Models\CancellationPolicy::where('key', $v)->value('id'),
-            ],
-            'capacity'             => fn ($v) => ['capacity' => $v],
-            'bedrooms'             => fn ($v) => ['bedrooms' => $v],
-            'beds'                 => fn ($v) => ['beds' => $v],
-            'bathrooms'            => fn ($v) => ['bathrooms' => $v],
-            'city'                 => fn ($v) => ['city' => Maps::cityToArabic($v) ?? $v],
-            'district'             => fn ($v) => ['district' => $v === null ? null : strip_tags($v)],
-            'description'          => fn ($v) => ['description' => $v === null ? null : strip_tags($v)],
-            'checkIn'              => fn ($v) => ['checkin_time' => $v],
-            'checkOut'             => fn ($v) => ['checkout_time' => $v],
-            'lat'                  => fn ($v) => ['lat' => $v],
-            'lng'                  => fn ($v) => ['lng' => $v],
-            'address'              => fn ($v) => ['address' => $v === null ? null : strip_tags($v)],
-            'tourismLicenseNumber' => fn ($v) => ['tourism_permit_no' => $v],
-            'tourismLicenseFileId' => fn ($v) => ['tourism_permit_file' => $v],
-        ];
-
-        $columns = [];
-        foreach ($map as $key => $fn) {
-            if (array_key_exists($key, $data)) {
-                $columns = array_merge($columns, $fn($data[$key]));
-            }
-        }
-
-        return $columns;
+        return UnitWriter::toColumns($data);
     }
 
     /** Full submit-time validation (§4). Throws VALIDATION with field errors. */
     private function assertSubmittable(User $user, Unit $unit): void
     {
-        $fields = [];
-
-        if (Str::length((string) $unit->unit_name) < 2)                 $fields['name'] = 'الاسم مطلوب';
-        if (! in_array($unit->unit_type, Unit::SUPPORTED_TYPES, true))  $fields['type'] = 'نوع الوحدة غير صالح';
-        if ((float) $unit->price <= 0)                                  $fields['pricePerNight'] = 'السعر يجب أن يكون أكبر من صفر';
-        if ((int) $unit->capacity < 1)                                  $fields['capacity'] = 'السعة مطلوبة';
-        if ((int) $unit->beds < 1)                                      $fields['beds'] = 'عدد السراير مطلوب';
-        if ((int) $unit->bathrooms < 1)                                 $fields['bathrooms'] = 'عدد دورات المياه مطلوب';
-        if (! Maps::cityToSlug($unit->city) || ! in_array(Maps::cityToSlug($unit->city), array_keys(Maps::CITIES), true)) {
-            $fields['city'] = 'المدينة يجب أن تكون ضمن المدن المعتمدة';
-        }
-        $descLen = Str::length((string) $unit->description);
-        if ($descLen < 10 || $descLen > 500)                           $fields['description'] = 'الوصف يجب أن يكون بين 10 و 500 حرف';
-        if (blank($unit->address))                                     $fields['address'] = 'العنوان مطلوب';
-        if ($unit->lat === null || $unit->lng === null || ! Maps::insideSaudi((float) $unit->lat, (float) $unit->lng)) {
-            $fields['location'] = 'الموقع يجب أن يكون داخل حدود المملكة';
-        }
-        if (blank($unit->tourism_permit_no))                           $fields['tourismLicenseNumber'] = 'رقم رخصة السياحة مطلوب';
-        if (blank($unit->tourism_permit_file))                         $fields['tourismLicenseFileId'] = 'ملف الرخصة مطلوب';
-        // REAL photos, not rows: a placeholder row pointing at the shared
-        // default image satisfied a bare count, which would let a listing reach
-        // review with nothing to look at — and make the reviewer's "no photos"
-        // finding a permanent feature of the queue rather than a rare one.
-        if ($this->realPhotoCount($unit) < 1)                          $fields['photos'] = 'أضف صورة واحدة على الأقل';
-
-        if ($fields) {
+        if ($fields = UnitWriter::submitErrors($unit)) {
             $this->fail('VALIDATION', 'بيانات غير مكتملة', 400, $fields);
         }
 
@@ -256,104 +163,32 @@ class UnitController extends DashboardController
         }
     }
 
-
-    /** Photos the partner actually uploaded, excluding shared-default rows. */
-    private function realPhotoCount(Unit $unit): int
-    {
-        return $unit->images()
-            ->whereNotNull('path')->where('path', '!=', '')
-            ->where('path', '!=', \App\Support\Media::defaultImagePath())
-            ->count();
-    }
-
     /* ---- files (§9.1 presign flow → unit) ---- */
 
     /**
-     * Every referenced upload must be a stored upload owned by THIS partner
-     * (§0.2), of the kind matching where it's used. Validated up-front so a bad
-     * fileId fails before any mutation — never leaves a half-attached unit.
+     * A bad fileId fails before any mutation — never leaves a half-attached unit.
+     *
+     * @param  array<string, mixed>  $data
      */
     private function assertFilesOwned(Request $request, array $data): void
     {
-        $errors = [];
-
-        if (! empty($data['tourismLicenseFileId'])
-            && ! $this->ownedUpload($request, $data['tourismLicenseFileId'], 'license_pdf')) {
-            $errors['tourismLicenseFileId'] = 'ملف الرخصة غير موجود';
-        }
-
-        foreach ($data['photoFileIds'] ?? [] as $i => $fileId) {
-            if (! $this->ownedUpload($request, $fileId, 'unit_photo')) {
-                $errors["photoFileIds.$i"] = 'الصورة غير موجودة';
-            }
-        }
-
-        if (! empty($data['coverFileId'])
-            && ! in_array($data['coverFileId'], $data['photoFileIds'] ?? [], true)) {
-            $errors['coverFileId'] = 'صورة الغلاف يجب أن تكون ضمن الصور المرفوعة';
-        }
-
-        if ($errors) {
+        if ($errors = UnitWriter::fileErrors((int) $request->user()->id, $data)) {
             $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $errors);
         }
     }
 
-    private function ownedUpload(Request $request, string $fileId, string $kind): ?DashboardUpload
-    {
-        return DashboardUpload::whereKey($fileId)
-            ->where('user_id', $request->user()->id)
-            ->where('kind', $kind)
-            ->where('status', 'stored')
-            ->first();
-    }
-
-    /**
-     * Replace the unit's gallery from the ordered photoFileIds (§1 answer:
-     * photoFileIds[] + coverFileId). Absent key → gallery untouched; present
-     * (even empty) → authoritative replace. coverFileId marks the main image,
-     * else the first photo. Files are already stored (presign+PUT); we just
-     * link them as UnitImage rows in order.
-     */
+    /** @param array<string, mixed> $data */
     private function syncPhotos(Request $request, Unit $unit, array $data): void
     {
-        if (! array_key_exists('photoFileIds', $data)) {
-            return;
-        }
-
-        $cover = $data['coverFileId'] ?? ($data['photoFileIds'][0] ?? null);
-
-        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $unit, $data, $cover) {
-            $unit->images()->delete();
-
-            foreach ($data['photoFileIds'] as $fileId) {
-                $upload = $this->ownedUpload($request, $fileId, 'unit_photo');
-                if (! $upload) {
-                    continue; // already validated in assertFilesOwned; defensive
-                }
-
-                $unit->images()->create([
-                    'file_id' => $upload->id,
-                    'path'    => $upload->path,
-                    'is_main' => $fileId === $cover,
-                ]);
-            }
-        });
+        UnitWriter::syncPhotos((int) $request->user()->id, $unit, $data);
     }
 
     /* ---- helpers ---- */
 
+    /** @param array<int, string>|null $keys */
     private function syncAmenities(Unit $unit, ?array $keys): void
     {
-        if ($keys === null) {
-            return;
-        }
-
-        $ids = collect($keys)
-            ->map(fn ($k) => Maps::amenityToArabic($k))
-            ->filter()
-            ->map(fn ($name) => Feature::firstOrCreate(['name' => $name])->id);
-
-        $unit->features()->sync($ids);
+        UnitWriter::syncAmenities($unit, $keys);
     }
 
     private function notifyAdmins(Unit $unit): void
@@ -370,11 +205,7 @@ class UnitController extends DashboardController
 
     private static function uniqueCode(): string
     {
-        do {
-            $code = 'MRN'.strtoupper(Str::random(5));
-        } while (Unit::where('code', $code)->exists());
-
-        return $code;
+        return UnitWriter::uniqueCode();
     }
 
     /** Accept both "u_1" (contract) and raw "1". */

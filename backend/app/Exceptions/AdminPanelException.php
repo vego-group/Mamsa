@@ -17,19 +17,31 @@ use RuntimeException;
  */
 class AdminPanelException extends RuntimeException
 {
+    /** @param array<string, string>|null $fields field key → Arabic message */
     public function __construct(
         public readonly string $errorCode,
         string $message,
         public readonly int $status = 400,
+        public readonly ?array $fields = null,
     ) {
         parent::__construct($message);
     }
 
     public function render(): JsonResponse
     {
-        return response()->json([
+        $payload = [
             'message' => $this->getMessage(),
             'code'    => $this->errorCode,
-        ], $this->status);
+        ];
+
+        // Only on validation failures, and only when we can actually name the
+        // offending fields. A six-step wizard that gets one flat sentence back
+        // cannot tell the admin WHICH step to return to — so keys here match
+        // the request body keys exactly (`amenities.0`, `photoFileIds.2`).
+        if ($this->fields) {
+            $payload['fields'] = $this->fields;
+        }
+
+        return response()->json($payload, $this->status);
     }
 }

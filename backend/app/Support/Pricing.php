@@ -56,11 +56,12 @@ final class Pricing
 
     /**
      * @param  float  $nightlyGross  GROSS (VAT-inclusive) price per night
+     * @param  bool  $mamsaOwned  the unit belongs to the platform, not a partner
      * @return array{nights:int, nightly_rate:float, gross:float, net_base:float,
      *   vat:float, vat_rate:float, subtotal:float, taxes:float, tax_percent:float,
      *   commission_rate:float, commission_amount:float, partner_share:float, total:float}
      */
-    public static function breakdown(float $nightlyGross, int $nights): array
+    public static function breakdown(float $nightlyGross, int $nights, bool $mamsaOwned = false): array
     {
         $vatRate = self::vatRate();
 
@@ -70,8 +71,15 @@ final class Pricing
 
         // Mamsa's cut of the partner's NET rental income — deducted from the
         // partner's payout, so it is NOT part of the guest-facing total.
-        $commissionRate = (float) config('booking.commission_rate');
-        $commission     = round($netBase * $commissionRate, 2);
+        //
+        // On a MAMSA-OWNED unit there is no partner to pay. `units.user_id` on
+        // such a listing is the admin who created it, so splitting 2%/98% here
+        // would accrue 98% of every booking into that admin's partner wallet
+        // and queue it for a real bank transfer — money owed to nobody. The
+        // platform keeps the whole net base instead, and the invariant
+        // commission + partnerShare + vat === gross still holds exactly.
+        $commissionRate = $mamsaOwned ? 1.0 : (float) config('booking.commission_rate');
+        $commission     = $mamsaOwned ? $netBase : round($netBase * $commissionRate, 2);
         $partnerShare   = round($netBase - $commission, 2); // subtraction again
 
         return [

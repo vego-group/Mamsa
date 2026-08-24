@@ -7,10 +7,10 @@ namespace App\Http\Controllers\AdminPanel;
 use App\Models\Booking;
 use App\Models\Unit;
 use App\Support\AdminPanel\UnitPresenter;
+use App\Support\Units\UnitWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 /**
  * Units (properties) — BACKEND_SPEC §5.6. Shapes live in UnitPresenter (shared
@@ -85,24 +85,129 @@ class UnitsController extends Controller
     /**
      * POST /admin/units — create a Mamsa-owned listing. It starts as a draft and
      * goes through the same review pipeline as partner units. Owner = the acting
-     * admin (units.user_id is NOT NULL); mamsa_owned flags it as platform-owned.
+     * admin (units.user_id is NOT NULL); mamsa_owned flags it as platform-owned,
+     * which is what stops the booking engine paying a 98% share to an admin who
+     * is not a partner ({@see \App\Support\Pricing::breakdown()}).
      */
     public function store(Request $request): JsonResponse
     {
-        $data = $this->validate($request, [
-            'name'          => ['required', 'string', 'max:255'],
-            'type'          => ['required', Rule::in(['apartment', 'villa', 'chalet', 'studio', 'hotel_room'])],
-            'city'          => ['required', 'string', 'max:100'],
-            'district'      => ['required', 'string', 'max:150'],
-            'pricePerNight' => ['required', 'numeric', 'min:0'],
-            'bedrooms'      => ['required', 'integer', 'min:0'],
-            'bathrooms'     => ['required', 'integer', 'min:0'],
-            'capacity'      => ['required', 'integer', 'min:1'],
-            'sizeSqm'       => ['required', 'numeric', 'min:0'],
-        ], [
+        $data = $this->validateUnit($request, required: true);
+        $this->assertFilesOwned($request, $data);
+
+        $unit = Unit::create(array_merge(UnitWriter::toColumns($data), [
+            'user_id'         => $request->user()->getKey(),
+            'mamsa_owned'     => true,
+            'code'            => UnitWriter::uniqueCode(),
+            'approval_status' => 'draft',
+            'status'          => 'available',
+            'calendar_token'  => Str::random(60),
+            // A listing with one bedroom sleeps at least one; the console has no
+            // separate "beds" input, so seed it from bedrooms and let an edit
+            // correct it. Without this every admin unit fails the submit gate.
+            'beds'            => $data['beds'] ?? max(1, (int) ($data['bedrooms'] ?? 1)),
+        ]));
+
+        UnitWriter::syncAmenities($unit, $data['amenities'] ?? null);
+        UnitWriter::syncPhotos((int) $request->user()->id, $unit, $data);
+
+        return response()->json($this->units->detail($this->reload($unit)), 201);
+    }
+
+    /**
+     * PATCH /admin/units/:id — partial edit. An absent key means "unchanged",
+     * never "blank it".
+     */
+    public function update(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->findUnit($id);
+
+        // Mirrors the partner rule: a unit sitting in the review queue must not
+        // change under the reviewer's feet.
+        if ($unit->approval_status === 'pending') {
+            $this->fail('CONFLICT', 'لا يمكن تعديل وحدة قيد المراجعة', 409);
+        }
+
+        $data = $this->validateUnit($request, required: false);
+        $this->assertFilesOwned($request, $data);
+
+        $columns = UnitWriter::toColumns($data);
+
+        // An edited approved unit goes back for review and leaves the public
+        // site — the same rule partner units follow, for the same reason: what
+        // was approved is no longer what is published.
+        $wasApproved = $unit->approval_status === 'approved';
+        if ($wasApproved) {
+            $columns['approval_status'] = 'pending';
+        }
+
+        $unit->update($columns);
+        UnitWriter::syncAmenities($unit, $data['amenities'] ?? null);
+        UnitWriter::syncPhotos((int) $unit->user_id, $unit, $data);
+
+        return response()->json($this->units->detail($this->reload($unit)));
+    }
+
+    /** DELETE /admin/units/:id — drafts only; anything further along has history. */
+    public function destroy(string $id): JsonResponse
+    {
+        $unit = $this->findUnit($id);
+
+        if ($unit->approval_status !== 'draft') {
+            $this->fail('CONFLICT', 'يمكن حذف المسودات فقط', 409);
+        }
+
+        $unit->delete();
+
+        return $this->ok();
+    }
+
+    /**
+     * POST /admin/units/:id/submit — draft → pending_review, into the same queue
+     * partner units go through.
+     *
+     * Mamsa reviewing its own listing is not the point; the completeness gate
+     * is. Photos, a permit and a description are what make a listing publishable
+     * at all, and this is the single place that enforces them.
+     */
+    public function submit(string $id): JsonResponse
+    {
+        $unit = $this->findUnit($id);
+
+        if (! in_array($unit->approval_status, ['draft', 'rejected'], true)) {
+            $this->fail('CONFLICT', 'لا يمكن تقديم هذه الوحدة', 409);
+        }
+
+        if ($fields = UnitWriter::submitErrors($unit)) {
+            $this->fail('VALIDATION_ERROR', 'بيانات غير مكتملة', 422, $fields);
+        }
+
+        $unit->update(['approval_status' => 'pending', 'rejection_reason' => null]);
+
+        return response()->json($this->units->detail($this->reload($unit)));
+    }
+
+    /* ---- shared helpers ---- */
+
+    /**
+     * The nine fields the console has always sent stay required; everything the
+     * listing wizard added is optional, so a half-finished draft can be saved.
+     *
+     * @return array<string, mixed>
+     */
+    private function validateUnit(Request $request, bool $required): array
+    {
+        $rules = UnitWriter::rules(required: false);
+
+        if ($required) {
+            foreach (['name', 'type', 'city', 'district', 'pricePerNight', 'bedrooms', 'bathrooms', 'capacity', 'sizeSqm'] as $key) {
+                $rules[$key][0] = 'required';
+            }
+        }
+
+        return $this->validate($request, $rules, [
             'name.required'          => 'اسم الوحدة مطلوب',
             'type.required'          => 'نوع الوحدة مطلوب',
-            'type.in'                => 'نوع الوحدة غير صالح',
+            'type.in'                => 'نوع الوحدة غير صالح — المدعوم: شقة، استوديو، فيلا',
             'city.required'          => 'المدينة مطلوبة',
             'district.required'      => 'الحي مطلوب',
             'pricePerNight.required' => 'سعر الليلة مطلوب',
@@ -110,28 +215,39 @@ class UnitsController extends Controller
             'bathrooms.required'     => 'عدد دورات المياه مطلوب',
             'capacity.required'      => 'السعة مطلوبة',
             'sizeSqm.required'       => 'المساحة مطلوبة',
+            'description.max'        => 'الوصف يجب ألا يتجاوز 500 حرف',
+            'amenities.*.in'         => 'إحدى المرافق غير معروفة',
+            'checkIn.date_format'    => 'صيغة وقت الدخول يجب أن تكون HH:mm',
+            'checkOut.date_format'   => 'صيغة وقت الخروج يجب أن تكون HH:mm',
+            'photoFileIds.max'       => 'الحد الأقصى 10 صور',
         ]);
+    }
 
-        Unit::create([
-            'user_id'         => $request->user()->getKey(),
-            'mamsa_owned'     => true,
-            'unit_name'       => $data['name'],
-            'unit_type'       => $data['type'] === 'hotel_room' ? 'hotel' : $data['type'],
-            'code'            => 'MRN'.now()->format('ymd').Str::upper(Str::random(4)),
-            'price'           => $data['pricePerNight'],
-            'bedrooms'        => $data['bedrooms'],
-            'beds'            => $data['bedrooms'],
-            'bathrooms'       => $data['bathrooms'],
-            'capacity'        => $data['capacity'],
-            'area'            => $data['sizeSqm'],
-            'city'            => $data['city'],
-            'district'        => $data['district'],
-            'approval_status' => 'draft',
-            'status'          => 'available',
-            'calendar_token'  => Str::random(60),
-        ]);
+    /** @param array<string, mixed> $data */
+    private function assertFilesOwned(Request $request, array $data): void
+    {
+        if ($errors = UnitWriter::fileErrors((int) $request->user()->id, $data)) {
+            $this->fail('VALIDATION_ERROR', 'ملفات غير صالحة', 422, $errors);
+        }
+    }
 
-        return $this->ok(201);
+    private function findUnit(string $id): Unit
+    {
+        $unit = Unit::find(Str::startsWith($id, 'u_') ? Str::after($id, 'u_') : $id);
+
+        if (! $unit) {
+            $this->fail('NOT_FOUND', 'الوحدة غير موجودة', 404);
+        }
+
+        return $unit;
+    }
+
+    private function reload(Unit $unit): Unit
+    {
+        return $this->units->baseQuery()
+            ->with(['features', 'owner.partnerDetail'])
+            ->whereKey($unit->getKey())
+            ->first() ?? $unit;
     }
 
     /** POST /admin/units/:id/unpublish — { reason }, approved → rejected (off the public site). */
