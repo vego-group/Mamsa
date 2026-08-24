@@ -104,8 +104,14 @@ class UnitPresenter
             'coverImage'        => $this->realCoverImage($u),
             'city'              => $u->city ?? '',
             'partnerId'         => (string) ($u->user_id ?? ''),
-            'partnerName'       => $owner?->name ?? '',
-            'partnerType'       => $owner?->partnerDetail?->type ?? 'individual',
+            // A Mamsa-owned listing has no partner: `user_id` is the admin who
+            // created it. Showing their personal name here would put a staff
+            // member in the queue as though they were an applicant — and the
+            // units list already reads 'ممسى' for the same row, so a reviewer
+            // saw two different owners for one unit.
+            'partnerName'       => $u->mamsa_owned ? 'ممسى' : ($owner?->name ?? ''),
+            'partnerType'       => $u->mamsa_owned ? 'mamsa' : ($owner?->partnerDetail?->type ?? 'individual'),
+            'mamsaOwned'        => (bool) $u->mamsa_owned,
             // True submission time where known; updated_at is the historical
             // proxy for rows that predate the submitted_at column.
             'submittedAt'       => $this->iso($u->submitted_at ?? $u->updated_at),

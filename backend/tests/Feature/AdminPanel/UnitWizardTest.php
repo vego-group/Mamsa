@@ -251,9 +251,13 @@ class UnitWizardTest extends TestCase
         $this->assertSame('pending', $unit->approval_status);
         $this->assertNotNull($unit->submitted_at, 'submitted_at was never stamped.');
 
-        // And it is now in the queue the reviewer actually looks at.
+        // And it is now in the queue the reviewer actually looks at — attributed
+        // to Mamsa, not to the admin who happens to own the row.
         $this->as()->getJson('/admin/approvals')->assertOk()
-            ->assertJsonPath('items.0.unitId', (string) $id);
+            ->assertJsonPath('items.0.unitId', (string) $id)
+            ->assertJsonPath('items.0.mamsaOwned', true)
+            ->assertJsonPath('items.0.partnerName', 'ممسى')
+            ->assertJsonPath('items.0.partnerType', 'mamsa');
     }
 
     public function test_a_unit_already_under_review_cannot_be_submitted_again(): void
