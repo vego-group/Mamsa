@@ -215,7 +215,7 @@ class UnitsController extends Controller
             'bathrooms.required'     => 'عدد دورات المياه مطلوب',
             'capacity.required'      => 'السعة مطلوبة',
             'sizeSqm.required'       => 'المساحة مطلوبة',
-            'description.max'        => 'الوصف يجب ألا يتجاوز 500 حرف',
+            'description.max'        => 'الوصف يجب ألا يتجاوز '.UnitWriter::MAX_DESCRIPTION.' حرف',
             'amenities.*.in'         => 'إحدى المرافق غير معروفة',
             'checkIn.date_format'    => 'صيغة وقت الدخول يجب أن تكون HH:mm',
             'checkOut.date_format'   => 'صيغة وقت الخروج يجب أن تكون HH:mm',

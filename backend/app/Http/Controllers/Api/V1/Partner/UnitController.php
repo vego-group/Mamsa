@@ -36,7 +36,11 @@ class UnitController extends Controller
             'district'            => ['nullable', 'string', 'max:150'],
             'lat'                 => ['nullable', 'numeric'],
             'lng'                 => ['nullable', 'numeric'],
-            'description'         => ['nullable', 'string'],
+            // Bounded to match the shared writer. Left unbounded, this surface
+            // could store a description the partner dashboard and admin console
+            // then refuse to save back, stranding the unit on whichever screen
+            // wrote it.
+            'description'         => ['nullable', 'string', 'max:'.\App\Support\Units\UnitWriter::MAX_DESCRIPTION],
             'tourism_permit_no'   => ['nullable', 'string', 'max:50'],
             'company_license_no'  => ['nullable', 'string', 'max:50'],
             'cancellation_policy' => ['nullable', 'in:no_cancel,48_hours'],
@@ -92,7 +96,11 @@ class UnitController extends Controller
             'district'            => ['nullable', 'string', 'max:150'],
             'lat'                 => ['nullable', 'numeric'],
             'lng'                 => ['nullable', 'numeric'],
-            'description'         => ['nullable', 'string'],
+            // Bounded to match the shared writer. Left unbounded, this surface
+            // could store a description the partner dashboard and admin console
+            // then refuse to save back, stranding the unit on whichever screen
+            // wrote it.
+            'description'         => ['nullable', 'string', 'max:'.\App\Support\Units\UnitWriter::MAX_DESCRIPTION],
             'tourism_permit_no'   => ['nullable', 'string', 'max:50'],
             'company_license_no'  => ['nullable', 'string', 'max:50'],
             'cancellation_policy' => ['nullable', 'in:no_cancel,48_hours'],

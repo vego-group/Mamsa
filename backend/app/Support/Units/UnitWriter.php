@@ -42,6 +42,26 @@ final class UnitWriter
     public const MAX_PHOTOS = 10;
 
     /**
+     * Description bounds, in CHARACTERS.
+     *
+     * 500 was never a rule anyone chose — the console guessed it, asked for
+     * confirmation, and did not get one. The storefront now renders the field
+     * as line-based markup (headings, lists, notes), and a structured
+     * description does not fit in 500: the example in the request exceeds it on
+     * its own.
+     *
+     * Laravel sizes strings with mb_strlen, so this is 2000 characters and not
+     * 2000 bytes — which would have meant ~666 Arabic characters, since Arabic
+     * is three bytes each in UTF-8.
+     *
+     * The MINIMUM is a submit-time gate only: a draft may hold no description
+     * at all, but a listing cannot go to review without one.
+     */
+    public const MIN_DESCRIPTION = 10;
+
+    public const MAX_DESCRIPTION = 2000;
+
+    /**
      * Validation rules for a unit body.
      *
      * @param  bool  $required  true → a complete listing; false → a draft, where
@@ -69,7 +89,7 @@ final class UnitWriter
             'city'                 => [$req, 'string', 'max:100', self::cityRule()],
             'district'             => ['sometimes', 'nullable', 'string', 'max:150'],
             'sizeSqm'              => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'description'          => ['sometimes', 'nullable', 'string', 'max:500'],
+            'description'          => ['sometimes', 'nullable', 'string', 'max:'.self::MAX_DESCRIPTION],
             'amenities'            => ['sometimes', 'array'],
             'amenities.*'          => ['string', 'in:'.implode(',', array_keys(Maps::AMENITIES))],
             'checkIn'              => ['sometimes', 'nullable', 'date_format:H:i'],
@@ -124,7 +144,20 @@ final class UnitWriter
             'city'                 => fn ($v) => ['city' => \App\Support\City::toArabic((string) $v) ?? $v],
             'district'             => fn ($v) => ['district' => $v === null ? null : strip_tags((string) $v)],
             'sizeSqm'              => fn ($v) => ['area' => $v],
-            'description'          => fn ($v) => ['description' => $v === null ? null : strip_tags((string) $v)],
+            // Stored verbatim. It used to go through strip_tags(), which is not
+            // a sanitiser so much as a silent editor: `<` followed by anything
+            // other than a space opens "tag mode" and everything up to the next
+            // `>` is deleted. Since `>` opens a note line in the storefront's
+            // markup, one `<=` in a description ate the line break and the note
+            // marker with it — `"شروط <= ثلاثة\n> ملاحظة"` came out as
+            // `"شروط  ملاحظة"`, corrupted in the column rather than the render.
+            //
+            // It bought nothing either: `<script>alert(1)</script>` survives it
+            // as `alert(1)`. Safety here is escaping at render, which every
+            // consumer already does — the JSON resources, the Vue storefront's
+            // `{{ }}`, and the three Next.js apps, none of which use v-html or
+            // dangerouslySetInnerHTML.
+            'description'          => fn ($v) => ['description' => $v === null ? null : (string) $v],
             'checkIn'              => fn ($v) => ['checkin_time' => $v],
             'checkOut'             => fn ($v) => ['checkout_time' => $v],
             'lat'                  => fn ($v) => ['lat' => $v],
@@ -251,7 +284,9 @@ final class UnitWriter
         if (! \App\Support\City::toArabic((string) $unit->city))       $fields['city'] = 'المدينة يجب أن تكون ضمن المدن المعتمدة';
 
         $descLen = Str::length((string) $unit->description);
-        if ($descLen < 10 || $descLen > 500)                           $fields['description'] = 'الوصف يجب أن يكون بين 10 و 500 حرف';
+        if ($descLen < self::MIN_DESCRIPTION || $descLen > self::MAX_DESCRIPTION) {
+            $fields['description'] = 'الوصف يجب أن يكون بين '.self::MIN_DESCRIPTION.' و '.self::MAX_DESCRIPTION.' حرف';
+        }
         if (blank($unit->address))                                     $fields['address'] = 'العنوان مطلوب';
         if ($unit->lat === null || $unit->lng === null || ! Maps::insideSaudi((float) $unit->lat, (float) $unit->lng)) {
             $fields['location'] = 'الموقع يجب أن يكون داخل حدود المملكة';
