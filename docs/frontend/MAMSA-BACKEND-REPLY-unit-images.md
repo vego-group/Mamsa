@@ -1,8 +1,8 @@
 # Unit images — shipped, with three corrections
 
 **From:** backend · **Date:** 2026-08-26 · **Re:** `mamsa-unit-images-backend-task.md`
-**Status:** ✅ live on **staging**, verified end to end. **Not yet on production** — awaiting the
-owner's go-ahead, since it changes what the upload endpoint accepts.
+**Status:** ✅ live on **staging and production**. *(Written while it was staging-only; the owner
+approved and it went to production the same day, 2026-08-26. Backfill: 12/12 images, 0 failed.)*
 
 Everything in your "عاجل" and "مهم" lists is built. `sort_order` came along for free. Every
 addition is a new key, so `url` still works exactly as it does today and you can migrate at your
@@ -122,6 +122,11 @@ deliberate: it's your signal to fall back to `url`.
 
 All derivatives are **WebP q82**. Names are deterministic (`{fileId}_{key}.webp`), so you can build
 a URL without a lookup if you ever need to.
+
+**`thumb` and `card` are always 4:3; `full` and the original always share the source aspect.**
+Confirmed across thirteen shapes from 301×3000 to 4032×3024 — worst deviation from 4:3 is 0.001,
+i.e. sub-pixel. So a fixed 4:3 container with `object-cover` is safe for both cropped sizes, and
+`width`/`height` belong only on `full`.
 
 **Never upscaled, in either mode.** A 432×768 portrait asked for `card` (800×600) is cropped to 4:3
 and left at **432×324** rather than blown up to 800×600. So `variants.card` is a guarantee about
@@ -268,9 +273,9 @@ production as part of the deploy.
   it; auto-generating `"{اسم الوحدة} 3"` server-side would just move your placeholder behind an API
   call without making it any more descriptive. Say if you want the column and I'll add it with the
   form field.
-- **CDN** — not set up. Images are served statically from `api.mamsaa.com/storage` via the web
-  server. Now that derivatives are WebP and small, this is much less urgent, but it's a real
-  improvement and it's an infrastructure decision rather than a code one.
+- **CDN** — ~~not set up~~ **already in place on production, which I had wrong.** `api.mamsaa.com`
+  sits behind Hostinger's edge (`server: hcdn`), which caches, re-encodes JPEG, and content-
+  negotiates WebP. Staging does not. See the round-2 reply for what that does to the numbers.
 - **§5 AI enhancement** — agreed, and it wasn't going to come from this side. Your contractual-content
   argument is the right one: a guest books on those photos. Plain resize, which is what this is.
 
@@ -330,7 +335,16 @@ const src = (img: RawImage, size: 'thumb' | 'card' | 'full') =>
 ```
 
 Then `thumb` in the thumbnail strip and checkout summary, `card` in `UnitCard` and the collage,
-`full` in the lightbox — and `width`/`height` on the `<img>` to reserve the box.
+`full` in the lightbox.
+
+⚠️ **`width`/`height` describe the ORIGINAL, which is the same shape as `full` and nothing else.**
+Put them on the `<img>` that renders `full`. Do **not** put them on a `thumb` or `card` image:
+those are 4:3 cover crops, so a 432×768 portrait has `width`/`height` of aspect 0.563 while its
+`card` arrives at 1.333 — reserving that box is a worse layout shift than reserving none. For
+`thumb` and `card`, size the container in CSS: they are always 4:3.
+
+*(Corrected 2026-08-26. The original wording here said "`width`/`height` on the `<img>` to reserve
+the box" without qualifying which one, which would have wired it up wrong.)*
 
 A separate implementation guide follows if you want it; say so and I'll write it up the way I did
 for the admin unit form.
