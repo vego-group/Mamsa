@@ -56,18 +56,33 @@ class UnitResource extends JsonResource
                 );
 
                 if ($real->isNotEmpty()) {
-                    return $real->values()->map(fn ($img) => [
-                        'id'      => $img->id,
-                        'url'     => $img->url,
-                        'is_main' => (bool) $img->is_main,
-                    ]);
+                    // Partner-controlled order. Falls back to id for rows
+                    // written before sort_order existed, which is the order
+                    // they were already coming back in.
+                    return $real
+                        ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
+                        ->values()
+                        ->map(fn ($img) => [
+                            'id'      => $img->id,
+                            'url'     => $img->url,
+                            'is_main' => (bool) $img->is_main,
+                            // Null until the derivative set exists (legacy rows,
+                            // or a file the processor could not read). Clients
+                            // fall back to `url`.
+                            'width'    => $img->width !== null ? (int) $img->width : null,
+                            'height'   => $img->height !== null ? (int) $img->height : null,
+                            'variants' => $img->variant_urls,
+                        ]);
                 }
 
                 // No real photo yet → the single bundled default image.
                 return [[
-                    'id'      => 0,
-                    'url'     => \App\Support\Media::defaultImageUrl(),
-                    'is_main' => true,
+                    'id'       => 0,
+                    'url'      => \App\Support\Media::defaultImageUrl(),
+                    'is_main'  => true,
+                    'width'    => null,
+                    'height'   => null,
+                    'variants' => null,
                 ]];
             }),
             // Legacy Arabic-string list (kept for existing consumers)…

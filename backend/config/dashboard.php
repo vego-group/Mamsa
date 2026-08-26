@@ -18,6 +18,30 @@ return [
     'upload_max_bytes' => 10 * 1024 * 1024,
 
     /*
+     * Minimum acceptable photo resolution, expressed as long/short edge rather
+     * than width/height so the rule does not silently reject every portrait —
+     * a phone held upright is a normal way to photograph a room.
+     *
+     * Set to admit the images already in the library while still refusing
+     * something unusable in a full-screen viewer. Raise it once real partner
+     * uploads show what the floor should be; it is deliberately env-tunable so
+     * that does not need a deploy.
+     */
+    'image_min_long_edge'  => (int) env('IMAGE_MIN_LONG_EDGE', 1024),
+    'image_min_short_edge' => (int) env('IMAGE_MIN_SHORT_EDGE', 576),
+
+    // WebP quality for generated derivatives.
+    'image_quality' => (int) env('IMAGE_QUALITY', 82),
+
+    /*
+     * The canonical stored file is re-encoded for one reason — to strip EXIF,
+     * which carries the property's GPS position into a public bucket. Kept
+     * higher than the derivatives since it is a re-encode of the partner's
+     * own upload, not a resize.
+     */
+    'image_original_quality' => (int) env('IMAGE_ORIGINAL_QUALITY', 90),
+
+    /*
      * Is the identity scan mandatory for an individual partner registration?
      *
      * Making it required is a breaking change to a live client contract: the

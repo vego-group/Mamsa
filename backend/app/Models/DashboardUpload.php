@@ -16,7 +16,9 @@ class DashboardUpload extends Model
 
     protected $keyType = 'string';
 
-    protected $fillable = ['id', 'user_id', 'kind', 'original_name', 'mime', 'size', 'path', 'status'];
+    protected $fillable = ['id', 'user_id', 'kind', 'original_name', 'mime', 'size', 'path', 'status', 'width', 'height', 'variants'];
+
+    protected $casts = ['variants' => 'array'];
 
     public function user(): BelongsTo
     {

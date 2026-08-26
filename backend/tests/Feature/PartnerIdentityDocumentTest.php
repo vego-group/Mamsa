@@ -161,7 +161,8 @@ class PartnerIdentityDocumentTest extends TestCase
         $fileId = $presign['fileId'];
 
         // A JPEG, not a PDF. Sent to the signed URL presign handed back.
-        $jpeg = "\xFF\xD8\xFF".str_repeat('x', 128);
+        // Really encoded — the receiver decodes every image it accepts.
+        $jpeg = \Tests\Support\ImageFactory::jpeg(600, 400);
         $this->call('PUT', $presign['uploadUrl'], [], [], [], [], $jpeg)->assertOk();
 
         $this->actingAs($partner, 'dashboard')

@@ -115,9 +115,10 @@ class UnitWizardTest extends TestCase
             'kind' => 'unit_photo', 'fileName' => 'p.png', 'mimeType' => 'image/png', 'size' => 8,
         ])->json('uploadUrl');
 
-        // A real PNG header — the receiving end sniffs magic bytes, not the
-        // MIME type the client claimed.
-        $this->call('PUT', $url, [], [], [], [], "\x89PNG\r\n\x1a\n")
+        // A real PNG, not just its header: the receiver decodes what it is
+        // given so it can measure it and strip the metadata, so a fabricated
+        // signature no longer gets through.
+        $this->call('PUT', $url, [], [], [], [], \Tests\Support\ImageFactory::png(1280, 720))
             ->assertOk();
     }
 

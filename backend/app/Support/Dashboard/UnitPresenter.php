@@ -53,13 +53,18 @@ class UnitPresenter
             'address'              => $unit->address,
             'tourismLicenseNumber' => $unit->tourism_permit_no,
             'tourismLicenseFileId' => $unit->tourism_permit_file,
-            'photos'               => $unit->images->map(fn ($img) => [
-                // The source fileId (stable, re-sendable in photoFileIds on edit)
-                // when the photo came via the presign flow; else the row id.
-                'id'      => $img->file_id ?: 'ph'.$img->id,
-                'url'     => $img->url,
-                'isCover' => $cover && $img->id === $cover->id,
-            ])->values(),
+            'photos'               => $unit->images
+                ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
+                ->map(fn ($img) => [
+                    // The source fileId (stable, re-sendable in photoFileIds on edit)
+                    // when the photo came via the presign flow; else the row id.
+                    'id'       => $img->file_id ?: 'ph'.$img->id,
+                    'url'      => $img->url,
+                    'isCover'  => $cover && $img->id === $cover->id,
+                    'width'    => $img->width !== null ? (int) $img->width : null,
+                    'height'   => $img->height !== null ? (int) $img->height : null,
+                    'variants' => $img->variant_urls,
+                ])->values(),
             'rejectionReason'      => $unit->approval_status === 'rejected' ? $unit->rejection_reason : null,
             'publicUrl'            => $unit->approval_status === 'approved'
                 ? rtrim((string) config('dashboard.public_site_url'), '/').'/units/'.$unit->code

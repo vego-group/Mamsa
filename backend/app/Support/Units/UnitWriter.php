@@ -196,16 +196,22 @@ final class UnitWriter
         DB::transaction(function () use ($ownerId, $unit, $data, $cover) {
             $unit->images()->delete();
 
-            foreach ($data['photoFileIds'] as $fileId) {
+            foreach (array_values($data['photoFileIds']) as $position => $fileId) {
                 $upload = self::ownedUpload($ownerId, (string) $fileId, 'unit_photo');
                 if (! $upload) {
                     continue; // already reported by fileErrors(); defensive
                 }
 
+                // Dimensions and derivative paths are denormalised from the
+                // upload so the storefront never joins to read a gallery.
                 $unit->images()->create([
-                    'file_id' => $upload->id,
-                    'path'    => $upload->path,
-                    'is_main' => $fileId === $cover,
+                    'file_id'    => $upload->id,
+                    'path'       => $upload->path,
+                    'is_main'    => $fileId === $cover,
+                    'sort_order' => $position,
+                    'width'      => $upload->width,
+                    'height'     => $upload->height,
+                    'variants'   => $upload->variants,
                 ]);
             }
         });

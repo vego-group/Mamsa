@@ -190,11 +190,19 @@ class UnitPresenter
         $real  = $u->images->filter(fn ($i) => filled($i->path) && $i->path !== Media::defaultImagePath());
         $cover = $real->firstWhere('is_main', true) ?? $real->first();
 
-        return $real->map(fn ($i) => [
-            'id'      => filled($i->file_id) ? $i->file_id : null,
-            'url'     => $i->url,
-            'isCover' => $cover && $i->id === $cover->id,
-        ])->values()->all();
+        // Same derivative set the storefront gets — the approvals queue renders
+        // these as small thumbnails too, and was downloading full photographs
+        // for every row.
+        return $real
+            ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
+            ->map(fn ($i) => [
+                'id'       => filled($i->file_id) ? $i->file_id : null,
+                'url'      => $i->url,
+                'isCover'  => $cover && $i->id === $cover->id,
+                'width'    => $i->width !== null ? (int) $i->width : null,
+                'height'   => $i->height !== null ? (int) $i->height : null,
+                'variants' => $i->variant_urls,
+            ])->values()->all();
     }
 
     /** Per-request memo so a unit list doesn't re-query the default N times. */

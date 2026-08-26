@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UnitImage extends Model
 {
-    protected $fillable = ['unit_id', 'file_id', 'path', 'is_main'];
+    protected $fillable = ['unit_id', 'file_id', 'path', 'is_main', 'width', 'height', 'variants', 'sort_order'];
 
-    protected $casts = ['is_main' => 'boolean'];
+    protected $casts = ['is_main' => 'boolean', 'variants' => 'array'];
 
     public function unit(): BelongsTo
     {
@@ -33,5 +33,33 @@ class UnitImage extends Model
         }
 
         return asset('storage/' . $path);
+    }
+
+    /**
+     * Derivative URLs keyed by size (`thumb`/`card`/`full`), or null when this
+     * row has none — a legacy image, or one whose processing failed. Callers
+     * fall back to `url`, which is why the key is omitted rather than pointing
+     * at the original: a `thumb` that is secretly full-size would defeat the
+     * whole point of asking for one.
+     *
+     * @return array<string, string>|null
+     */
+    public function getVariantUrlsAttribute(): ?array
+    {
+        $paths = $this->variants;
+
+        if (! is_array($paths) || $paths === []) {
+            return null;
+        }
+
+        $urls = [];
+
+        foreach ($paths as $key => $path) {
+            if (is_string($path) && $path !== '') {
+                $urls[$key] = asset('storage/' . $path);
+            }
+        }
+
+        return $urls ?: null;
     }
 }
