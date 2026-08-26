@@ -107,7 +107,7 @@ class UnitsController extends Controller
             'beds'            => $data['beds'] ?? max(1, (int) ($data['bedrooms'] ?? 1)),
         ]));
 
-        UnitWriter::syncAmenities($unit, $data['amenities'] ?? null);
+        UnitWriter::syncAmenities($unit, $data);
         UnitWriter::syncPhotos((int) $request->user()->id, $unit, $data);
 
         return response()->json($this->units->detail($this->reload($unit)), 201);
@@ -141,7 +141,7 @@ class UnitsController extends Controller
         }
 
         $unit->update($columns);
-        UnitWriter::syncAmenities($unit, $data['amenities'] ?? null);
+        UnitWriter::syncAmenities($unit, $data);
         UnitWriter::syncPhotos((int) $unit->user_id, $unit, $data);
 
         return response()->json($this->units->detail($this->reload($unit)));

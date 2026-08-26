@@ -90,7 +90,7 @@ final class UnitWriter
             'district'             => ['sometimes', 'nullable', 'string', 'max:150'],
             'sizeSqm'              => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'description'          => ['sometimes', 'nullable', 'string', 'max:'.self::MAX_DESCRIPTION],
-            'amenities'            => ['sometimes', 'array'],
+            'amenities'            => ['sometimes', 'nullable', 'array'],
             'amenities.*'          => ['string', 'in:'.implode(',', array_keys(Maps::AMENITIES))],
             'checkIn'              => ['sometimes', 'nullable', 'date_format:H:i'],
             'checkOut'             => ['sometimes', 'nullable', 'date_format:H:i'],
@@ -99,7 +99,7 @@ final class UnitWriter
             'address'              => ['sometimes', 'nullable', 'string', 'max:255'],
             'tourismLicenseNumber' => ['sometimes', 'nullable', 'string', 'max:50'],
             'tourismLicenseFileId' => ['sometimes', 'nullable', 'string'],
-            'photoFileIds'         => ['sometimes', 'array', 'max:'.self::MAX_PHOTOS],
+            'photoFileIds'         => ['sometimes', 'nullable', 'array', 'max:'.self::MAX_PHOTOS],
             'photoFileIds.*'       => ['string'],
             'coverFileId'          => ['sometimes', 'nullable', 'string'],
         ];
@@ -127,7 +127,10 @@ final class UnitWriter
     public static function toColumns(array $data): array
     {
         $map = [
-            'name'                 => fn ($v) => ['unit_name' => strip_tags((string) $v)],
+            // Stored verbatim, like `description` below and for the same reason:
+            // strip_tags() deletes from `<` through the next `>` rather than
+            // escaping anything, so it silently truncates instead of protecting.
+            'name'                 => fn ($v) => ['unit_name' => (string) $v],
             'type'                 => fn ($v) => ['unit_type' => $v],
             'pricePerNight'        => fn ($v) => ['price' => $v],
             // Preset slug → FK. Only affects FUTURE bookings: paid bookings
@@ -142,7 +145,7 @@ final class UnitWriter
             // `units.city` stores the Arabic name. The partner dashboard sends
             // slugs, the admin console sends English labels; both land here.
             'city'                 => fn ($v) => ['city' => \App\Support\City::toArabic((string) $v) ?? $v],
-            'district'             => fn ($v) => ['district' => $v === null ? null : strip_tags((string) $v)],
+            'district'             => fn ($v) => ['district' => $v === null ? null : (string) $v],
             'sizeSqm'              => fn ($v) => ['area' => $v],
             // Stored verbatim. It used to go through strip_tags(), which is not
             // a sanitiser so much as a silent editor: `<` followed by anything
@@ -162,7 +165,9 @@ final class UnitWriter
             'checkOut'             => fn ($v) => ['checkout_time' => $v],
             'lat'                  => fn ($v) => ['lat' => $v],
             'lng'                  => fn ($v) => ['lng' => $v],
-            'address'              => fn ($v) => ['address' => $v === null ? null : strip_tags((string) $v)],
+            // The field a guest navigates by, and the one most likely to carry a
+            // `<`: "<200م من المسجد" lost everything after the bracket.
+            'address'              => fn ($v) => ['address' => $v === null ? null : (string) $v],
             'tourismLicenseNumber' => fn ($v) => ['tourism_permit_no' => $v],
             'tourismLicenseFileId' => fn ($v) => ['tourism_permit_file' => $v],
         ];
@@ -224,6 +229,10 @@ final class UnitWriter
             return;
         }
 
+        // A present null means the same as an empty list — "replace the gallery
+        // with nothing" — so the two array fields answer to the same spelling.
+        $data['photoFileIds'] = $data['photoFileIds'] ?? [];
+
         $cover = $data['coverFileId'] ?? ($data['photoFileIds'][0] ?? null);
 
         DB::transaction(function () use ($ownerId, $unit, $data, $cover) {
@@ -251,13 +260,24 @@ final class UnitWriter
     }
 
     /** @param array<int, string>|null $keys null → leave amenities untouched */
-    public static function syncAmenities(Unit $unit, ?array $keys): void
+    /**
+     * Absent key → unchanged. Present → the list REPLACES what the unit has,
+     * so `[]` (or `null`) clears every amenity.
+     *
+     * Takes the whole body rather than a pre-extracted value on purpose: with
+     * `$data['amenities'] ?? null` the caller cannot tell "not supplied" from
+     * "supplied as null", and an admin who unticked every box got a silent
+     * no-op. Same shape as syncPhotos() so the two array fields behave alike.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function syncAmenities(Unit $unit, array $data): void
     {
-        if ($keys === null) {
+        if (! array_key_exists('amenities', $data)) {
             return;
         }
 
-        $ids = collect($keys)
+        $ids = collect($data['amenities'] ?? [])
             ->map(fn ($k) => Maps::amenityToArabic($k))
             ->filter()
             ->map(fn ($name) => Feature::firstOrCreate(['name' => $name])->id);

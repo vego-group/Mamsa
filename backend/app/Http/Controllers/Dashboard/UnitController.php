@@ -67,7 +67,7 @@ class UnitController extends DashboardController
             ],
         ));
 
-        $this->syncAmenities($unit, $data['amenities'] ?? null);
+        UnitWriter::syncAmenities($unit, $data);
         $this->syncPhotos($request, $unit, $data);
 
         return $this->ok(UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])), 201);
@@ -93,7 +93,7 @@ class UnitController extends DashboardController
         }
 
         $unit->update($columns);
-        $this->syncAmenities($unit, $data['amenities'] ?? null);
+        UnitWriter::syncAmenities($unit, $data);
         $this->syncPhotos($request, $unit, $data);
 
         if ($wasApproved) {
@@ -184,12 +184,6 @@ class UnitController extends DashboardController
     }
 
     /* ---- helpers ---- */
-
-    /** @param array<int, string>|null $keys */
-    private function syncAmenities(Unit $unit, ?array $keys): void
-    {
-        UnitWriter::syncAmenities($unit, $keys);
-    }
 
     private function notifyAdmins(Unit $unit): void
     {
