@@ -1,4 +1,4 @@
-# `description` follow-up — one already done, two built
+# `description` follow-up — all three done, all on production
 
 **From:** backend · **Date:** 2026-08-26 · **Re:** `BACKEND-ASK-description-formatting-followup.md`
 
@@ -8,7 +8,7 @@
    نافذة التلف الصامت على `description` مغلقة منذ ذلك اليوم.
 
 2. إزالة strip_tags من name/district/address:   نعم — الثلاثة معاً.
-   مبنيّة ومختبَرة وعلى staging الآن؛ تنتظر نافذة نشر الإنتاج.
+   **نُشرت على الإنتاج 2026-08-26.**
 
 3. إفراغ amenities يتم بإرسال:   []   — وكان يعمل أصلاً.
    و null صار يعمل الآن أيضاً (كان 422).
@@ -39,13 +39,13 @@ One correction to your notes section: *"الإنتاج ما زال على 500"* 
 since that deploy. Worth updating the comment in `wizard.ts` alongside the "confirmed, not guessed"
 note you already added.
 
-⚠️ **But `address` is still corrupting on production today** — that's request 2, below, which is
-built but not yet deployed. Your data-loss argument transfers to it directly, and I'd say more
+~~But `address` is still corrupting on production today~~ — **no longer: request 2 went to
+production the same day, 2026-08-26.** Your data-loss argument transferred to it directly, and more
 forcefully, for the reason you gave: `address` is the field a guest navigates by.
 
 ---
 
-## 🔵 Request 2 — done, all three
+## 🔵 Request 2 — done, all three, live
 
 `strip_tags` is gone from `name`, `district` and `address`.
 
@@ -151,13 +151,26 @@ changing.
 |---|---|---|
 | `max:2000` on description | ✅ 2026-08-26 | ✅ |
 | `strip_tags` off `description` | ✅ 2026-08-26 | ✅ |
-| `strip_tags` off `name`/`district`/`address` | ⏳ built, awaiting window | ✅ |
+| `strip_tags` off `name`/`district`/`address` | ✅ 2026-08-26 | ✅ |
 | `amenities` / `photoFileIds` clearable with `[]` | ✅ (`[]` always worked) | ✅ |
-| …clearable with `null` | ⏳ built, awaiting window | ✅ |
+| …clearable with `null` | ✅ 2026-08-26 | ✅ |
 
 Backend suite: **342 passed, 1623 assertions** — 12 new here, covering both clearing spellings on
 both array fields, absent-means-unchanged, replace-not-append, and four angle-bracket cases across
 `address`, `name` and `district`.
 
-I'll confirm the production date for the remaining two as soon as I have the owner's window. Point
-me at it when you want to re-test against production — nothing on your side needs to change first.
+**Everything in this document is now on production, deployed 2026-08-26.** Verified there:
+
+```
+amenities rule    ["sometimes","nullable","array"]
+photoFileIds      ["sometimes","nullable","array","max:10"]
+address / district / name / description   all stored byte-identical
+
+on a throwaway unit, then deleted:
+  set two amenities  → 2
+  absent key         → 2   (unchanged)
+  null               → 0   (cleared)
+  []                 → 0   (cleared)
+```
+
+Re-test against production whenever suits; nothing on your side needs to change first.
