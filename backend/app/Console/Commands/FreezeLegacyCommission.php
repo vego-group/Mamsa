@@ -51,7 +51,7 @@ class FreezeLegacyCommission extends Command
 
         $query->with('unit')->chunkById(200, function ($bookings) use ($wallet, $dry, &$count, &$commission, &$adjusted) {
             foreach ($bookings as $booking) {
-                $newCommission = round((float) $booking->subtotal * Booking::COMMISSION_RATE, 2);
+                $newCommission = round((float) $booking->subtotal * Booking::LEGACY_COMMISSION_RATE, 2);
                 $newShare      = round((float) $booking->subtotal - $newCommission, 2);
                 $delta         = round($newShare - (float) $booking->partner_share, 2);
 

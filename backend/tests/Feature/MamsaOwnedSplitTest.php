@@ -29,13 +29,38 @@ class MamsaOwnedSplitTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_a_partner_unit_still_splits_two_percent(): void
+    public function test_a_partner_unit_splits_at_the_live_rate(): void
     {
+        // 10% since 2026-08-27. The guest still pays 1150 either way — the rate
+        // moves money between the platform and the partner, it does not change
+        // the price of a night.
         $p = Pricing::breakdown(1150.0, 1, mamsaOwned: false);
 
         $this->assertEqualsWithDelta(1000.00, $p['net_base'], 0.01);
-        $this->assertEqualsWithDelta(20.00, $p['commission_amount'], 0.01);
-        $this->assertEqualsWithDelta(980.00, $p['partner_share'], 0.01);
+        $this->assertEqualsWithDelta(100.00, $p['commission_amount'], 0.01);
+        $this->assertEqualsWithDelta(900.00, $p['partner_share'], 0.01);
+        $this->assertEqualsWithDelta(1150.00, $p['total'], 0.01, 'the guest price must not move');
+    }
+
+    public function test_the_configured_rate_is_what_gets_charged(): void
+    {
+        config()->set('booking.commission_rate', 0.25);
+
+        $p = Pricing::breakdown(1150.0, 1, mamsaOwned: false);
+
+        $this->assertEqualsWithDelta(250.00, $p['commission_amount'], 0.01);
+        $this->assertEqualsWithDelta(0.25, $p['commission_rate'], 0.0001);
+    }
+
+    public function test_the_legacy_rate_is_not_the_live_rate(): void
+    {
+        // These two must never be collapsed into one constant: the live rate
+        // prices new bookings, the legacy one reconstructs rows taken before
+        // the frozen columns existed. Merging them would restate history.
+        $this->assertNotSame(
+            (float) config('booking.commission_rate'),
+            \App\Models\Booking::LEGACY_COMMISSION_RATE,
+        );
     }
 
     public function test_a_mamsa_owned_unit_keeps_the_whole_net_base(): void
@@ -142,7 +167,10 @@ class MamsaOwnedSplitTest extends TestCase
         $entry = \App\Models\PartnerLedgerEntry::where('ref_id', (string) $booking->id)->first();
 
         $this->assertNotNull($entry, 'The partner was not credited at all.');
-        $this->assertEqualsWithDelta(980.00, (float) $entry->amount, 0.01);
+        // Whatever the live rate is, the wallet must be credited the share that
+        // was FROZEN on the booking — never recomputed from today's rate.
+        $this->assertEqualsWithDelta($pricing['partner_share'], (float) $entry->amount, 0.01);
+        $this->assertEqualsWithDelta(900.00, (float) $entry->amount, 0.01, 'net base 1000 less 10%');
         $this->assertSame($partner->id, $entry->partner_user_id);
     }
 }

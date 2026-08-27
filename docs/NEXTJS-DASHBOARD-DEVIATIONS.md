@@ -48,7 +48,7 @@ and `GET /units/1` both work. Just echo back whatever we send.
 ## 5. Money & dates
 
 - All money is **whole/decimal SAR** (numbers, not halalas). `commission + partnerShare === total`
-  holds on every booking (2% commission, frozen per booking).
+  holds on every booking (commission frozen per booking at the rate then live).
 - Dates in JSON are **ISO-8601 UTC** (`…Z`). Booking `checkIn`/`checkOut` combine the stay date with
   the unit's check-in/out time (default 15:00 / 12:00).
 

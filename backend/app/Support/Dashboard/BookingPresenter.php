@@ -8,7 +8,8 @@ use App\Models\Booking;
 
 /**
  * Maps a Booking to the partner-dashboard contract shape (§6). Financials use
- * the frozen 2% commission (commission + partnerShare === total).
+ * the commission frozen on the booking (commission + partnerShare === total).
+ * The rate is not fixed — it is whatever was live when the booking was taken.
  */
 class BookingPresenter
 {
@@ -17,7 +18,8 @@ class BookingPresenter
         $booking->loadMissing(['unit.images', 'user', 'payment', 'refunds']);
 
         $total      = (float) $booking->total_amount;
-        $commission = (float) ($booking->commission_amount ?? round($total * 0.02, 2));
+        $commission = (float) ($booking->commission_amount
+            ?: round((float) $booking->subtotal * Booking::LEGACY_COMMISSION_RATE, 2));
 
         $cover = $booking->unit?->images->firstWhere('is_main', true) ?? $booking->unit?->images->first();
 

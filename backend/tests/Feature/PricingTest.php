@@ -116,7 +116,7 @@ class PricingTest extends TestCase
             'taxes'         => 391.30,    // VAT carved out of the gross
             'tax_percent'   => 15.00,
             'total_amount'  => 3000.00,   // gross = what the guest pays
-            'partner_share' => 2556.53,   // netBase - 2% commission, frozen
+            'partner_share' => 2347.83,   // netBase - 10% commission, frozen
         ]);
 
         // The two contract invariants must hold exactly under rounding.

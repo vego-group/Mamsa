@@ -129,6 +129,8 @@ class Analytics
             ->withCount(['unitBookings as bookings_count'])
             ->withSum(['unitBookings as revenue' => $revenue], 'total_amount')
             ->withSum(['unitBookings as subtotal_sum' => $revenue], 'subtotal')
+            // Per-booking commission, so a mix of rates totals correctly.
+            ->withSum(['unitBookings as commission_sum' => $revenue], \Illuminate\Support\Facades\DB::raw(Booking::commissionExpr()))
             ->addSelect(['city' => Unit::query()->select('city')->whereColumn('units.user_id', 'users.id')->latest()->limit(1)])
             ->orderByDesc('revenue')->limit($limit)->get()
             ->map(fn (User $u) => [
@@ -138,7 +140,7 @@ class Analytics
                 'units'      => (int) $u->units_count,
                 'bookings'   => (int) $u->bookings_count,
                 'revenue'    => $this->money($u->revenue),
-                'commission' => $this->money((float) $u->subtotal_sum * Booking::COMMISSION_RATE),
+                'commission' => $this->money((float) $u->commission_sum),
             ])->all();
     }
 

@@ -43,7 +43,7 @@ trait MapsSpec
      */
     protected function commissionOf(float $base, ?float $stored = null): float
     {
-        return $this->money(($stored !== null && $stored > 0) ? $stored : round($base * Booking::COMMISSION_RATE, 2));
+        return $this->money(($stored !== null && $stored > 0) ? $stored : round($base * Booking::LEGACY_COMMISSION_RATE, 2));
     }
 
     /**

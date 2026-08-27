@@ -22,8 +22,20 @@ class Booking extends Model
      */
     public const REVENUE_STATUSES = [self::STATUS_CONFIRMED, self::STATUS_COMPLETED];
 
-    /** Mamsa's commission = 2% of the rental subtotal (frozen per booking). */
-    public const COMMISSION_RATE = 0.02;
+    /**
+     * The rate to IMPUTE for bookings that predate the frozen columns — not the
+     * rate charged today.
+     *
+     * Those rows were taken when the commission was 2%, so reconstructing them
+     * at the current rate would restate history: a report would claim Mamsa
+     * earned five times what it actually invoiced, and a partner's past
+     * earnings would shrink retroactively.
+     *
+     * The live rate lives in config('booking.commission_rate') and is read only
+     * by App\Support\Pricing, at the moment a booking is created. The two are
+     * separate on purpose and must not be merged.
+     */
+    public const LEGACY_COMMISSION_RATE = 0.02;
 
     /** @param \Illuminate\Database\Eloquent\Builder $q */
     public function scopeRevenue($q)
@@ -41,7 +53,7 @@ class Booking extends Model
     public static function commissionExpr(string $table = 'bookings'): string
     {
         return "(CASE WHEN {$table}.commission_amount > 0 THEN {$table}.commission_amount"
-            ." ELSE ROUND(COALESCE({$table}.subtotal, 0) * ".self::COMMISSION_RATE.", 2) END)";
+            ." ELSE ROUND(COALESCE({$table}.subtotal, 0) * ".self::LEGACY_COMMISSION_RATE.", 2) END)";
     }
 
     protected $fillable = [

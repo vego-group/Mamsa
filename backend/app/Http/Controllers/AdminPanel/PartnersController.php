@@ -81,7 +81,10 @@ class PartnersController extends Controller
 
         $d          = $u->partnerDetail;
         $revenue    = $this->money($u->revenue);
-        $commission = $this->money((float) $u->subtotal_sum * Booking::COMMISSION_RATE);
+        // Summed per booking, because the rate is no longer the same for all
+        // of them: multiplying total subtotal by one rate under-reports every
+        // booking taken since the commission changed.
+        $commission = $this->money((float) $u->commission_sum);
         $bookings   = (int) $u->bookings_count;
 
         // The partner's earnings are the SUM of the frozen per-booking share,
@@ -302,6 +305,8 @@ class PartnersController extends Controller
             ->withCount(['unitBookings as cancellations_12m' => fn ($q) => $q->where('bookings.status', 'cancelled')->where('bookings.created_at', '>=', $yearAgo)])
             ->withSum(['unitBookings as revenue' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'total_amount')
             ->withSum(['unitBookings as subtotal_sum' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'subtotal')
+            // Per-booking commission, so a mix of rates totals correctly.
+            ->withSum(['unitBookings as commission_sum' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], \Illuminate\Support\Facades\DB::raw(Booking::commissionExpr()))
             ->withAvg(['unitReviews as rating'], 'rating')
             ->addSelect(['city' => Unit::query()->select('city')->whereColumn('units.user_id', 'users.id')->latest()->limit(1)]);
     }

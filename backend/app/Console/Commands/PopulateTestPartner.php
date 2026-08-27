@@ -198,6 +198,7 @@ class PopulateTestPartner extends Command
             $subtotal = $nights * (float) $approved->price;
             $cleaning = 100;
             $total = $subtotal + $cleaning;
+            $rate = (float) config('booking.commission_rate');
 
             $booking = $approved->bookings()->updateOrCreate(
                 ['unit_id' => $approved->id, 'user_id' => $guest->id, 'start_date' => $start],
@@ -209,8 +210,10 @@ class PopulateTestPartner extends Command
                     'cleaning_fee' => $cleaning,
                     'service_fee' => 0,
                     'taxes' => 0,
-                    'commission_rate' => 0.02,
-                    'commission_amount' => round($subtotal * 0.02, 2),
+                    // Seeded at the LIVE rate so test data behaves like a real
+                    // booking taken today, not like a historical one.
+                    'commission_rate' => $rate,
+                    'commission_amount' => round($subtotal * $rate, 2),
                     'total_amount' => $total,
                     'status' => $status,
                     'cancellation_snapshot' => [

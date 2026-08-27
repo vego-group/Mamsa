@@ -54,7 +54,7 @@ POST /user/email/resend     (no body)
 | Trigger | Recipient | Status |
 |---|---|---|
 | `booking.confirmed` (Moyasar success) | Guest: code, unit, dates, total SAR, **frozen** policy snapshot tiers | ✅ |
-| `booking.confirmed` | Partner: code, unit, dates, guest, **net share** (total − frozen 2% commission — same number the dashboard shows) | ✅ |
+| `booking.confirmed` | Partner: code, unit, dates, guest, **net share** (total − the commission frozen on the booking — same number the dashboard shows) | ✅ |
 | 24h before check-in | Guest: address + check-in time | ✅ daily job, **10:00 Asia/Riyadh**, idempotent (a marker column — double runs can't double-send) |
 | `booking.cancelled` (guest) | Guest + Partner, refund from the frozen `policy_snapshot` | ✅ |
 | `booking.cancelled_by_host` | Guest: host cancelled + 100% refund | ✅ |

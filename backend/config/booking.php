@@ -18,10 +18,24 @@ return [
     // config-only, no admin edit surface.
     'tax_rate' => (float) env('BOOKING_TAX_RATE', 0.15),
 
-    // Mamsa's commission on partner rentals (2% of the nightly subtotal,
-    // never on taxes). Deducted from the partner's earnings — it does not
-    // change what the guest pays.
-    'commission_rate' => (float) env('BOOKING_COMMISSION_RATE', 0.02),
+    /*
+     * Mamsa's commission on partner rentals — a share of the nightly subtotal
+     * (the NET base), never of the VAT.
+     *
+     * Deducted from the partner's payout. It does NOT change what the guest
+     * pays: raising it moves money from the partner to the platform, it does
+     * not raise the price of a night.
+     *
+     * Applies to bookings made from now on. Every booking freezes the rate and
+     * the amount it was created under, so existing bookings keep the deal they
+     * were made on — see App\Support\Pricing and the frozen columns
+     * `commission_rate` / `commission_amount`. Reconstructing commission for
+     * rows that predate freezing uses Booking::LEGACY_COMMISSION_RATE, which is
+     * deliberately a different number.
+     *
+     * Raised from 2% to 10% on 2026-08-27 (owner).
+     */
+    'commission_rate' => (float) env('BOOKING_COMMISSION_RATE', 0.10),
 
     // Email task doc §2 — POST /bookings refuses guests without a verified
     // email (EMAIL_VERIFICATION_REQUIRED). Env-flagged per environment: ON

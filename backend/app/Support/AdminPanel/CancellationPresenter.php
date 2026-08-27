@@ -35,7 +35,7 @@ class CancellationPresenter
             'bookingTotal' => $this->money($b->total_amount),
             'refundAmount' => $this->money($refunded),
             // Lost commission = frozen amount, else 2% of subtotal (historical bookings have no frozen value).
-            'impact'       => -$this->money((float) $b->commission_amount > 0 ? (float) $b->commission_amount : round((float) $b->subtotal * Booking::COMMISSION_RATE, 2)),
+            'impact'       => -$this->money((float) $b->commission_amount > 0 ? (float) $b->commission_amount : round((float) $b->subtotal * Booking::LEGACY_COMMISSION_RATE, 2)),
             'refundStatus' => $this->refundStatusOf($b, $refunded),
             'mamsaOwned'   => (bool) ($b->unit?->mamsa_owned ?? false),
         ];

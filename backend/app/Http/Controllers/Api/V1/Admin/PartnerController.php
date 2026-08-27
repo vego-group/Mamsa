@@ -66,7 +66,7 @@ class PartnerController extends Controller
         $d = $u->partnerDetail;
 
         $revenue    = round((float) ($u->revenue ?? 0), 2);
-        $commission = round((float) ($u->subtotal_sum ?? 0) * Booking::COMMISSION_RATE, 2);
+        $commission = round((float) ($u->commission_sum ?? 0), 2);
         $bookings   = (int) $u->bookings_count;
         // avg is over the paid stays that produced the revenue, not all bookings.
         $paidCount  = (int) $u->unitBookings()->whereIn('bookings.status', Booking::REVENUE_STATUSES)->count();
@@ -176,6 +176,8 @@ class PartnerController extends Controller
             ->withCount(['unitBookings as cancellations_count' => fn ($q) => $q->where('bookings.status', 'cancelled')])
             ->withSum(['unitBookings as revenue' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'total_amount')
             ->withSum(['unitBookings as subtotal_sum' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'subtotal')
+            // Per-booking commission, so a mix of rates totals correctly.
+            ->withSum(['unitBookings as commission_sum' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], \Illuminate\Support\Facades\DB::raw(Booking::commissionExpr()))
             ->withAvg(['unitReviews as rating'], 'rating')
             ->addSelect(['city' => Unit::query()->select('city')
                 ->whereColumn('units.user_id', 'users.id')

@@ -34,7 +34,10 @@ class NewBooking extends Notification
         // (email task doc §3): total − the commission frozen on the booking.
         if (! $notifiable->hasAnyRole(['Admin', 'SuperAdmin'])) {
             $total      = (float) $this->booking->total_amount;
-            $commission = (float) ($this->booking->commission_amount ?? round($total * 0.02, 2));
+            // Frozen amount when there is one; the legacy rate otherwise, on
+            // the subtotal rather than the VAT-inclusive total.
+            $commission = (float) ($this->booking->commission_amount
+                ?: round((float) $this->booking->subtotal * Booking::LEGACY_COMMISSION_RATE, 2));
 
             return (new MailMessage())
                 ->subject('حجز جديد مؤكد BK-'.$this->booking->id.' — مَمسَى')

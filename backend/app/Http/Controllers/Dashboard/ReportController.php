@@ -40,7 +40,7 @@ class ReportController extends DashboardController
         // the payout engine. VAT is remitted to ZATCA and was never Mamsa's to
         // take a percentage of.
         $commission = (float) $base()
-            ->selectRaw('COALESCE(SUM(COALESCE(NULLIF(commission_amount,0), ROUND(subtotal*0.02,2))),0) as v')
+            ->selectRaw('COALESCE(SUM('.Booking::commissionExpr().'),0) as v')
             ->value('v');
 
         // What the partner is actually owed, frozen per booking — the same
@@ -170,7 +170,7 @@ class ReportController extends DashboardController
     {
         $frozen = (float) ($b->commission_amount ?? 0);
 
-        return $frozen > 0 ? $frozen : round((float) $b->subtotal * Booking::COMMISSION_RATE, 2);
+        return $frozen > 0 ? $frozen : round((float) $b->subtotal * Booking::LEGACY_COMMISSION_RATE, 2);
     }
 
     /** What the partner is owed — the frozen share, matching the wallet. */
