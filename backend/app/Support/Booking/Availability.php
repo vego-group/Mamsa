@@ -57,6 +57,26 @@ final class Availability
             ->whereDate('end_date', '>', $start);
     }
 
+    /**
+     * Narrow a UNIT query to those free for the whole range.
+     *
+     * Used by the search listing, so a result set can honestly be labelled
+     * "available for your stay". Reuses the same predicate the probe and the
+     * create enforce — a listing that advertised availability on its own rules
+     * would be the same lie in a wider place.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<Unit>  $units
+     */
+    public static function onlyFree(Builder $units, string $start, string $end): void
+    {
+        $units->whereDoesntHave('bookings', fn (Builder $q) => $q
+            ->whereIn('status', self::BLOCKING_STATUSES)
+            ->whereDate('start_date', '<', $end)
+            ->whereDate('end_date', '>', $start));
+
+        $units->whereDoesntHave('blockedDates', fn (Builder $q) => $q->overlapping($start, $end));
+    }
+
     /** Is anything — a booking or a block — holding this range? */
     public static function isTaken(Unit $unit, string $start, string $end): bool
     {

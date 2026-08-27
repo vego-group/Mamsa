@@ -8,6 +8,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -175,5 +176,43 @@ return Application::configure(basePath: dirname(__DIR__))
             return response()->json([
                 'error' => ['code' => 'SERVER_ERROR', 'message' => 'حدث خطأ غير متوقع'],
             ], 500);
+        });
+
+        /*
+         * Guest API (/api/v1) — the only surface without a renderer of its own,
+         * so it fell through to Laravel's default and answered a missing unit
+         * with "No query results for model [App\Models\Unit] 999999".
+         *
+         * Clients display `message` to the visitor, so that string put our
+         * model names and namespace layout on a public page. The detail belongs
+         * in the log; the caller gets a stable `code` to branch and translate
+         * on.
+         *
+         * Deliberately narrow: only not-found and otherwise-unhandled errors.
+         * Validation and auth responses keep their existing shapes, which
+         * clients already parse.
+         */
+        $exceptions->render(function (\Throwable $e, Request $request) {
+            if (! $request->is('api/*')
+                || $request->attributes->get('dashboard_api')
+                || $request->attributes->get('admin_panel_api')) {
+                return null;
+            }
+
+            if ($e instanceof ModelNotFoundException || $e instanceof NotFoundHttpException) {
+                return response()->json(['message' => 'المورد غير موجود', 'code' => 'NOT_FOUND'], 404);
+            }
+
+            if ($e instanceof ValidationException
+                || $e instanceof AuthenticationException
+                || $e instanceof ThrottleRequestsException
+                || $e instanceof \App\Exceptions\OtpException
+                || $e instanceof HttpExceptionInterface) {
+                return null; // keep the shapes clients already handle
+            }
+
+            report($e);
+
+            return response()->json(['message' => 'حدث خطأ غير متوقع', 'code' => 'SERVER_ERROR'], 500);
         });
     })->create();

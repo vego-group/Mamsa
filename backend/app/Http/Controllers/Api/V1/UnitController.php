@@ -41,7 +41,13 @@ class UnitController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Unit::with(['images', 'features', 'cancellationPolicy.tiers'])
+        // `owner.partnerDetail` is loaded here too: without it every unit card
+        // rendered from this list showed a blank host and an unlit verification
+        // badge, because UnitResource only emits `owner` when the relation is
+        // present.
+        $query = Unit::with(['images', 'features', 'cancellationPolicy.tiers', 'owner.partnerDetail'])
+            ->withCount('reviews')
+            ->withAvg('reviews as reviews_avg_rating', 'rating')
             ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available');
@@ -55,8 +61,13 @@ class UnitController extends Controller
                     ->orWhere('district', 'like', $term);
             });
         }
+        // Slug (`riyadh`), English (`Riyadh`) or Arabic (`الرياض`) all resolve to
+        // the stored Arabic value. An exact match on the raw input worked only
+        // for clients that already spoke the stored spelling, and failed as
+        // "no results" rather than as an error — indistinguishable, from the
+        // outside, from a city with nothing listed in it.
         if ($request->filled('city')) {
-            $query->where('city', $request->city);
+            \App\Support\City::filter($query, 'city', (string) $request->city);
         }
         if ($request->filled('type')) {
             $query->where('unit_type', $request->type);
@@ -105,7 +116,54 @@ class UnitController extends Controller
             }
         }
 
-        return UnitResource::collection($query->paginate(12));
+        // Availability window (§2.1). Previously accepted and ignored, so a
+        // search could show a fully booked unit under a banner promising it was
+        // free for those exact nights.
+        // `nullable`, not `sometimes`: `sometimes` skips a field that is absent,
+        // which skips `required_with` with it — so half a window passed
+        // validation and was then silently ignored, which is exactly the
+        // failure this section exists to remove.
+        $dates = $request->validate([
+            'start_date' => ['nullable', 'required_with:end_date', 'date'],
+            'end_date'   => ['nullable', 'required_with:start_date', 'date', 'after:start_date'],
+        ]);
+
+        if (isset($dates['start_date'], $dates['end_date'])) {
+            Availability::onlyFree($query, $dates['start_date'], $dates['end_date']);
+        }
+
+        self::applySort($query, (string) $request->query('sort', ''));
+
+        // Caller-controlled page size, capped: an uncapped one is a way to ask
+        // for the entire table in a single query.
+        $perPage = min(max((int) $request->query('per_page', 12), 1), 50);
+
+        return UnitResource::collection($query->paginate($perPage));
+    }
+
+    /**
+     * Ordering for the search listing.
+     *
+     * Every branch ends with `id`, including the default. Without a unique
+     * tiebreaker the database is free to return rows in any order it likes for
+     * equal keys — and it need not pick the same order twice, so paging through
+     * results could show one unit on two pages and never show another at all.
+     */
+    private static function applySort(\Illuminate\Database\Eloquent\Builder $query, string $sort): void
+    {
+        match ($sort) {
+            'price_asc'  => $query->orderBy('price'),
+            'price_desc' => $query->orderByDesc('price'),
+            'newest'     => $query->orderByDesc('created_at'),
+            'rating'     => $query->orderByDesc(
+                \Illuminate\Support\Facades\DB::raw('(select coalesce(avg(rating), 0) from reviews where reviews.unit_id = units.id)')
+            ),
+            // Unrecognised or absent → featured first, then newest. This is the
+            // shape the storefront calls "موصى به".
+            default      => $query->orderByDesc('is_featured')->orderByDesc('created_at'),
+        };
+
+        $query->orderBy('units.id');
     }
 
     /**
@@ -116,10 +174,12 @@ class UnitController extends Controller
     {
         $limit = min((int) $request->input('limit', 8), 12);
 
-        $units = Unit::with(['images', 'features', 'cancellationPolicy.tiers'])
+        $units = Unit::with(['images', 'features', 'cancellationPolicy.tiers', 'owner.partnerDetail'])
             ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available')
+            ->withCount('reviews')
+            ->withAvg('reviews as reviews_avg_rating', 'rating')
             ->withCount(['bookings' => fn ($q) => $q->where('status', 'confirmed')])
             ->orderByDesc('bookings_count')
             ->orderByDesc('id')

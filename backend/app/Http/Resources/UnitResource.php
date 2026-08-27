@@ -27,7 +27,16 @@ class UnitResource extends JsonResource
             'description'         => $this->description,
             'checkin_time'        => $this->checkin_time,
             'checkout_time'       => $this->checkout_time,
-            'cancellation_policy' => $this->cancellation_policy,
+            // The EFFECTIVE preset key, not the dead `cancellation_policy` enum
+            // column it used to echo. That column only ever held `no_cancel` /
+            // `48_hours` — neither of which is a policy the refund engine knows
+            // — so a client using it as a pre-payment fallback showed the guest
+            // a refund schedule the platform would never honour.
+            //
+            // Always one of the preset keys, and always the policy that would
+            // actually be applied. Same value as
+            // `cancellation_policy_details.template`.
+            'cancellation_policy' => $this->effectivePolicyKey(),
             // FR-021 — the unit's LIVE tiered policy for pre-booking display
             // (unit page / checkout). Same shape as the booking's
             // policy_snapshot (minus checkin_at) and same default-policy
@@ -44,6 +53,9 @@ class UnitResource extends JsonResource
             // Uniform KSA VAT rate applied to every unit (15%). Exposed so the
             // storefront never hardcodes it.
             'tax_percent'         => \App\Support\Pricing::taxPercent(),
+            // Needed for a `newest` sort to mean anything client-side, and so a
+            // "new listing" badge is read from the record rather than invented.
+            'created_at'          => $this->created_at?->toIso8601ZuluString(),
             'approval_status'     => $this->approval_status,
             'rejection_reason'    => $this->when(
                 in_array($this->approval_status, ['rejected']),
@@ -93,8 +105,15 @@ class UnitResource extends JsonResource
             'amenities'           => $this->whenLoaded('features', fn () =>
                 \App\Support\Dashboard\Maps::amenityPairs($this->features->pluck('name'))
             ),
-            'avg_rating'          => round((float) $this->reviews()->avg('rating'), 1),
-            'reviews_count'       => $this->reviews()->count(),
+            // Prefer the eager-loaded aggregates. Computing these per row cost
+            // TWO queries per unit, so a 50-item page ran 100 extra queries to
+            // produce two numbers.
+            //
+            // `avg_rating` is 0 (never null) when there are no reviews, and
+            // `reviews_count` is the real count — so a client can tell "unrated"
+            // from "rated zero" by reading the count, not the average.
+            'avg_rating'          => round((float) ($this->reviews_avg_rating ?? $this->reviews()->avg('rating')), 1),
+            'reviews_count'       => (int) ($this->reviews_count ?? $this->reviews()->count()),
             'owner'               => $this->whenLoaded('owner', fn () => [
                 'id'          => $this->owner->id,
                 'name'        => $this->owner->name,
@@ -105,6 +124,19 @@ class UnitResource extends JsonResource
                 'avatar_url'  => null,
             ]),
         ];
+    }
+
+    /**
+     * The preset the refund engine would apply: the unit's own, else the
+     * platform default. Mirrors CancellationPolicyService::snapshotForBooking().
+     */
+    private function effectivePolicyKey(): ?string
+    {
+        $policy = $this->relationLoaded('cancellationPolicy')
+            ? ($this->cancellationPolicy ?? self::defaultPolicy())
+            : ($this->cancellationPolicy()->first() ?? self::defaultPolicy());
+
+        return $policy?->key;
     }
 
     /**
