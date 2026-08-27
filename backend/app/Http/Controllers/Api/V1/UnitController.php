@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\Booking;
 use App\Models\Unit;
+use App\Support\Booking\Availability;
 use App\Support\Pricing;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -227,24 +228,10 @@ class UnitController extends Controller
             'end_date'   => ['required', 'date', 'after:start_date'],
         ]);
 
-        $conflict = Booking::where('unit_id', $unit->id)
-            ->whereIn('status', ['pending_payment', 'confirmed'])
-            ->where(function ($q) use ($request) {
-                $q->whereBetween('start_date', [$request->start_date, $request->end_date])
-                  ->orWhereBetween('end_date', [$request->start_date, $request->end_date])
-                  ->orWhere(function ($inner) use ($request) {
-                      $inner->where('start_date', '<=', $request->start_date)
-                            ->where('end_date', '>=', $request->end_date);
-                  });
-            })
-            ->exists();
-
-        // Partner manual closures + external (iCal) bookings count as unavailable.
-        $blocked = $conflict ? false : $unit->blockedDates()
-            ->overlapping($request->start_date, $request->end_date)
-            ->exists();
-
-        $available = ! $conflict && ! $blocked;
+        // Same predicate POST /bookings enforces — see Availability. A probe
+        // that disagreed with the create is how a guest loses a booking at the
+        // last step, so there is one definition and both read it.
+        $available = ! Availability::isTaken($unit, $request->start_date, $request->end_date);
         $payload   = ['available' => $available];
 
         // Server-computed breakdown for the checkout page — the exact same
@@ -287,4 +274,40 @@ class UnitController extends Controller
 
         return response()->json($reviews);
     }
+    /**
+     * GET /units/{unit}/blocked-dates?from=&to=
+     *
+     * The dates a guest cannot pick, so the calendar can grey them out instead
+     * of letting someone choose them, fill in their details, and be refused at
+     * checkout. Ranges are INCLUSIVE of both ends and already merged.
+     *
+     * Bookings and partner closures are deliberately not distinguished: the
+     * guest only needs to know a date is unavailable, and saying which would
+     * publish how busy a partner's unit is to anyone who asks.
+     */
+    public function blockedDates(Request $request, Unit $unit): JsonResponse
+    {
+        $data = $request->validate([
+            'from' => ['sometimes', 'date'],
+            'to'   => ['sometimes', 'date', 'after_or_equal:from'],
+        ]);
+
+        // Defaults cover the window a picker can realistically show; a wider
+        // one is allowed but capped so a single call cannot scan years.
+        $from = isset($data['from']) ? now()->parse($data['from']) : now();
+        $to   = isset($data['to']) ? now()->parse($data['to']) : (clone $from)->addMonths(6);
+
+        if ($to->diffInDays($from) > 400) {
+            $to = (clone $from)->addDays(400);
+        }
+
+        // Flat, like the sibling /availability endpoint — two envelopes on
+        // adjacent routes is a needless branch on the client.
+        return response()->json([
+            'from'    => $from->toDateString(),
+            'to'      => $to->toDateString(),
+            'blocked' => Availability::blockedRanges($unit, $from->toDateString(), $to->toDateString()),
+        ]);
+    }
+
 }

@@ -8,10 +8,13 @@ use App\Http\Resources\BookingResource;
 use App\Models\Booking;
 use App\Models\Unit;
 use App\Services\CancellationPolicyService;
+use App\Support\Booking\Availability;
+use App\Support\Booking\UnitUnavailable;
 use App\Support\Pricing;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class BookingController extends Controller
 {
@@ -96,38 +99,54 @@ class BookingController extends Controller
             ->where('status', 'available')
             ->firstOrFail();
 
-        // conflict check
-        $conflict = Booking::where('unit_id', $unit->id)
-            ->whereIn('status', ['pending_payment', 'confirmed'])
-            ->where(function ($q) use ($data) {
-                $q->whereBetween('start_date', [$data['start_date'], $data['end_date']])
-                  ->orWhereBetween('end_date', [$data['start_date'], $data['end_date']])
-                  ->orWhere(function ($inner) use ($data) {
-                      $inner->where('start_date', '<=', $data['start_date'])
-                            ->where('end_date', '>=', $data['end_date']);
-                  });
-            })
-            ->exists();
-
-        if ($conflict) {
-            return response()->json(['message' => 'الوحدة محجوزة في هذه الفترة'], 422);
-        }
-
-        // Blocked dates: partner manual closures + external (iCal) bookings.
-        $blocked = $unit->blockedDates()
-            ->overlapping($data['start_date'], $data['end_date'])
-            ->exists();
-
-        if ($blocked) {
-            return response()->json(['message' => 'الوحدة غير متاحة في هذه الفترة'], 422);
-        }
-
         $nights  = (int) now()->parse($data['start_date'])->diffInDays($data['end_date']);
         // The split is frozen here for the life of the booking, so the
         // ownership flag has to be read at this moment — not inferred later.
         $pricing = Pricing::breakdown((float) $unit->price, $nights, (bool) $unit->mamsa_owned);
 
-        $booking = Booking::create([
+        /*
+         * Check and create under a lock on the UNIT row.
+         *
+         * The availability probe the client ran earlier is advice, not a
+         * reservation — nothing stops another guest booking the same nights in
+         * the seconds between. Re-checking here without a lock only narrows that
+         * window: two requests can both read "free" before either has written,
+         * and both then succeed. MySQL has no exclusion constraint to express
+         * "no overlapping ranges", so the unit row is the thing to serialise on.
+         *
+         * Concurrent bookings for DIFFERENT units are unaffected; two for the
+         * same unit queue, and the second sees the first's row.
+         */
+        try {
+            $booking = DB::transaction(function () use ($unit, $data, $pricing) {
+                Unit::whereKey($unit->id)->lockForUpdate()->first();
+
+                // Kept as two checks so the guest is told which it is: another
+                // booking, or the partner having closed the dates.
+                if (Availability::conflictingBookings((int) $unit->id, $data['start_date'], $data['end_date'])->exists()) {
+                    throw new UnitUnavailable('الوحدة محجوزة في هذه الفترة');
+                }
+
+                if ($unit->blockedDates()->overlapping($data['start_date'], $data['end_date'])->exists()) {
+                    throw new UnitUnavailable('الوحدة غير متاحة في هذه الفترة');
+                }
+
+                return $this->persist($unit, $data, $pricing);
+            });
+        } catch (UnitUnavailable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(new BookingResource($booking->load('unit.images')), 201);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $pricing
+     */
+    private function persist(Unit $unit, array $data, array $pricing): Booking
+    {
+        return Booking::create([
             'unit_id'           => $unit->id,
             'user_id'           => auth()->id(),
             'start_date'        => $data['start_date'],
@@ -152,7 +171,5 @@ class BookingController extends Controller
             'status'            => Booking::STATUS_PENDING, // explicit so the in-memory model matches the DB default
             'notes'             => $data['notes'] ?? null,
         ]);
-
-        return response()->json(new BookingResource($booking->load('unit.images')), 201);
     }
 }

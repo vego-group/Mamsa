@@ -102,8 +102,10 @@ class UnitFieldClearingTest extends TestCase
 
     public function test_an_empty_photo_list_clears_the_gallery(): void
     {
-        $unit = $this->unitWithAmenities();
-        $unit->images()->create(['path' => 'dashboard/unit_photo/x.jpg', 'is_main' => true]);
+        // A photo the client CAN address — the only kind an empty list removes.
+        $unit   = $this->unitWithAmenities();
+        $upload = $this->upload((int) $unit->user_id);
+        $unit->images()->create(['file_id' => $upload->id, 'path' => $upload->path, 'is_main' => true]);
 
         $this->edit($unit, ['photoFileIds' => []])->assertOk();
 
@@ -112,10 +114,72 @@ class UnitFieldClearingTest extends TestCase
 
     public function test_a_null_photo_list_clears_the_gallery(): void
     {
-        $unit = $this->unitWithAmenities();
-        $unit->images()->create(['path' => 'dashboard/unit_photo/x.jpg', 'is_main' => true]);
+        $unit   = $this->unitWithAmenities();
+        $upload = $this->upload((int) $unit->user_id);
+        $unit->images()->create(['file_id' => $upload->id, 'path' => $upload->path, 'is_main' => true]);
 
         $this->edit($unit, ['photoFileIds' => null])->assertOk();
+
+        $this->assertSame(0, $unit->images()->count());
+    }
+
+    /* ---------- photos that cannot be addressed ---------- */
+
+    public function test_a_photo_without_a_file_id_survives_an_empty_list(): void
+    {
+        // It predates the upload flow, so no client can name it in photoFileIds
+        // — deleting it would be answering a limit of the request format rather
+        // than anyone's intent, and the file cannot be put back.
+        $unit = $this->unitWithAmenities();
+        $unit->images()->create(['path' => 'legacy/old.jpg', 'is_main' => true]);
+
+        $this->edit($unit, ['photoFileIds' => []])->assertOk();
+
+        $this->assertSame(1, $unit->images()->count());
+        $this->assertSame('legacy/old.jpg', $unit->images()->first()->path);
+    }
+
+    public function test_it_also_survives_an_ordinary_photo_edit(): void
+    {
+        // The case the admin console's own guard could not cover: adding a photo
+        // used to wipe the gallery just the same as clearing it.
+        $unit   = $this->unitWithAmenities();
+        $upload = $this->upload((int) $unit->user_id);
+        $unit->images()->create(['path' => 'legacy/old.jpg', 'is_main' => true]);
+
+        $this->edit($unit, ['photoFileIds' => [$upload->id]])->assertOk();
+
+        $paths = $unit->images()->orderBy('sort_order')->pluck('path')->all();
+
+        $this->assertContains('legacy/old.jpg', $paths);
+        $this->assertSame(2, count($paths));
+    }
+
+    public function test_the_addressable_photos_keep_the_order_that_was_sent(): void
+    {
+        $unit = $this->unitWithAmenities();
+        $unit->images()->create(['path' => 'legacy/old.jpg', 'is_main' => true]);
+        $a = $this->upload((int) $unit->user_id);
+        $b = $this->upload((int) $unit->user_id);
+
+        $this->edit($unit, ['photoFileIds' => [$a->id, $b->id], 'coverFileId' => $b->id])->assertOk();
+
+        $rows = $unit->images()->orderBy('sort_order')->get();
+
+        // Client order first, unaddressable trailing behind it.
+        $this->assertSame([$a->path, $b->path, 'legacy/old.jpg'], $rows->pluck('path')->all());
+        // And the cover the client chose is the cover, not the survivor.
+        $this->assertSame($b->path, $rows->firstWhere('is_main', true)?->path);
+    }
+
+    public function test_a_normal_gallery_is_still_fully_replaced(): void
+    {
+        // The preservation must not turn into "photos never get removed".
+        $unit = $this->unitWithAmenities();
+        $old  = $this->upload((int) $unit->user_id);
+        $unit->images()->create(['file_id' => $old->id, 'path' => $old->path, 'is_main' => true]);
+
+        $this->edit($unit, ['photoFileIds' => []])->assertOk();
 
         $this->assertSame(0, $unit->images()->count());
     }
@@ -184,6 +248,23 @@ class UnitFieldClearingTest extends TestCase
             ], $overrides))
             ->assertStatus(201)
             ->json('id');
+    }
+
+    /** A stored unit_photo upload owned by the given user, as presign+PUT leaves it. */
+    private function upload(int $ownerId): \App\Models\DashboardUpload
+    {
+        $id = 'file_'.strtolower((string) str()->ulid());
+
+        return \App\Models\DashboardUpload::create([
+            'id'            => $id,
+            'user_id'       => $ownerId,
+            'kind'          => 'unit_photo',
+            'original_name' => 'p.jpg',
+            'mime'          => 'image/jpeg',
+            'size'          => 1000,
+            'path'          => "dashboard/unit_photo/{$id}.jpg",
+            'status'        => 'stored',
+        ]);
     }
 
     private function unitWithAmenities(): Unit

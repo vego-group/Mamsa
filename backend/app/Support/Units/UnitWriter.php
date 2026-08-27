@@ -219,7 +219,18 @@ final class UnitWriter
      * Replace the gallery from the ordered photoFileIds.
      *
      * Absent key → gallery untouched. Present (even empty) → authoritative
-     * replace, so removing a photo in the client actually removes it.
+     * replace of every photo the request is ABLE to address, so removing a photo
+     * in the client actually removes it.
+     *
+     * Photos with no `file_id` are the exception, and are kept. They predate the
+     * upload flow, so they have no id a client could put in `photoFileIds` — the
+     * list can never contain them, and deleting them here would destroy a photo
+     * in answer to a limitation of the request format rather than to anyone's
+     * intent. There is no way to put such a file back.
+     *
+     * That means a client cannot empty a gallery it could not fully represent —
+     * which is the safe direction to fail, and removes the need for every
+     * console to carry its own guard against the same trap.
      *
      * @param  array<string, mixed>  $data
      */
@@ -236,9 +247,11 @@ final class UnitWriter
         $cover = $data['coverFileId'] ?? ($data['photoFileIds'][0] ?? null);
 
         DB::transaction(function () use ($ownerId, $unit, $data, $cover) {
-            $unit->images()->delete();
+            $unit->images()->whereNotNull('file_id')->where('file_id', '!=', '')->delete();
 
-            foreach (array_values($data['photoFileIds']) as $position => $fileId) {
+            $position = 0;
+
+            foreach (array_values($data['photoFileIds']) as $fileId) {
                 $upload = self::ownedUpload($ownerId, (string) $fileId, 'unit_photo');
                 if (! $upload) {
                     continue; // already reported by fileErrors(); defensive
@@ -250,16 +263,47 @@ final class UnitWriter
                     'file_id'    => $upload->id,
                     'path'       => $upload->path,
                     'is_main'    => $fileId === $cover,
-                    'sort_order' => $position,
+                    'sort_order' => $position++,
                     'width'      => $upload->width,
                     'height'     => $upload->height,
                     'variants'   => $upload->variants,
                 ]);
             }
+
+            self::reorderKeptPhotos($unit, $position, $position > 0);
         });
     }
 
-    /** @param array<int, string>|null $keys null → leave amenities untouched */
+    /**
+     * Settle the photos that survived a sync because they could not be
+     * addressed: give them positions after the ones the client ordered, and
+     * make sure the unit still has exactly one cover.
+     *
+     * @param  int   $from      first free sort_order
+     * @param  bool  $demote    true when the client supplied its own cover
+     */
+    private static function reorderKeptPhotos(Unit $unit, int $from, bool $demote): void
+    {
+        $kept = $unit->images()
+            ->where(fn ($q) => $q->whereNull('file_id')->orWhere('file_id', ''))
+            ->orderBy('sort_order')->orderBy('id')
+            ->get();
+
+        foreach ($kept as $image) {
+            $image->update([
+                'sort_order' => $from++,
+                'is_main'    => $demote ? false : (bool) $image->is_main,
+            ]);
+        }
+
+        // A gallery with no cover renders no hero. Only reachable when the
+        // client cleared every addressable photo and what remains never carried
+        // the flag.
+        if ($unit->images()->where('is_main', true)->doesntExist()) {
+            $unit->images()->orderBy('sort_order')->orderBy('id')->first()?->update(['is_main' => true]);
+        }
+    }
+
     /**
      * Absent key → unchanged. Present → the list REPLACES what the unit has,
      * so `[]` (or `null`) clears every amenity.

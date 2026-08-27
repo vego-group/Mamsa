@@ -58,6 +58,9 @@ Route::prefix('v1')->group(function () {
         Route::get('{unit}', [UnitController::class, 'show'])->name('show');
         Route::get('{unit}/reviews', [UnitController::class, 'reviews'])->name('reviews');
         Route::post('{unit}/availability', [UnitController::class, 'checkAvailability'])->name('availability');
+        // Calendar feed: the ranges a guest cannot pick, so a conflict is shown
+        // in the picker instead of at checkout.
+        Route::get('{unit}/blocked-dates', [UnitController::class, 'blockedDates'])->name('blocked-dates');
     });
 
     Route::get('offers', [OfferController::class, 'index'])->name('api.offers.index');
