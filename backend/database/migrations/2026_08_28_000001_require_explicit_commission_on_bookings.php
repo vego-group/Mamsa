@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Drop the DEFAULT from the commission columns so a booking cannot be written
+ * Drop the DEFAULT from the money-split columns so a booking cannot be written
  * without one.
  *
  * Both columns were already NOT NULL — what let an unfrozen row exist was the
@@ -49,6 +49,7 @@ return new class extends Migration
 
         DB::statement('ALTER TABLE bookings ALTER COLUMN commission_rate DROP DEFAULT');
         DB::statement('ALTER TABLE bookings ALTER COLUMN commission_amount DROP DEFAULT');
+        DB::statement('ALTER TABLE bookings ALTER COLUMN partner_share DROP DEFAULT');
     }
 
     public function down(): void
@@ -59,5 +60,6 @@ return new class extends Migration
 
         DB::statement('ALTER TABLE bookings ALTER COLUMN commission_rate SET DEFAULT 0');
         DB::statement('ALTER TABLE bookings ALTER COLUMN commission_amount SET DEFAULT 0');
+        DB::statement('ALTER TABLE bookings ALTER COLUMN partner_share SET DEFAULT 0');
     }
 };

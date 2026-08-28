@@ -73,7 +73,9 @@ class Booking extends Model
      */
     public static function commissionExpr(string $table = 'bookings'): string
     {
-        return "COALESCE({$table}.commission_amount, 0)";
+        // No COALESCE: the column is NOT NULL and no caller LEFT JOINs bookings,
+        // so wrapping it would only suggest a nullability that does not exist.
+        return "{$table}.commission_amount";
     }
 
     protected $fillable = [
