@@ -171,7 +171,10 @@ class DashboardTestPartnerSeeder extends Seeder
             $nights   = Carbon::parse($start)->diffInDays(Carbon::parse($end));
             $subtotal = $nights * (float) $unit->price;
             $cleaning = 100;
-            $commission = round($subtotal * 0.02, 2);
+            // Live rate, not a hardcoded 2%: seeded data should behave like a
+            // booking taken today.
+            $rate       = (float) config('booking.commission_rate');
+            $commission = round($subtotal * $rate, 2);
             $total    = $subtotal + $cleaning;
 
             $booking = $unit->bookings()->updateOrCreate(
@@ -184,8 +187,10 @@ class DashboardTestPartnerSeeder extends Seeder
                     'cleaning_fee'      => $cleaning,
                     'service_fee'       => 0,
                     'taxes'             => 0,
-                    'commission_rate'   => 0.02,
+                    'commission_rate'   => $rate,
                     'commission_amount' => $commission,
+                    // Stated explicitly: the column has no default any more.
+                    'partner_share'     => round($subtotal - $commission, 2),
                     'total_amount'      => $total,
                     'status'            => $status,
                     'cancellation_snapshot' => [

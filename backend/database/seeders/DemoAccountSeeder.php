@@ -90,6 +90,10 @@ class DemoAccountSeeder extends Seeder
         $pricing = $this->pricing((float) $unit->price, $nights);
 
         $booking = $guest->bookings()->create([
+            // No column defaults remain, so the split is stated explicitly.
+            'commission_rate'   => $pricing['commission_rate'],
+            'commission_amount' => $pricing['commission_amount'],
+            'partner_share'     => $pricing['partner_share'],
             'unit_id'      => $unit->id,
             'start_date'   => $start->toDateString(),
             'end_date'     => $end->toDateString(),
@@ -174,6 +178,11 @@ class DemoAccountSeeder extends Seeder
         $cleaningFee = round((float) config('booking.cleaning_fee'), 2);
         $taxes       = round($subtotal * (float) config('booking.tax_rate'), 2);
 
+        // Commission at the live rate, on the subtotal — never on the total,
+        // which would charge it on the VAT as well.
+        $rate       = (float) config('booking.commission_rate');
+        $commission = round($subtotal * $rate, 2);
+
         return [
             'nightly_rate' => $nightly,
             'subtotal'     => $subtotal,
@@ -181,6 +190,9 @@ class DemoAccountSeeder extends Seeder
             'cleaning_fee' => $cleaningFee,
             'taxes'        => $taxes,
             'total'        => round($subtotal + $serviceFee + $cleaningFee + $taxes, 2),
+            'commission_rate'   => $rate,
+            'commission_amount' => $commission,
+            'partner_share'     => round($subtotal - $commission, 2),
         ];
     }
 }

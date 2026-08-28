@@ -87,7 +87,16 @@ class ReviewsSeeder extends Seeder
         $cleaningFee = round((float) config('booking.cleaning_fee'), 2);
         $taxes       = round($subtotal * (float) config('booking.tax_rate'), 2);
 
+        // The split has to be stated: the columns have no default any more, so a
+        // seeder that omits them is rejected by the database rather than
+        // silently written as a zero-commission booking.
+        $rate       = (float) config('booking.commission_rate');
+        $commission = round($subtotal * $rate, 2);
+
         return Booking::create([
+            'commission_rate'   => $rate,
+            'commission_amount' => $commission,
+            'partner_share'     => round($subtotal - $commission, 2),
             'unit_id'      => $unit->id,
             'user_id'      => $guest->id,
             'start_date'   => $start->toDateString(),

@@ -214,6 +214,8 @@ class PopulateTestPartner extends Command
                     // booking taken today, not like a historical one.
                     'commission_rate' => $rate,
                     'commission_amount' => round($subtotal * $rate, 2),
+                    // Stated explicitly: the column has no default any more.
+                    'partner_share'     => round($subtotal - round($subtotal * $rate, 2), 2),
                     'total_amount' => $total,
                     'status' => $status,
                     'cancellation_snapshot' => [

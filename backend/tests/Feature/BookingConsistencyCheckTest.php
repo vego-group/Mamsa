@@ -85,6 +85,28 @@ class BookingConsistencyCheckTest extends TestCase
         $this->artisan('bookings:check-consistency')->assertSuccessful();
     }
 
+    public function test_skipped_rows_are_counted_and_reported(): void
+    {
+        // A silent skip hides the same class of fault the command exists to
+        // find: a clean result over half the table still reads as "all clear".
+        $this->booking(subtotal: 1000, rate: 0.10, commission: 100, share: 900);
+        $this->booking(subtotal: 0, rate: 0, commission: 0, share: 0);
+
+        $this->artisan('bookings:check-consistency')
+            ->expectsOutputToContain('checked 1 / 2 booking(s)   skipped 1')
+            ->expectsOutputToContain('1 booking(s) skipped')
+            ->assertSuccessful();
+    }
+
+    public function test_nothing_is_reported_as_skipped_when_nothing_is(): void
+    {
+        $this->booking(subtotal: 1000, rate: 0.10, commission: 100, share: 900);
+
+        $this->artisan('bookings:check-consistency')
+            ->expectsOutputToContain('checked 1 / 1 booking(s)   skipped 0')
+            ->assertSuccessful();
+    }
+
     private function booking(float $subtotal, float $rate, float $commission, float $share): Booking
     {
         $owner = User::factory()->create();

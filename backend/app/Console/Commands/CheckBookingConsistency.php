@@ -57,9 +57,17 @@ class CheckBookingConsistency extends Command
 
         // Rows with no subtotal predate the price breakdown entirely; they have
         // no split to check and flagging them would be noise, not a finding.
+        //
+        // They are COUNTED and reported all the same. A silent skip is the same
+        // shape as the bug this command exists to catch: "67/67 pass" says
+        // nothing about how many rows were never looked at, so a migration that
+        // emptied half the subtotals would report a clean bill of health on the
+        // remaining half.
         $scoped = Booking::query()->whereNotNull('subtotal')->where('subtotal', '>', 0);
 
-        $total = (clone $scoped)->count();
+        $all     = Booking::query()->count();
+        $total   = (clone $scoped)->count();
+        $skipped = $all - $total;
 
         $broken = (clone $scoped)
             ->whereRaw("ROUND(ABS((commission_amount + partner_share) - subtotal), 2) > {$tolerance}")
@@ -77,10 +85,15 @@ class CheckBookingConsistency extends Command
             ->whereRaw("ROUND(ABS(ROUND(subtotal * commission_rate, 2) - commission_amount), 2) > {$tolerance}")
             ->count();
 
-        $this->line("checked {$total} booking(s) with a subtotal");
+        $this->line("checked {$total} / {$all} booking(s)   skipped {$skipped}");
+
+        if ($skipped > 0) {
+            $this->warn("⚠ {$skipped} booking(s) skipped for having no subtotal — they carry no split to verify.");
+            $this->warn('  If that number is unexpected, the rows are worth a look before trusting the result below.');
+        }
 
         if ($brokenCount === 0 && $rateMismatch === 0) {
-            $this->info('✓ every row adds up: commission + partner share === subtotal');
+            $this->info('✓ every checked row adds up: commission + partner share === subtotal');
 
             return self::SUCCESS;
         }
