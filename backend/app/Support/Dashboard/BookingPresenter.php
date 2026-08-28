@@ -38,7 +38,8 @@ class BookingPresenter
             'status'     => $booking->status,
             'financials' => [
                 'total'        => $total,
-                'commission'   => $commission,
+                'commission'     => $commission,
+                'commissionRate' => (float) $booking->commission_rate,
                 'partnerShare' => round($total - $commission, 2),
             ],
             // Guest-facing invoice lines, frozen at booking time. Standing
@@ -86,7 +87,8 @@ class BookingPresenter
             'vatRate'      => round((float) ($booking->tax_percent ?? 0) / 100, 4),
             // Partner-facing: this is the partner's OWN booking, so the split
             // that determines their payout is legitimately theirs to see.
-            'commission'   => (float) $booking->commission_amount,
+            'commission'     => (float) $booking->commission_amount,
+            'commissionRate' => (float) $booking->commission_rate,
             'partnerShare' => (float) ($booking->partner_share
                 ?: round(($booking->subtotal ?? $total) - $booking->commission_amount, 2)),
 

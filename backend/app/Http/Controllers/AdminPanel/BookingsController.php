@@ -159,8 +159,11 @@ class BookingsController extends Controller
             'nights'        => (int) $b->nights,
             'guests'        => (int) $b->guests,
             'total'         => $this->money($total),
-            'commission'    => $commission,
-            'partnerShare'  => $this->money($partnerShare),
+            'commission'     => $commission,
+            // Frozen per booking. Reports must sum the per-row amount rather
+            // than apply one rate to a total — see BookingsController::commissionSum.
+            'commissionRate' => (float) $b->commission_rate,
+            'partnerShare'   => $this->money($partnerShare),
             'nightlyRate'   => (float) $b->nightly_rate,
             'paymentMethod' => $b->payment?->payment_method ?? '',
             // Refunds are tracked via refunded_amount, not a 'refunded' status.

@@ -109,7 +109,9 @@ class CancellationController extends Controller
 
         return [
             'total_refunds'    => round($totalRefunds, 2),
-            'financial_impact' => round((float) (clone $cancelled)->sum('commission_amount'), 2),
+            // Per-row via the shared expression, so a booking that predates the
+            // frozen columns still counts instead of reading as zero.
+            'financial_impact' => round((float) (clone $cancelled)->sum(\Illuminate\Support\Facades\DB::raw(\App\Models\Booking::commissionExpr())), 2),
             'host_cancellations' => (clone $cancelled)->where(fn ($q) => $q->where('cancelled_by', '!=', 'customer')->orWhereNull('cancelled_by'))->count(),
         ];
     }

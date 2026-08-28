@@ -46,6 +46,11 @@ class BookingResource extends JsonResource
             // the partner's own earnings view. Withheld from guests.
             $this->mergeWhen($isAdmin || $isOwner, fn () => [
                 'commission_amount' => (float) $this->commission_amount,
+                // The rate this booking was created under, frozen alongside the
+                // amount. Read it rather than a local constant: the rate has
+                // changed once and will again, and a client multiplying by a
+                // hardcoded figure is wrong the day it does.
+                'commission_rate'   => (float) $this->commission_rate,
             ]),
             // Itemised price summary (ملخص السعر). Falls back gracefully for
             // legacy rows that predate the breakdown columns.
