@@ -43,7 +43,10 @@ trait MapsSpec
      */
     protected function commissionOf(float $base, ?float $stored = null): float
     {
-        return $this->money(($stored !== null && $stored > 0) ? $stored : round($base * Booking::LEGACY_COMMISSION_RATE, 2));
+        // Frozen at creation; no imputation. The old `> 0` test replaced a
+        // legitimate zero commission with 2% of the base — a wrong number that
+        // reads as a right one.
+        return $this->money((float) ($stored ?? 0));
     }
 
     /**

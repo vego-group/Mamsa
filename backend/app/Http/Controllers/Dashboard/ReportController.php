@@ -170,7 +170,9 @@ class ReportController extends DashboardController
     {
         $frozen = (float) ($b->commission_amount ?? 0);
 
-        return $frozen > 0 ? $frozen : round((float) $b->subtotal * Booking::LEGACY_COMMISSION_RATE, 2);
+        // Frozen at creation; a zero here means zero commission, not a
+        // missing value to guess at.
+        return $frozen;
     }
 
     /** What the partner is owed — the frozen share, matching the wallet. */

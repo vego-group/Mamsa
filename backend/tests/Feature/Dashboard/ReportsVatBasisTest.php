@@ -130,19 +130,25 @@ class ReportsVatBasisTest extends TestCase
         );
     }
 
-    public function test_a_booking_with_no_frozen_commission_is_imputed_from_the_base(): void
+    public function test_a_zero_commission_is_reported_as_zero_not_imputed(): void
     {
-        // Pre-conversion row: commission never captured.
+        // Reports used to impute the legacy rate whenever the frozen amount was
+        // not greater than zero. That could not tell a booking which owes NO
+        // commission — a promotional partner, a waived fee — from one that was
+        // never frozen, and it substituted a plausible wrong number for a
+        // correct zero.
+        //
+        // The ambiguity is now removed at write time instead: the column
+        // defaults are dropped, so an unfrozen row cannot be created, and a
+        // zero here means zero. `bookings:freeze-commission` repairs any row
+        // that predates that guarantee — see the test below.
         $this->booking([
             'subtotal' => 1000.00, 'taxes' => 150.00,
             'commission_amount' => 0, 'partner_share' => 1000.00,
             'total_amount' => 1150.00,
         ]);
 
-        $s = $this->summary();
-
-        // 2% of the base (20.00), never 2% of gross (23.00).
-        $this->assertEqualsWithDelta(20.00, $s['commission'], 0.01);
+        $this->assertEqualsWithDelta(0.00, $this->summary()['commission'], 0.01);
     }
 
     public function test_the_freeze_command_makes_a_legacy_row_self_consistent(): void

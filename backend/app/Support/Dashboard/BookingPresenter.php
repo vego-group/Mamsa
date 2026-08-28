@@ -18,8 +18,9 @@ class BookingPresenter
         $booking->loadMissing(['unit.images', 'user', 'payment', 'refunds']);
 
         $total      = (float) $booking->total_amount;
-        $commission = (float) ($booking->commission_amount
-            ?: round((float) $booking->subtotal * Booking::LEGACY_COMMISSION_RATE, 2));
+        // Frozen at creation; never imputed. `?:` treated a legitimate zero
+        // commission as a missing value and substituted the legacy rate.
+        $commission = (float) $booking->commission_amount;
 
         $cover = $booking->unit?->images->firstWhere('is_main', true) ?? $booking->unit?->images->first();
 

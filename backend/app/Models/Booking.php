@@ -34,6 +34,12 @@ class Booking extends Model
      * The live rate lives in config('booking.commission_rate') and is read only
      * by App\Support\Pricing, at the moment a booking is created. The two are
      * separate on purpose and must not be merged.
+     *
+     * As of 2026-08-28 this is used ONLY by the `bookings:freeze-commission`
+     * repair command and the migration that backfilled the last implicit rows —
+     * both places where reconstructing the historical rate is the intent. No
+     * read path imputes any more: a zero commission is now read as zero,
+     * because the write side can no longer produce an unfrozen row.
      */
     public const LEGACY_COMMISSION_RATE = 0.02;
 
@@ -46,14 +52,28 @@ class Booking extends Model
     }
 
     /**
-     * SQL for a booking's effective commission: the frozen amount when it was
-     * captured, otherwise 2% of the subtotal (historical bookings predate the
-     * frozen column, so `SUM(commission_amount)` alone reads ~0).
+     * SQL for a booking's commission: simply the frozen amount.
+     *
+     * This used to impute the legacy rate whenever `commission_amount` was not
+     * greater than zero, and that test could not tell a booking with a
+     * LEGITIMATE zero commission — a promotional partner, a Mamsa-owned unit's
+     * counterpart — from one that was never frozen. It would have replaced a
+     * correct zero with 2% of the subtotal: a wrong number that looks right,
+     * which is worse than the silent zero it was guarding against.
+     *
+     * `IS NOT NULL` is not the fix either: both columns are NOT NULL, so that
+     * test is always true and the fallback becomes unreachable — the same
+     * outcome by a longer route.
+     *
+     * The ambiguity is not resolvable at read time, so it is removed at write
+     * time instead: the column defaults are dropped (see the 2026_08_28
+     * migration), so a row cannot be created without an explicit rate and
+     * amount, and an unfrozen row can no longer exist. Every row here is frozen
+     * by construction.
      */
     public static function commissionExpr(string $table = 'bookings'): string
     {
-        return "(CASE WHEN {$table}.commission_amount > 0 THEN {$table}.commission_amount"
-            ." ELSE ROUND(COALESCE({$table}.subtotal, 0) * ".self::LEGACY_COMMISSION_RATE.", 2) END)";
+        return "COALESCE({$table}.commission_amount, 0)";
     }
 
     protected $fillable = [

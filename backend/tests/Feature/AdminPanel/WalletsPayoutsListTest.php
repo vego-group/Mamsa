@@ -336,11 +336,15 @@ class WalletsPayoutsListTest extends TestCase
     /* ---- one money basis on the bookings screen ---- */
 
     /**
-     * A legacy booking with no frozen commission was imputed at 2% of GROSS on
-     * the detail row while the stats total above it imputed 2% of the subtotal —
-     * 23.00 against 20.00 for the same stay.
+     * The detail row and the stats total above it must agree on one number.
+     *
+     * They once disagreed by imputing from different bases — 2% of gross on the
+     * row, 2% of the subtotal in the total, 23.00 against 20.00 for one stay.
+     * Neither imputes now: both read the amount frozen on the booking, so they
+     * cannot drift apart at all, and a booking that owes no commission reports
+     * none instead of having a plausible figure invented for it.
      */
-    public function test_an_unfrozen_commission_is_imputed_from_the_subtotal(): void
+    public function test_the_detail_row_reports_the_frozen_commission_verbatim(): void
     {
         $booking = Booking::create([
             'unit_id' => $this->unit->id, 'user_id' => User::factory()->create()->id,
@@ -356,6 +360,16 @@ class WalletsPayoutsListTest extends TestCase
         $row = $this->actingAs($this->admin, 'admin-panel')
             ->getJson('/admin/bookings/'.$booking->id)->assertOk()->json();
 
-        $this->assertEqualsWithDelta(20.00, $row['commission'], 0.01, '2% of 1000, never of 1150');
+        $this->assertEqualsWithDelta(0.00, $row['commission'], 0.01, 'a zero is a zero, not a cue to guess');
+
+        // And a frozen amount comes back exactly, from whatever rate it was
+        // taken under — no recomputation against today's rate.
+        $booking->forceFill(['commission_rate' => 0.10, 'commission_amount' => 100.00])->save();
+
+        $again = $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/bookings/'.$booking->id)->assertOk()->json();
+
+        $this->assertEqualsWithDelta(100.00, $again['commission'], 0.01);
+        $this->assertEqualsWithDelta(0.10, $again['commissionRate'], 0.0001);
     }
 }
