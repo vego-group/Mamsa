@@ -91,6 +91,22 @@ class LedgerReseedCommandTest extends TestCase
         );
     }
 
+    public function test_a_booking_that_credits_nothing_is_counted_and_listed(): void
+    {
+        // A completed booking with a zero share produces no ledger entry. The
+        // rebuild must say so rather than report a clean total over a row that
+        // contributed nothing.
+        $this->completedBooking(subtotal: 1000, commission: 1000, share: 0);
+        $this->completedBooking(subtotal: 1000, commission: 100, share: 900);
+
+        $this->artisan('ledger:reseed-staging', ['--confirm' => true])
+            ->expectsOutputToContain('Re-posted 1 / 2 completed booking(s)')
+            ->expectsOutputToContain('produced no entry')
+            ->assertSuccessful();
+
+        $this->assertSame(1, PartnerLedgerEntry::count());
+    }
+
     public function test_the_payout_scenario_leaves_a_partner_above_the_floor(): void
     {
         $this->artisan('ledger:seed-payout-scenario')->assertSuccessful();

@@ -95,14 +95,39 @@ class ReseedStagingLedger extends Command
         $this->line('Ledger, payouts and booking payout links cleared.');
 
         // Re-post from the frozen share on each completed booking.
-        $posted = 0;
+        //
+        // Skips are COUNTED and listed. A booking with no partner, or with no
+        // share to credit, produces no entry — and a silent skip here is the
+        // same fault as a silent skip in the consistency check: the totals look
+        // clean while a row quietly contributed nothing.
+        $posted  = 0;
+        $skipped = [];
+
         foreach (Booking::where('status', Booking::STATUS_COMPLETED)->with('unit')->cursor() as $booking) {
             if ($wallet->recordEarning($booking)) {
                 $posted++;
+
+                continue;
             }
+
+            $skipped[] = [
+                $booking->id,
+                $booking->unit?->user_id ?? '— no partner —',
+                number_format((float) ($booking->subtotal ?? 0), 2),
+                number_format((float) ($booking->partner_share ?? 0), 2),
+            ];
         }
 
-        $this->line("Re-posted {$posted} earning(s) from frozen booking shares.");
+        $eligible = $posted + count($skipped);
+        $this->line("Re-posted {$posted} / {$eligible} completed booking(s) from frozen shares.");
+
+        if ($skipped !== []) {
+            $this->newLine();
+            $this->warn(count($skipped).' completed booking(s) produced no entry:');
+            $this->table(['booking', 'partner', 'subtotal', 'frozen share'], $skipped);
+            $this->warn('A booking with no partner or a zero share credits nothing. If any of these');
+            $this->warn('are unexpected, the ledger is short by that much and the rows need a look.');
+        }
 
         $this->newLine();
         $this->summary('AFTER', $this->snapshot());

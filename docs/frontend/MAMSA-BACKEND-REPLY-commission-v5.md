@@ -59,10 +59,14 @@ skip is the shape of the bug, not an exception to it. `67/67 pass` says nothing 
 were never looked at.
 
 ```
+# ILLUSTRATIVE FORMAT ONLY — not a measurement of staging.
 checked 66 / 67 booking(s)   skipped 1
 ⚠ 1 booking(s) skipped for having no subtotal — they carry no split to verify.
   If that number is unexpected, the rows are worth a look before trusting the result below.
 ```
+
+*(Staging's real figure is **67 / 67, skipped 0** — see the round-5 reply. The block above was a
+sample of the output shape and should have been labelled as one.)*
 
 Always printed, warned about when non-zero, and covered by two tests — one asserting the skip is
 reported, one asserting a clean run says `skipped 0` rather than staying quiet.
