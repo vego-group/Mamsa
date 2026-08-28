@@ -69,6 +69,17 @@ class UnitController extends Controller
         if ($request->filled('city')) {
             \App\Support\City::filter($query, 'city', (string) $request->city);
         }
+        // Fetch a known set — the favourites page. Capped at the maximum page
+        // size so one request with `per_page=50` always returns everything it
+        // asked for; a longer list is the caller's to chunk.
+        if ($request->filled('ids')) {
+            $ids = $request->validate([
+                'ids'   => ['array', 'max:50'],
+                'ids.*' => ['integer'],
+            ])['ids'];
+
+            $query->whereIn('units.id', $ids);
+        }
         if ($request->filled('type')) {
             $query->where('unit_type', $request->type);
         }
@@ -334,6 +345,30 @@ class UnitController extends Controller
 
         return response()->json($reviews);
     }
+    /**
+     * GET /units/sitemap
+     *
+     * Every publicly reachable unit, as `{ id, updated_at }`. No pagination and
+     * no other field: a sitemap builder needs a complete list in one pass, and
+     * paging it would mean the last page decides whether a unit gets indexed.
+     */
+    public function sitemap(): JsonResponse
+    {
+        return response()->json(
+            Unit::query()
+                ->whereIn('unit_type', Unit::SUPPORTED_TYPES)
+                ->where('approval_status', 'approved')
+                ->where('status', 'available')
+                ->orderBy('id')
+                ->get(['id', 'updated_at'])
+                ->map(fn (Unit $u) => [
+                    'id'         => (int) $u->id,
+                    'updated_at' => $u->updated_at?->toIso8601ZuluString(),
+                ])
+                ->all(),
+        );
+    }
+
     /**
      * GET /units/{unit}/blocked-dates?from=&to=
      *

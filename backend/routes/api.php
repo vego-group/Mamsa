@@ -52,6 +52,8 @@ Route::prefix('v1')->group(function () {
     Route::prefix('units')->name('api.units.')->group(function () {
         Route::get('/', [UnitController::class, 'index'])->name('index');
         Route::get('popular', [UnitController::class, 'popular'])->name('popular');
+        // Complete list of indexable units for sitemap.xml — no pagination.
+        Route::get('sitemap', [UnitController::class, 'sitemap'])->name('sitemap');
         Route::get('categories', [UnitController::class, 'categories'])->name('categories');
         Route::get('cities', [UnitController::class, 'cities'])->name('cities');
         Route::get('budgets', [UnitController::class, 'budgets'])->name('budgets');
@@ -158,6 +160,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/', [BookingController::class, 'store'])->name('store');
             Route::get('{booking}', [BookingController::class, 'show'])->name('show');
             Route::get('{booking}/cancellation-preview', [BookingController::class, 'cancellationPreview'])->name('cancellation-preview');
+            // The guest reading back the review they wrote.
+            Route::get('{booking}/review', [BookingController::class, 'review'])->name('review');
             // Tax invoice — §7.1. Issued in Mamsa's name (supplier of record).
             Route::get('{booking}/invoice', [InvoiceController::class, 'show'])->name('invoice');
             Route::post('{booking}/cancel', [BookingController::class, 'cancel'])->name('cancel');

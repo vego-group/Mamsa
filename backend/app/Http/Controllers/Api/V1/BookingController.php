@@ -26,7 +26,7 @@ class BookingController extends Controller
             return response()->json(['message' => 'غير مصرح'], 403);
         }
 
-        $booking->load(['unit.images', 'unit.features', 'unit.owner', 'payment', 'review']);
+        $booking->load(['unit.images', 'unit.features', 'unit.owner', 'user', 'payment', 'review']);
 
         return new BookingResource($booking);
     }
@@ -64,6 +64,48 @@ class BookingController extends Controller
             $quote->toArray(),
             $quote->refundAmount > 0 ? 'تم الإلغاء وسيتم رد المبلغ المستحق' : 'تم إلغاء الحجز',
         );
+    }
+
+    /**
+     * GET /bookings/{booking}/review — the review left on this booking.
+     *
+     * A guest could write one and never read it back; the only review endpoint
+     * was the write. Returns the object or a bare `null` (200) — an unreviewed
+     * booking is an ordinary state, not a 404.
+     *
+     * Readable by the guest who booked, the partner who owns the unit, and
+     * admins: all three already see the review elsewhere, and gating it here
+     * would only hide it from the person who wrote it.
+     */
+    public function review(Booking $booking): JsonResponse
+    {
+        $viewer = auth()->user();
+        $isGuest = (int) $booking->user_id === (int) $viewer?->id;
+        $isOwner = (int) ($booking->unit?->user_id ?? 0) === (int) $viewer?->id;
+
+        if (! $isGuest && ! $isOwner && ! $viewer?->isAdmin()) {
+            return response()->json(['message' => 'غير مصرح', 'code' => 'FORBIDDEN'], 403);
+        }
+
+        $review = $booking->review()->with('user')->first();
+
+        if (! $review) {
+            return response()->json(null);
+        }
+
+        return response()->json([
+            'id'              => $review->id,
+            'booking_id'      => (int) $review->booking_id,
+            'unit_id'         => (int) $review->unit_id,
+            'user_id'         => (int) $review->user_id,
+            'user_name'       => $review->user?->name,
+            // No avatar storage exists yet, so this is null for everyone rather
+            // than a placeholder that would look like a real picture failing.
+            'user_avatar_url' => null,
+            'rating'          => (int) $review->rating,
+            'comment'         => $review->comment,
+            'created_at'      => $review->created_at?->toIso8601ZuluString(),
+        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -137,7 +179,7 @@ class BookingController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        return response()->json(new BookingResource($booking->load('unit.images')), 201);
+        return response()->json(new BookingResource($booking->load(['unit.images', 'user'])), 201);
     }
 
     /**
