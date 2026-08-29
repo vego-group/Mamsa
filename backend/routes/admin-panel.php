@@ -46,6 +46,10 @@ Route::prefix('admin')->group(function () {
         Route::get('profile/sessions', [AdminPanel\ProfileController::class, 'sessions'])->name('ap.profile.sessions');
         Route::delete('profile/sessions/{id}', [AdminPanel\ProfileController::class, 'revokeSession'])->name('ap.profile.sessions.revoke');
 
+        /* Admins (super-admin management) — SuperAdmin-only */
+        Route::get('admins', [AdminPanel\AdminsController::class, 'index'])->name('ap.admins.index');
+        Route::post('admins', [AdminPanel\AdminsController::class, 'store'])->name('ap.admins.store');
+
         /* Users (guests) — §5.4 */
         Route::get('users', [AdminPanel\UsersController::class, 'index'])->name('ap.users.index');
         Route::get('users/stats', [AdminPanel\UsersController::class, 'stats'])->name('ap.users.stats');

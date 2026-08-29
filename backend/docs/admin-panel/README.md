@@ -93,6 +93,7 @@ Only registered `Admin` / `SuperAdmin` phones may request an OTP. The cookie is
 |---|---|
 | Profile §5.2 | `GET/PATCH profile`, `GET profile/sessions`, `DELETE profile/sessions/{id}` |
 | Dashboard §5.3 | `GET dashboard/summary` |
+| Admins (super-admin mgmt) | `GET admins`, `POST admins` `{ phone, name? }` — grant super-admin to a phone. **SuperAdmin-only** (403 for a plain `Admin`); creates or promotes the account and returns `{ ok:true, admin }` (201). 409 if already a super-admin. |
 | Users §5.4 | `GET users`, `GET users/stats`, `GET users/{id}`, `PATCH users/{id}/status`, `DELETE users/{id}` (409 if active bookings), `POST users/invite` |
 | Partners §5.5 | `GET partners`, `GET partners/stats`, `GET partners/{id}`, `POST partners/{id}/{approve,reject,suspend,verify,revoke-verification}`, `POST partners/{partnerId}/documents/{documentId}/verify`, `POST partners/invite` |
 | Units §5.6 | `GET units`, `GET units/stats`, `GET units/{id}`, `POST units` (Mamsa-owned draft), `POST units/{id}/unpublish` |
