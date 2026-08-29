@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Support\Sql;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Review;
@@ -37,7 +38,7 @@ class ReportController extends Controller
         $revenue = Booking::query()->revenue();
 
         $avgNights = (float) (clone $revenue)
-            ->selectRaw('AVG(DATEDIFF(end_date, start_date)) as a')
+            ->selectRaw(Sql::avgDays().' as a')
             ->value('a');
 
         $totalRevenue = round((float) (clone $revenue)->sum('total_amount'), 2);
@@ -60,7 +61,7 @@ class ReportController extends Controller
     private function activeMonths(): int
     {
         return max(1, (int) Booking::query()->revenue()
-            ->selectRaw("COUNT(DISTINCT DATE_FORMAT(created_at, '%Y-%m')) as m")->value('m'));
+            ->selectRaw('COUNT(DISTINCT '.Sql::ym('created_at').') as m')->value('m'));
     }
 
     private function occupancyRate(): int
@@ -84,7 +85,7 @@ class ReportController extends Controller
     {
         $rows = Booking::query()->revenue()
             ->where('created_at', '>=', now()->subMonths(11)->startOfMonth())
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, SUM(total_amount) as total, SUM(".Booking::commissionExpr().") as commission")
+            ->selectRaw(Sql::ym('created_at')." as ym, SUM(total_amount) as total, SUM(".Booking::commissionExpr().") as commission")
             ->groupBy('ym')
             ->get()
             ->keyBy('ym');
@@ -175,7 +176,10 @@ class ReportController extends Controller
         return Unit::query()
             ->withCount('bookings')
             ->withSum(['bookings as revenue' => fn ($q) => $q->whereIn('status', Booking::REVENUE_STATUSES)], 'total_amount')
-            ->having('bookings_count', '>', 0)
+            // HAVING with no GROUP BY is a MySQL extension; sqlite rejects it.
+            // "has at least one booking" is what this means, and whereHas says
+            // it in a form both drivers accept.
+            ->whereHas('bookings')
             ->orderByDesc('bookings_count')
             ->limit(5)
             ->get()

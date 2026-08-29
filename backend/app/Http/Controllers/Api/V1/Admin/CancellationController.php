@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Support\Sql;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\PartnerDetail;
@@ -131,12 +132,7 @@ class CancellationController extends Controller
      */
     private function trend(): array
     {
-        // Driver-aware: DATE_FORMAT is MySQL-only, so the raw form made this
-        // whole endpoint 500 under the sqlite test suite — which is why it had
-        // no coverage at all. Same shape as MapsSpec::ymSql().
-        $ym = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'sqlite'
-            ? "strftime('%Y-%m', cancelled_at)"
-            : "DATE_FORMAT(cancelled_at, '%Y-%m')";
+        $ym = Sql::ym('cancelled_at');
 
         $rows = Booking::where('status', 'cancelled')
             ->where('cancelled_at', '>=', now()->subMonths(5)->startOfMonth())

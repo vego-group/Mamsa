@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Support\Sql;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\PartnerDetail;
@@ -175,7 +176,10 @@ class RequestController extends Controller
 
         // Avg hours from submission → review, for units already actioned.
         $avgHours = (float) Unit::whereIn('approval_status', ['approved', 'rejected'])
-            ->selectRaw('AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as h')
+            // Was TIMESTAMPDIFF(HOUR, …), which TRUNCATES: a 14.2-hour average
+            // reported as 14. Sql::avgHours uses MINUTE/60, so this is a
+            // correctness fix as well as a portability one.
+            ->selectRaw(Sql::avgHours('created_at', 'updated_at').' as h')
             ->value('h');
 
         return [

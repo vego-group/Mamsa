@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Support\Sql;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\Booking;
@@ -29,7 +30,7 @@ class UnitController extends Controller
             ->withCount('reviews as reviews_count')
             // Booked nights (paid stays) in the trailing window → occupancy %.
             ->addSelect(['booked_nights' => Booking::query()
-                ->selectRaw('COALESCE(SUM(DATEDIFF(end_date, start_date)), 0)')
+                ->selectRaw(Sql::sumNights())
                 ->whereColumn('unit_id', 'units.id')
                 ->whereIn('status', Booking::REVENUE_STATUSES)
                 ->where('start_date', '>=', $since)]);
@@ -113,7 +114,7 @@ class UnitController extends Controller
 
         $bookedNights = (int) Booking::query()->revenue()
             ->where('start_date', '>=', $since)
-            ->selectRaw('COALESCE(SUM(DATEDIFF(end_date, start_date)), 0) as n')
+            ->selectRaw(Sql::sumNights().' as n')
             ->value('n');
 
         $avgOccupancy = $approved > 0

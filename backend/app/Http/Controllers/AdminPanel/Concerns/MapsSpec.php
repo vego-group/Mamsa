@@ -7,6 +7,7 @@ namespace App\Http\Controllers\AdminPanel\Concerns;
 use App\Models\Booking;
 use App\Models\PartnerDetail;
 use App\Models\User;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -140,31 +141,27 @@ trait MapsSpec
     }
 
     /* ---------- driver-aware SQL (works on MySQL prod + sqlite tests) ---------- */
+    /*
+     * Delegated to App\Support\Sql so there is ONE implementation. These stayed
+     * protected on this trait, which is why controllers outside AdminPanel could
+     * not reuse them and hand-rolled the raw MySQL form instead.
+     */
 
     /** SUM of nights between two date columns. */
     protected function nightsSql(string $end = 'end_date', string $start = 'start_date'): string
     {
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "COALESCE(SUM(julianday({$end}) - julianday({$start})), 0)"
-            : "COALESCE(SUM(DATEDIFF({$end}, {$start})), 0)";
+        return Sql::sumNights($end, $start);
     }
 
     /** 'YYYY-MM' bucket for a datetime column. */
     protected function ymSql(string $col): string
     {
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "strftime('%Y-%m', {$col})"
-            : "DATE_FORMAT({$col}, '%Y-%m')";
+        return Sql::ym($col);
     }
 
     /** AVG hours between two datetime columns. */
     protected function avgHoursSql(string $start, string $end): string
     {
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "AVG((julianday({$end}) - julianday({$start})) * 24)"
-            // MINUTE/60, not HOUR: TIMESTAMPDIFF(HOUR, …) truncates, so MySQL
-            // would report 14 where sqlite (and the UI's SLA colouring) expects
-            // 14.2 — a silent behaviour difference between tests and production.
-            : "AVG(TIMESTAMPDIFF(MINUTE, {$start}, {$end}) / 60)";
+        return Sql::avgHours($start, $end);
     }
 }

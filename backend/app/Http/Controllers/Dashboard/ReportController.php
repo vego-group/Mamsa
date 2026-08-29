@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dashboard;
 
+use App\Support\Sql;
 use App\Models\Booking;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -129,14 +130,7 @@ class ReportController extends DashboardController
             ? 'COALESCE(SUM(total_amount),0) as v'
             : 'COUNT(*) as v';
 
-        // Driver-aware: MySQL in production, sqlite under test. DATE_FORMAT is
-        // MySQL-only, so this endpoint could not be exercised by a test at all —
-        // which is why its money basis went unverified for as long as it did.
-        $month = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'sqlite'
-            ? "strftime('%Y-%m', start_date)"
-            : "DATE_FORMAT(start_date,'%Y-%m')";
-
-        $rows = $query->selectRaw("{$month} as ym")
+        $rows = $query->selectRaw(Sql::ym('start_date').' as ym')
             ->selectRaw($expr)->groupBy('ym')->pluck('v', 'ym');
 
         return $rows->map(fn ($v, $ym) => [

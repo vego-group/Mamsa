@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dashboard;
 
+use App\Support\Sql;
 use App\Models\Booking;
 use App\Models\Unit;
 use Carbon\CarbonImmutable;
@@ -41,13 +42,13 @@ class OverviewController extends DashboardController
         $start = CarbonImmutable::now()->startOfMonth()->subMonths(11);
         $rows = Booking::whereIn('unit_id', $unitIds)->where($nonCancelled)
             ->where('start_date', '>=', $start->toDateString())
-            ->selectRaw("DATE_FORMAT(start_date, '%Y-%m') as ym")
+            ->selectRaw(Sql::ym('start_date').' as ym')
             ->selectRaw('COUNT(*) as cnt')
             ->selectRaw("{$shareExpr} as amt")
             ->groupBy('ym')->pluck('amt', 'ym');
         $counts = Booking::whereIn('unit_id', $unitIds)->where($nonCancelled)
             ->where('start_date', '>=', $start->toDateString())
-            ->selectRaw("DATE_FORMAT(start_date, '%Y-%m') as ym")
+            ->selectRaw(Sql::ym('start_date').' as ym')
             ->selectRaw('COUNT(*) as cnt')
             ->groupBy('ym')->pluck('cnt', 'ym');
 
