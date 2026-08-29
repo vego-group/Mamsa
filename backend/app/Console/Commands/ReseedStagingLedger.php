@@ -47,8 +47,17 @@ class ReseedStagingLedger extends Command
 
     protected $description = 'STAGING ONLY — wipe and rebuild partner ledger entries from booking shares';
 
-    /** Databases this command is willing to touch. */
-    private const ALLOWED_DATABASES = ['u184390120_mamsa_stg_db', 'mamsa_staging', 'testing', ':memory:'];
+    /**
+     * Test databases, which are always safe to rebuild — a suite creates and
+     * discards them, so there is no history to lose.
+     *
+     * Real environments come from config('database.reseed_allowlist'), set per
+     * environment via RESEED_ALLOWED_DATABASES. They are deliberately NOT here:
+     * a guard that needs a code change to cover a new environment is one people
+     * route around, and this repository is public, so a database name does not
+     * belong in it.
+     */
+    private const ALWAYS_SAFE = ['testing', ':memory:'];
 
     public function handle(PartnerWalletService $wallet): int
     {
@@ -61,7 +70,8 @@ class ReseedStagingLedger extends Command
             $this->line("  app env    : ".app()->environment());
             $this->newLine();
             $this->line('This command destroys ledger history and is restricted to staging databases.');
-            $this->line('If this really is staging under another name, pass --force-env=<database name>.');
+            $this->line('Allowed here: '.(implode(', ', self::allowed()) ?: '(none configured)'));
+            $this->line('Set RESEED_ALLOWED_DATABASES for this environment, or pass --force-env=<exact database name>.');
 
             return self::FAILURE;
         }
@@ -146,9 +156,25 @@ class ReseedStagingLedger extends Command
 
         $forced = (string) $this->option('force-env');
 
-        return $forced !== ''
-            ? $forced === $database
-            : in_array($database, self::ALLOWED_DATABASES, true);
+        if ($forced !== '') {
+            // Still has to name the live database exactly, so a wrong guess is
+            // a refusal rather than a blind override.
+            return $forced === $database;
+        }
+
+        return in_array($database, self::allowed(), true);
+    }
+
+    /**
+     * Test databases plus whatever this environment has configured.
+     *
+     * @return list<string>
+     */
+    private static function allowed(): array
+    {
+        $configured = (array) config('database.reseed_allowlist', []);
+
+        return array_values(array_unique(array_merge(self::ALWAYS_SAFE, $configured)));
     }
 
     /** @return array<string, mixed> */

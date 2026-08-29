@@ -42,6 +42,53 @@ class LedgerReseedCommandTest extends TestCase
         $this->assertSame(1, PartnerLedgerEntry::count(), 'production data must be untouched');
     }
 
+    public function test_an_unconfigured_environment_cannot_reach_a_real_database(): void
+    {
+        // The safe default: a checkout with no RESEED_ALLOWED_DATABASES set can
+        // only touch test databases. Nothing real is reachable by accident.
+        //
+        // Asserted on the decision rather than by swapping the live connection:
+        // the name is resolved when the connection opens, so changing config
+        // afterwards would not move it and the test would pass vacuously.
+        config()->set('database.reseed_allowlist', []);
+
+        $allowed = $this->invokeAllowed();
+
+        $this->assertNotContains('some_real_db', $allowed);
+        $this->assertSame(['testing', ':memory:'], $allowed, 'only test databases without configuration');
+    }
+
+    public function test_a_configured_database_is_accepted(): void
+    {
+        // And naming it in config is what makes it reachable — no code change.
+        config()->set('database.reseed_allowlist', ['some_real_db']);
+
+        $this->assertContains(
+            'some_real_db',
+            $this->invokeAllowed(),
+            'a configured database must be on the effective allow-list',
+        );
+    }
+
+    public function test_test_databases_are_always_safe_without_configuration(): void
+    {
+        config()->set('database.reseed_allowlist', []);
+
+        $allowed = $this->invokeAllowed();
+
+        $this->assertContains(':memory:', $allowed);
+        $this->assertContains('testing', $allowed);
+    }
+
+    /** @return list<string> */
+    private function invokeAllowed(): array
+    {
+        $m = new \ReflectionMethod(\App\Console\Commands\ReseedStagingLedger::class, 'allowed');
+        $m->setAccessible(true);
+
+        return $m->invoke(null);
+    }
+
     public function test_it_refuses_a_database_it_does_not_recognise(): void
     {
         $this->ledgerEntry();

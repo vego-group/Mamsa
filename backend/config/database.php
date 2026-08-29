@@ -7,6 +7,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Databases a destructive reseed may target
+    |--------------------------------------------------------------------------
+    |
+    | `ledger:reseed-staging` destroys ledger history, so it refuses to run
+    | unless the live database name is on this list. The names live here rather
+    | than in the command because a guard that needs a source edit to cover a
+    | new environment is a guard people work around — and because the repository
+    | is public, so an environment's database name does not belong in it.
+    |
+    | Set RESEED_ALLOWED_DATABASES to a comma-separated list per environment.
+    | Empty means the command can only run against the test databases below,
+    | which is the safe default for a checkout that has not been configured.
+    |
+    */
+
+    'reseed_allowlist' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('RESEED_ALLOWED_DATABASES', '')),
+    ))),
+
+
+    /*
+    |--------------------------------------------------------------------------
     | Default Database Connection Name
     |--------------------------------------------------------------------------
     |
