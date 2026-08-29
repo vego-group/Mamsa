@@ -30,7 +30,7 @@ class CancellationRowSplitTest extends TestCase
     {
         parent::setUp();
 
-        foreach (['Individual', 'Admin', 'SuperAdmin', 'User'] as $r) {
+        foreach (['Individual', 'Company', 'Admin', 'SuperAdmin', 'User'] as $r) {
             Role::findOrCreate($r, 'web');
         }
 
@@ -78,7 +78,59 @@ class CancellationRowSplitTest extends TestCase
         $this->assertEqualsWithDelta(980.0, $row['partnerShare'], 0.01);
     }
 
-    private function cancelled(float $subtotal, float $commission, float $share, float $total): Booking
+    public function test_the_row_carries_the_rate_it_was_frozen_at(): void
+    {
+        // Frozen at 2% while the live rate is 10%.
+        $this->cancelled(subtotal: 1000, commission: 20, share: 980, total: 1150);
+
+        $row = $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/cancellations')->assertOk()->json('items.0');
+
+        // Without this field a console shows 20 SAR beside a "(10%)" badge:
+        // correct money, wrong label, and nothing on the row to catch it.
+        $this->assertEqualsWithDelta(0.02, $row['commissionRate'], 0.0001);
+        $this->assertNotEqualsWithDelta(
+            (float) config('booking.commission_rate'),
+            $row['commissionRate'],
+            0.0001,
+            'the row reported the live rate instead of the frozen one',
+        );
+
+        // The rate and the money agree, so a client may check one against the other.
+        $this->assertEqualsWithDelta(
+            $row['commission'],
+            round($row['netBase'] * $row['commissionRate'], 2),
+            0.01,
+        );
+    }
+
+    public function test_a_mamsa_owned_cancellation_reports_a_whole_rate(): void
+    {
+        // No partner to pay: the platform keeps the entire net base.
+        $this->cancelled(subtotal: 1000, commission: 1000, share: 0, total: 1150, mamsaOwned: true);
+
+        $row = $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/cancellations')->assertOk()->json('items.0');
+
+        $this->assertTrue($row['mamsaOwned']);
+        $this->assertEqualsWithDelta(1.0, $row['commissionRate'], 0.0001);
+        $this->assertEqualsWithDelta(1000.0, $row['commission'], 0.01);
+        $this->assertEqualsWithDelta(0.0, $row['partnerShare'], 0.01);
+    }
+
+    public function test_the_v1_admin_surface_carries_the_same_rate_in_snake_case(): void
+    {
+        $this->cancelled(subtotal: 1000, commission: 20, share: 980, total: 1150);
+
+        $row = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/v1/admin/cancellations')->assertOk()->json('data.0');
+
+        $this->assertEqualsWithDelta(0.02, $row['commission_rate'], 0.0001);
+        $this->assertEqualsWithDelta(1000.0, $row['net_base'], 0.01);
+        $this->assertEqualsWithDelta(20.0, $row['commission'], 0.01);
+    }
+
+    private function cancelled(float $subtotal, float $commission, float $share, float $total, bool $mamsaOwned = false): Booking
     {
         $owner = User::factory()->create();
         $owner->assignRole('Individual');
@@ -90,6 +142,7 @@ class CancellationRowSplitTest extends TestCase
             'price' => 500, 'capacity' => 2, 'bedrooms' => 1,
             'approval_status' => 'approved', 'status' => 'available',
             'calendar_token' => str()->random(60),
+            'mamsa_owned' => $mamsaOwned,
         ]);
 
         return Booking::create([

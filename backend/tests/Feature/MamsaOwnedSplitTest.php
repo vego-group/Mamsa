@@ -70,6 +70,11 @@ class MamsaOwnedSplitTest extends TestCase
         $this->assertEqualsWithDelta(1000.00, $p['net_base'], 0.01);
         $this->assertEqualsWithDelta(1000.00, $p['commission_amount'], 0.01);
         $this->assertEqualsWithDelta(0.00, $p['partner_share'], 0.01);
+
+        // The RATE, not just the amounts. 1.0 — not 0.0, not null. A zero would
+        // read as "no commission" on a row where the platform in fact keeps
+        // everything, and null breaks `commission === rate × netBase`.
+        $this->assertEqualsWithDelta(1.0, $p['commission_rate'], 0.0001);
     }
 
     public function test_the_money_invariant_holds_either_way(): void

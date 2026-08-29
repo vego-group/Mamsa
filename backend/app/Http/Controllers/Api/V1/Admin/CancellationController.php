@@ -80,6 +80,8 @@ class CancellationController extends Controller
             'net_base'      => round((float) $b->subtotal, 2),
             'commission'    => round((float) $b->commission_amount, 2),
             'partner_share' => round((float) $b->partner_share, 2),
+            // The FROZEN rate — never today's. 1.0 on a Mamsa-owned unit.
+            'commission_rate' => (float) $b->commission_rate,
             // Lost Mamsa commission on the cancelled booking (shown negative).
             'impact'        => -round((float) $b->commission_amount, 2),
             'refund_status' => $this->refundStatus($refunded, (float) $b->total_amount),
@@ -129,9 +131,16 @@ class CancellationController extends Controller
      */
     private function trend(): array
     {
+        // Driver-aware: DATE_FORMAT is MySQL-only, so the raw form made this
+        // whole endpoint 500 under the sqlite test suite — which is why it had
+        // no coverage at all. Same shape as MapsSpec::ymSql().
+        $ym = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', cancelled_at)"
+            : "DATE_FORMAT(cancelled_at, '%Y-%m')";
+
         $rows = Booking::where('status', 'cancelled')
             ->where('cancelled_at', '>=', now()->subMonths(5)->startOfMonth())
-            ->selectRaw("DATE_FORMAT(cancelled_at, '%Y-%m') as ym,
+            ->selectRaw("{$ym} as ym,
                 SUM(CASE WHEN cancelled_by = 'customer' THEN 1 ELSE 0 END) as guest,
                 SUM(CASE WHEN cancelled_by = 'customer' THEN 0 ELSE 1 END) as host")
             ->groupBy('ym')
@@ -177,7 +186,12 @@ class CancellationController extends Controller
             ->withCount(['unitBookings as bookings_count'])
             ->withCount(['unitBookings as cancellations_count' => fn ($q) => $q->where('bookings.status', 'cancelled')])
             ->addSelect(['city' => \App\Models\Unit::query()->select('city')->whereColumn('units.user_id', 'users.id')->latest()->limit(1)])
-            ->having('cancellations_count', '>', 0)
+            // A HAVING with no GROUP BY is a MySQL extension; sqlite rejects it
+            // outright ("HAVING clause on a non-aggregate query"), which is the
+            // second reason this endpoint could never run under test. The
+            // predicate is just "has at least one cancelled booking", which
+            // whereHas states directly and both drivers accept.
+            ->whereHas('unitBookings', fn ($q) => $q->where('bookings.status', 'cancelled'))
             ->orderByDesc('cancellations_count')
             ->limit(3)
             ->get()

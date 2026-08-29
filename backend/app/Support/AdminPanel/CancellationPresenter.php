@@ -48,6 +48,13 @@ class CancellationPresenter
             'commission'   => $this->money((float) $b->commission_amount),
             'partnerShare' => $this->money((float) $b->partner_share),
 
+            // The rate this row was FROZEN at, so a console never labels frozen
+            // money with today's rate: a booking taken at 2% shows 20 SAR, and
+            // without this field the badge beside it reads "(10%)".
+            // On a Mamsa-owned unit this is 1.0 — the platform keeps the whole
+            // net base because there is no partner to pay.
+            'commissionRate' => (float) $b->commission_rate,
+
             // Negative because it is what the platform loses. Same number as
             // `commission`, opposite sign — kept for the consoles already
             // rendering it.
