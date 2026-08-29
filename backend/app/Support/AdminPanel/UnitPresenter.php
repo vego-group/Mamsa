@@ -165,8 +165,13 @@ class UnitPresenter
             'publicUrl'       => $this->publicUrl($u),
             'tourismPermitNo' => $u->tourism_permit_no,
             'permitFileUrl'   => $this->fileUrl($u->tourism_permit_file),
+            // Proof of the right to list. Same resolver: the column holds
+            // either an upload id or a storage path depending on which
+            // surface sent it, and resolveUrl() reads both.
+            'ownershipDocUrl' => $this->fileUrl($u->ownership_doc_file),
             // The id, not the URL — this is what goes back in the write body.
             'tourismLicenseFileId' => $u->tourism_permit_file,
+            'ownershipDocFileId'   => $u->ownership_doc_file,
             'ownerIdNumber'   => $u->owner?->partnerDetail?->national_id,
         ]);
     }

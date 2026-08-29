@@ -24,6 +24,16 @@ export const partnerApi = {
     for (const f of files) fd.append('images[]', f)
     return http.post(`/partner/units/${id}/images`, fd, { headers: { 'Content-Type': undefined } })
   },
+  // Unit documents — tourism licence and ownership proof (deed or lease).
+  // Content-Type unset so the browser supplies the multipart boundary.
+  uploadUnitDocument: (id, type, file) => {
+    const fd = new FormData()
+    fd.append('type', type)
+    fd.append('file', file)
+    return http.post(`/partner/units/${id}/documents`, fd, { headers: { 'Content-Type': undefined } })
+  },
+  deleteUnitDocument: (id, type) => http.delete(`/partner/units/${id}/documents/${type}`),
+
   deleteUnitImage: (id, imageId) => http.delete(`/partner/units/${id}/images/${imageId}`),
   setMainImage: (id, imageId) => http.post(`/partner/units/${id}/images/${imageId}/main`),
 

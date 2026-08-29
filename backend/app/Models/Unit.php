@@ -35,6 +35,7 @@ class Unit extends Model
         'description',
         'tourism_permit_no',
         'tourism_permit_file',
+        'ownership_doc_file',
         'company_license_no',
         'approval_status',
         'submitted_at',

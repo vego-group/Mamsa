@@ -41,6 +41,9 @@ class UploadController extends DashboardController
         // identity scan, so a PDF-only rule here left partners who registered
         // earlier unable to supply the same file through the dashboard.
         'company_doc' => ['images' => true,  'pdf' => true,  'derive' => false],
+        // A title deed or lease is photographed at least as often as it is
+        // scanned, so the same images-or-PDF rule as company_doc applies.
+        'ownership_doc' => ['images' => true,  'pdf' => true,  'derive' => false],
     ];
 
     public function presign(Request $request): JsonResponse

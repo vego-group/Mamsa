@@ -53,6 +53,7 @@ class UnitPresenter
             'address'              => $unit->address,
             'tourismLicenseNumber' => $unit->tourism_permit_no,
             'tourismLicenseFileId' => $unit->tourism_permit_file,
+            'ownershipDocFileId'   => $unit->ownership_doc_file,
             'photos'               => $unit->images
                 ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
                 ->map(fn ($img) => [

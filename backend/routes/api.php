@@ -204,6 +204,13 @@ Route::prefix('v1')->group(function () {
                 Route::post('{unit}/images', [Partner\UnitImageController::class, 'store'])->name('images.store');
                 Route::delete('{unit}/images/{image}', [Partner\UnitImageController::class, 'destroy'])->name('images.destroy');
                 Route::post('{unit}/images/{image}/main', [Partner\UnitImageController::class, 'setMain'])->name('images.main');
+
+                // Tourism licence + ownership proof. The dashboard attaches these
+                // through /uploads/presign, which is cookie-session only — so
+                // before this the Bearer clients could not attach the licence
+                // that submitting a listing requires.
+                Route::post('{unit}/documents', [Partner\UnitDocumentController::class, 'store'])->name('documents.store');
+                Route::delete('{unit}/documents/{type}', [Partner\UnitDocumentController::class, 'destroy'])->name('documents.destroy');
             });
 
             Route::get('bookings', [Partner\BookingController::class, 'index'])->name('bookings.index');

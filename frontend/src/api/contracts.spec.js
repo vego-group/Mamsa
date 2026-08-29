@@ -189,3 +189,24 @@ describe('endpoints that existed on the backend but were never called', () => {
     expect(http.delete).toHaveBeenCalledWith('/user/account')
   })
 })
+
+describe('unit documents — licence and ownership proof', () => {
+  it('uploads a document as multipart with the type in the body', () => {
+    const file = new File(['x'], 'deed.pdf', { type: 'application/pdf' })
+    partnerApi.uploadUnitDocument(9, 'ownership_doc', file)
+
+    const [url, body, opts] = http.post.mock.calls.at(-1)
+    expect(url).toBe('/partner/units/9/documents')
+    expect(body).toBeInstanceOf(FormData)
+    expect(body.get('type')).toBe('ownership_doc')
+    expect(body.get('file')).toBe(file)
+    // Unset, not set: the browser must add its own multipart boundary, and the
+    // client's default JSON header would break the upload.
+    expect(opts.headers['Content-Type']).toBeUndefined()
+  })
+
+  it('deletes a document by type', () => {
+    partnerApi.deleteUnitDocument(9, 'tourism_permit')
+    expect(http.delete).toHaveBeenCalledWith('/partner/units/9/documents/tourism_permit')
+  })
+})

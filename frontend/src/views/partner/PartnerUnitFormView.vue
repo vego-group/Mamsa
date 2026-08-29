@@ -101,6 +101,50 @@
             </select>
           </div>
 
+            <!-- Fields the API has always accepted and this form never sent:
+                 beds, bathrooms, the map position and the two licence numbers.
+                 Without lat/lng a partner could not place their unit on the map
+                 at all. -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-body-sm font-bold text-on-surface mb-1.5">عدد الأسرّة</label>
+                <input v-model.number="form.beds" type="number" min="1" max="20" class="field" dir="rtl" />
+              </div>
+              <div>
+                <label class="block text-body-sm font-bold text-on-surface mb-1.5">دورات المياه</label>
+                <input v-model.number="form.bathrooms" type="number" min="1" max="10" class="field" dir="rtl" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-body-sm font-bold text-on-surface mb-1.5">العنوان</label>
+              <input v-model="form.address" class="field" dir="rtl" placeholder="حي الملقا، طريق الملك عبدالعزيز" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-body-sm font-bold text-on-surface mb-1.5">خط العرض (Latitude)</label>
+                <input v-model.number="form.lat" type="number" step="any" class="field" dir="ltr" placeholder="24.7136" />
+              </div>
+              <div>
+                <label class="block text-body-sm font-bold text-on-surface mb-1.5">خط الطول (Longitude)</label>
+                <input v-model.number="form.lng" type="number" step="any" class="field" dir="ltr" placeholder="46.6753" />
+              </div>
+            </div>
+            <p class="text-[11px] text-on-surface-variant -mt-1">الموقع يجب أن يكون داخل حدود المملكة، وإلا تُرفض الوحدة عند الإرسال للمراجعة.</p>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-body-sm font-bold text-on-surface mb-1.5">رقم رخصة السياحة</label>
+                <input v-model="form.tourism_permit_no" class="field" dir="ltr" placeholder="TL-0000000" />
+              </div>
+              <div>
+                <label class="block text-body-sm font-bold text-on-surface mb-1.5">رقم السجل التجاري</label>
+                <input v-model="form.company_license_no" class="field" dir="ltr" placeholder="1010000000" />
+              </div>
+            </div>
+
+
           <!-- Features -->
           <div>
             <label class="block text-body-sm font-bold text-on-surface mb-2">المميزات</label>
@@ -151,6 +195,40 @@
         </label>
         <p v-if="imgError" class="err">{{ imgError }}</p>
       </section>
+
+        <!-- Documents (edit only — uploads need a saved unit id, same as photos) -->
+        <section v-if="isEdit" class="bg-white rounded-2xl border border-outline-variant p-5 space-y-4">
+          <h2 class="font-title-sm text-title-sm text-on-surface">المستندات</h2>
+
+          <div v-for="d in documentTypes" :key="d.type" class="flex items-center justify-between gap-3 py-2 border-b border-outline-variant last:border-0">
+            <div class="min-w-0">
+              <div class="text-body-sm font-bold text-on-surface">{{ d.label }}</div>
+              <div class="text-[11px] text-on-surface-variant">{{ d.hint }}</div>
+              <a v-if="docs[d.type]" :href="docs[d.type]" target="_blank" rel="noopener"
+                 class="text-[12px] text-primary font-bold hover:underline inline-flex items-center gap-1 mt-1">
+                <span class="material-symbols-outlined text-[14px]">description</span>
+                عرض المستند الحالي
+              </a>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <label class="inline-flex items-center gap-1.5 px-3 py-2 border border-dashed border-outline-variant rounded-xl cursor-pointer hover:bg-surface-container-low text-body-sm font-bold"
+                     :class="{ 'opacity-50 pointer-events-none': docBusy === d.type }">
+                <span v-if="docBusy === d.type" class="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
+                <span v-else class="material-symbols-outlined text-[16px]">upload_file</span>
+                {{ docs[d.type] ? 'استبدال' : 'رفع' }}
+                <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" class="hidden"
+                       :disabled="docBusy === d.type" @change="onDocSelected($event, d.type)" />
+              </label>
+              <button v-if="docs[d.type]" type="button" class="text-error text-[13px] font-bold hover:underline"
+                      :disabled="docBusy === d.type" @click="removeDoc(d.type)">حذف</button>
+            </div>
+          </div>
+
+          <p class="text-[11px] text-on-surface-variant">
+            الصيغ المسموحة: PDF أو صورة (jpg / png / webp)، بحد أقصى ١٠ ميجابايت.
+          </p>
+        </section>
+
 
       <!-- New unit: images come after the draft is saved -->
       <section v-else class="bg-surface-container-low rounded-2xl border border-dashed border-outline-variant p-6 text-center text-body-sm text-on-surface-variant">
@@ -219,9 +297,54 @@ const form = ref({
   description: '',
   checkin_time: '15:00',
   checkout_time: '12:00',
+  beds: null,
+  bathrooms: null,
+  address: '',
+  lat: null,
+  lng: null,
+  tourism_permit_no: '',
+  company_license_no: '',
   cancellation_policy: 'no_cancel',
   features: [],
 })
+
+const documentTypes = [
+  { type: 'tourism_permit', label: 'رخصة السياحة', hint: 'مطلوبة لإرسال الوحدة للمراجعة' },
+  { type: 'ownership_doc', label: 'مستند ملكية العقار', hint: 'صك الملكية أو عقد الإيجار — اختياري حالياً' },
+]
+const docs = ref({ tourism_permit: null, ownership_doc: null })
+const docBusy = ref(null)
+
+async function onDocSelected(e, type) {
+  const file = e.target.files?.[0]
+  e.target.value = '' // allow re-selecting the same file after a failure
+  if (!file) return
+
+  docBusy.value = type
+  try {
+    const { data } = await partnerApi.uploadUnitDocument(route.params.id, type, file)
+    docs.value[type] = data.data?.url ?? null
+    showToast('تم رفع المستند')
+  } catch (err) {
+    showToast(err.response?.data?.message || 'تعذّر رفع المستند', 'error')
+  } finally {
+    docBusy.value = null
+  }
+}
+
+async function removeDoc(type) {
+  docBusy.value = type
+  try {
+    await partnerApi.deleteUnitDocument(route.params.id, type)
+    docs.value[type] = null
+    showToast('تم حذف المستند')
+  } catch (err) {
+    showToast(err.response?.data?.message || 'تعذّر حذف المستند', 'error')
+  } finally {
+    docBusy.value = null
+  }
+}
+
 
 function showToast(msg, type = 'success') {
   toast.value = { msg, type }
@@ -239,6 +362,12 @@ async function loadUnit() {
   try {
     const { data } = await partnerApi.getUnit(route.params.id)
     const u = data.data ?? data
+    // Owner-gated on the API, so these only arrive for the partner who owns
+    // the unit — which is exactly who is on this screen.
+    docs.value = {
+      tourism_permit: u.tourism_permit_url ?? null,
+      ownership_doc: u.ownership_doc_url ?? null,
+    }
     form.value = {
       unit_name: u.name,
       unit_type: u.type,
@@ -250,6 +379,13 @@ async function loadUnit() {
       description: u.description || '',
       checkin_time: (u.checkin_time || '15:00').slice(0, 5),
       checkout_time: (u.checkout_time || '12:00').slice(0, 5),
+      beds: u.beds ?? null,
+      bathrooms: u.bathrooms ?? null,
+      address: u.address || '',
+      lat: u.lat ?? null,
+      lng: u.lng ?? null,
+      tourism_permit_no: u.tourism_permit_no || '',
+      company_license_no: u.company_license_no || '',
       cancellation_policy: u.cancellation_policy || 'no_cancel',
       features: Array.isArray(u.features) ? [...u.features] : [],
     }

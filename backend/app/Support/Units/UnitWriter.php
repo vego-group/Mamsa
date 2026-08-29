@@ -170,6 +170,8 @@ final class UnitWriter
             'address'              => fn ($v) => ['address' => $v === null ? null : (string) $v],
             'tourismLicenseNumber' => fn ($v) => ['tourism_permit_no' => $v],
             'tourismLicenseFileId' => fn ($v) => ['tourism_permit_file' => $v],
+            // Title deed or lease contract — proof of the right to list.
+            'ownershipDocFileId'   => fn ($v) => ['ownership_doc_file' => $v],
         ];
 
         $columns = [];
@@ -199,6 +201,14 @@ final class UnitWriter
         if (! empty($data['tourismLicenseFileId'])
             && ! self::ownedUpload($ownerId, (string) $data['tourismLicenseFileId'], 'license_pdf')) {
             $errors['tourismLicenseFileId'] = 'ملف الرخصة غير موجود';
+        }
+
+        // Title deed or lease contract. Optional at submit (see the migration),
+        // but if one IS supplied it must be a stored upload of the right kind
+        // owned by this partner — the same rule the licence file follows.
+        if (! empty($data['ownershipDocFileId'])
+            && ! self::ownedUpload($ownerId, (string) $data['ownershipDocFileId'], 'ownership_doc')) {
+            $errors['ownershipDocFileId'] = 'مستند الملكية غير موجود';
         }
 
         foreach ($data['photoFileIds'] ?? [] as $i => $fileId) {

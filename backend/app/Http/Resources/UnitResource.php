@@ -61,6 +61,26 @@ class UnitResource extends JsonResource
                 in_array($this->approval_status, ['rejected']),
                 $this->rejection_reason
             ),
+            // Compliance paperwork — the licence number, the CR number and the
+            // two document links. NEVER public: a title deed carries the owner's
+            // name and the property's registry details, and the licence number
+            // is not ours to publish either. Visible only to the partner who
+            // owns the unit and to admins.
+            $this->mergeWhen(
+                // `$request->user()` resolves the DEFAULT guard, which on this
+                // public route is never populated — the token is a sanctum one.
+                // Reading it that way made the block invisible to the owner too,
+                // so the fields silently never appeared for anyone.
+                ($u = $request->user('sanctum') ?? $request->user())
+                    && ($u->id === $this->user_id || $u->isAdmin()),
+                fn () => [
+                    'tourism_permit_no'   => $this->tourism_permit_no,
+                    'company_license_no'  => $this->company_license_no,
+                    'tourism_permit_url'  => \App\Models\DashboardUpload::resolveUrl($this->tourism_permit_file),
+                    'ownership_doc_url'   => \App\Models\DashboardUpload::resolveUrl($this->ownership_doc_file),
+                ],
+            ),
+
             'images'              => $this->whenLoaded('images', function () {
                 // Real photos only — ignore the generic default placeholder rows.
                 $real = $this->images->filter(
