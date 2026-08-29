@@ -148,7 +148,7 @@ class WalletTest extends TestCase
 
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'شريك',
         ]);
         $this->assertSame('bank_unverified', $body()['ineligibleReason']);
 
@@ -212,7 +212,7 @@ class WalletTest extends TestCase
         $payout = Payout::create([
             'partner_user_id' => $this->partner->id, 'reference' => 'PO-2026-06',
             'period_month' => '2026-05', 'amount' => 5880.00, 'bookings_count' => 2,
-            'iban_masked' => '••••7519', 'bank_name' => 'مصرف الراجحي',
+            'iban_masked' => '••••0000', 'bank_name' => 'مصرف الراجحي',
             'status' => 'paid', 'paid_at' => now()->subDay(),
         ]);
 
@@ -252,7 +252,7 @@ class WalletTest extends TestCase
             Payout::create([
                 'partner_user_id' => $this->partner->id, 'reference' => $ref,
                 'period_month' => '2026-05', 'amount' => 1000.00, 'bookings_count' => 1,
-                'iban_masked' => '••••7519', 'status' => $status, 'paid_at' => now()->subDays(2),
+                'iban_masked' => '••••0000', 'status' => $status, 'paid_at' => now()->subDays(2),
             ]);
         }
 
@@ -277,11 +277,11 @@ class WalletTest extends TestCase
     public function test_saving_an_account_derives_the_bank_and_starts_unverified(): void
     {
         $body = $this->actingAs($this->partner, 'dashboard')->putJson('/me/bank-details', [
-            'iban' => 'SA03 8000 0000 6080 1016 7519',   // spaced — the server normalizes
+            'iban' => 'SA24 8000 0000 0000 0000 0000',   // spaced — the server normalizes
             'accountHolderName' => 'شركة ممسى للضيافة',
         ])->assertOk()->json();
 
-        $this->assertSame('SA0380000000608010167519', $body['iban']);
+        $this->assertSame('SA2480000000000000000000', $body['iban']);
         $this->assertSame('مصرف الراجحي', $body['bankName']);
         $this->assertFalse($body['verified']);
     }
@@ -290,7 +290,7 @@ class WalletTest extends TestCase
     {
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'شريك',
             'verified' => true, 'verified_at' => now(),
         ]);
 
@@ -306,12 +306,12 @@ class WalletTest extends TestCase
     {
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'شريك',
             'verified' => true, 'verified_at' => now(),
         ]);
 
         $body = $this->actingAs($this->partner, 'dashboard')->putJson('/me/bank-details', [
-            'iban' => 'SA0380000000608010167519', 'accountHolderName' => 'اسم جديد',
+            'iban' => 'SA2480000000000000000000', 'accountHolderName' => 'اسم جديد',
         ])->assertOk()->json();
 
         $this->assertFalse(
@@ -330,12 +330,12 @@ class WalletTest extends TestCase
     {
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'اسم خاطئ',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'اسم خاطئ',
             'verified' => false, 'rejection_reason' => 'اسم صاحب الحساب لا يطابق اسم الشريك',
         ]);
 
         $body = $this->actingAs($this->partner, 'dashboard')->putJson('/me/bank-details', [
-            'iban' => 'SA0380000000608010167519',     // unchanged
+            'iban' => 'SA2480000000000000000000',     // unchanged
             'accountHolderName' => 'الاسم الصحيح',      // the thing they were told to fix
         ])->assertOk()->json();
 
@@ -347,12 +347,12 @@ class WalletTest extends TestCase
     {
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'شريك',
             'verified' => true, 'verified_at' => now(),
         ]);
 
         $body = $this->actingAs($this->partner, 'dashboard')->putJson('/me/bank-details', [
-            'iban' => 'SA0380000000608010167519', 'accountHolderName' => 'شريك',
+            'iban' => 'SA2480000000000000000000', 'accountHolderName' => 'شريك',
         ])->assertOk()->json();
 
         $this->assertTrue($body['verified'], 'nothing changed, so nothing is invalidated');
@@ -362,30 +362,30 @@ class WalletTest extends TestCase
     {
         // Correct shape, one digit off — the case a shape-only check would pass.
         $this->actingAs($this->partner, 'dashboard')->putJson('/me/bank-details', [
-            'iban' => 'SA0380000000608010167518', 'accountHolderName' => 'شريك',
+            'iban' => 'SA2480000000000000000001', 'accountHolderName' => 'شريك',
         ])->assertStatus(422)->assertJsonPath('error.code', 'INVALID_IBAN');
     }
 
     public function test_the_kyc_iban_is_kept_in_step(): void
     {
         $this->actingAs($this->partner, 'dashboard')->putJson('/me/bank-details', [
-            'iban' => 'SA0380000000608010167519', 'accountHolderName' => 'شريك',
+            'iban' => 'SA2480000000000000000000', 'accountHolderName' => 'شريك',
         ])->assertOk();
 
         // The admin KYC screen and documentsComplete() read this column.
-        $this->assertSame('SA0380000000608010167519', $this->partner->fresh()->partnerDetail->iban);
+        $this->assertSame('SA2480000000000000000000', $this->partner->fresh()->partnerDetail->iban);
     }
 
     /* ---- IBAN support ---- */
 
     public function test_iban_checksum_validation(): void
     {
-        $this->assertTrue(Iban::isValid('SA0380000000608010167519'));
-        $this->assertTrue(Iban::isValid('sa03 8000 0000 6080 1016 7519'));
-        $this->assertFalse(Iban::isValid('SA0380000000608010167518'), 'one digit off');
+        $this->assertTrue(Iban::isValid('SA2480000000000000000000'));
+        $this->assertTrue(Iban::isValid('sa24 8000 0000 0000 0000 0000'));
+        $this->assertFalse(Iban::isValid('SA2480000000000000000001'), 'one digit off');
         $this->assertFalse(Iban::isValid('SA038000000060801016751'), 'too short');
         $this->assertFalse(Iban::isValid('GB82WEST12345698765432'), 'not Saudi');
-        $this->assertSame('••••7519', Iban::mask('SA0380000000608010167519'));
+        $this->assertSame('••••0000', Iban::mask('SA2480000000000000000000'));
         $this->assertNull(Iban::bankName('SA4499000001234567891234'), 'unknown code is null, never a guess');
     }
 }

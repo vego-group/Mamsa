@@ -209,7 +209,7 @@ class SearchAndBadgesTest extends TestCase
         $this->assertFalse($this->partnerDetail()['documentsComplete']);
 
         $detail->update([
-            'iban'                      => 'SA0380000000608010167519',
+            'iban'                      => 'SA2480000000000000000000',
             'vat_certificate_file'      => 'file_vat',
             'operator_license_file'     => 'file_licence',
             'authorization_letter_file' => 'file_auth',
@@ -230,7 +230,7 @@ class SearchAndBadgesTest extends TestCase
     public function test_documents_complete_does_not_depend_on_kyc_approval(): void
     {
         $this->partner->partnerDetail->update([
-            'iban'                      => 'SA0380000000608010167519',
+            'iban'                      => 'SA2480000000000000000000',
             'vat_certificate_file'      => 'file_vat',
             'operator_license_file'     => 'file_licence',
             'authorization_letter_file' => 'file_auth',
@@ -261,7 +261,7 @@ class SearchAndBadgesTest extends TestCase
         $detail = $individual->partnerDetail()->create([
             'type' => 'individual', 'status' => PartnerDetail::STATUS_APPROVED,
             'national_id' => '1098765432',
-            'iban' => 'SA0380000000608010167519',
+            'iban' => 'SA2480000000000000000000',
             'authorization_letter_file' => 'file_auth',
         ]);
 
@@ -284,7 +284,7 @@ class SearchAndBadgesTest extends TestCase
     public function test_a_company_is_complete_on_the_cr_number_today(): void
     {
         $this->partner->partnerDetail->update([
-            'iban'                      => 'SA0380000000608010167519',
+            'iban'                      => 'SA2480000000000000000000',
             'vat_certificate_file'      => 'file_vat',
             'operator_license_file'     => 'file_licence',
             'authorization_letter_file' => 'file_auth',

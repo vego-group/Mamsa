@@ -197,7 +197,7 @@ class CompanyCrDocumentTest extends TestCase
     {
         $company = $this->company();
         $company->partnerDetail->update([
-            'iban'                      => 'SA0380000000608010167519',
+            'iban'                      => 'SA2480000000000000000000',
             'vat_certificate_file'      => 'file_vat',
             'operator_license_file'     => 'file_licence',
             'authorization_letter_file' => 'file_auth',

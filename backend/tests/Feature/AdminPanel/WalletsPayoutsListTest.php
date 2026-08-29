@@ -73,7 +73,7 @@ class WalletsPayoutsListTest extends TestCase
     {
         return BankDetail::create([
             'partner_user_id' => $p->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => $p->name,
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => $p->name,
             'bank_name' => 'مصرف الراجحي', 'verified' => true, 'verified_at' => now(),
         ]);
     }
@@ -203,7 +203,7 @@ class WalletsPayoutsListTest extends TestCase
             'partner_user_id' => $p->id,
             'reference'       => 'PO-'.$month.'-'.fake()->unique()->numerify('####'),
             'period_month'    => $month, 'amount' => $amount, 'bookings_count' => 2,
-            'currency' => 'SAR', 'iban_masked' => '••••7519', 'bank_name' => 'مصرف الراجحي',
+            'currency' => 'SAR', 'iban_masked' => '••••0000', 'bank_name' => 'مصرف الراجحي',
             'status' => $status, 'paid_at' => $month.'-15 10:00:00',
             'bank_reference' => 'FT'.fake()->unique()->numerify('#########'),
         ]);
@@ -221,7 +221,7 @@ class WalletsPayoutsListTest extends TestCase
         $this->assertSame('شريك الاختبار', $body['items'][0]['partnerName']);
         $this->assertSame('prt_'.$this->partner->id, $body['items'][0]['partnerId']);
         $this->assertEqualsWithDelta(5880.00, $body['items'][0]['amount'], 0.01);
-        $this->assertSame('••••7519', $body['items'][0]['ibanMasked']);
+        $this->assertSame('••••0000', $body['items'][0]['ibanMasked']);
     }
 
     /**

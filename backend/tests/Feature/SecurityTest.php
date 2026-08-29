@@ -335,7 +335,7 @@ class SecurityTest extends TestCase
 
         \App\Models\BankDetail::create([
             'partner_user_id'     => $partner->id,
-            'iban'                => 'SA0380000000608010167519',
+            'iban'                => 'SA2480000000000000000000',
             'account_holder_name' => 'شريك',
             'bank_name'           => 'مصرف الراجحي',
             'verified'            => true,
@@ -378,7 +378,7 @@ class SecurityTest extends TestCase
         // asked for — the assertion the fixture version could never make.
         $payout = \App\Models\Payout::firstOrFail();
         $this->assertEqualsWithDelta(2940.00, $payout->amount, 0.001);
-        $this->assertSame('••••7519', $payout->iban_masked);
+        $this->assertSame('••••0000', $payout->iban_masked);
     }
 
     /* ========== 7. the money ledger is append-only ========== */

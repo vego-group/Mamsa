@@ -174,7 +174,7 @@ class ReportsVatBasisTest extends TestCase
         $payout = \App\Models\Payout::create([
             'partner_user_id' => $this->partner->id, 'reference' => 'PO-TEST-0001',
             'period_month' => '2026-07', 'amount' => 1000.00, 'bookings_count' => 1,
-            'iban_masked' => '••••7519', 'status' => 'paid', 'paid_at' => now(),
+            'iban_masked' => '••••0000', 'status' => 'paid', 'paid_at' => now(),
         ]);
 
         $booking = $this->booking([

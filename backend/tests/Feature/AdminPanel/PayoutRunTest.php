@@ -54,7 +54,7 @@ class PayoutRunTest extends TestCase
     {
         return BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك الاختبار',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'شريك الاختبار',
             'bank_name' => 'مصرف الراجحي', 'verified' => true, 'verified_at' => now(),
         ]);
     }
@@ -89,7 +89,7 @@ class PayoutRunTest extends TestCase
         $this->assertNotNull($row);
         $this->assertEqualsWithDelta(5880.00, $row['amount'], 0.001);
         $this->assertSame(2, $row['bookingsCount']);
-        $this->assertSame('SA0380000000608010167519', $row['iban']);
+        $this->assertSame('SA2480000000000000000000', $row['iban']);
     }
 
     public function test_each_ineligible_partner_carries_its_reason(): void
@@ -140,7 +140,7 @@ class PayoutRunTest extends TestCase
         $payout = Payout::firstOrFail();
         $this->assertEqualsWithDelta(5880.00, $payout->amount, 0.001);
         $this->assertSame(2, (int) $payout->bookings_count);
-        $this->assertSame('••••7519', $payout->iban_masked, 'never the full IBAN');
+        $this->assertSame('••••0000', $payout->iban_masked, 'never the full IBAN');
         $this->assertSame(2, Booking::where('payout_id', $payout->id)->count());
 
         // The debit lands in the ledger and the balance returns to zero.
@@ -167,7 +167,7 @@ class PayoutRunTest extends TestCase
             $detail['amount'], collect($detail['bookings'])->sum('partnerShare'), 0.001,
             'contract §5 invariant 4 — the sheet shows this total back to the partner',
         );
-        $this->assertSame('••••7519', $detail['ibanMasked']);
+        $this->assertSame('••••0000', $detail['ibanMasked']);
     }
 
     /* ---- the guards ---- */
@@ -186,7 +186,7 @@ class PayoutRunTest extends TestCase
 
         $payout = Payout::firstOrFail();
         $this->assertEqualsWithDelta(2940.00, $payout->amount, 0.001, 'the server decides what was owed');
-        $this->assertSame('••••7519', $payout->iban_masked, 'and where it went');
+        $this->assertSame('••••0000', $payout->iban_masked, 'and where it went');
     }
 
     public function test_a_repeated_bank_reference_is_refused(): void
@@ -316,7 +316,7 @@ class PayoutRunTest extends TestCase
     {
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك الاختبار',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'شريك الاختبار',
             'bank_name' => 'مصرف الراجحي',   // saved by the partner, unverified
         ]);
         $this->earned(2);
@@ -346,7 +346,7 @@ class PayoutRunTest extends TestCase
     {
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك الاختبار',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'شريك الاختبار',
         ]);
 
         $this->actingAs($this->admin, 'admin-panel')
@@ -366,7 +366,7 @@ class PayoutRunTest extends TestCase
     {
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'اسم مختلف',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'اسم مختلف',
             'verified' => true, 'verified_at' => now(),
         ]);
 
@@ -388,7 +388,7 @@ class PayoutRunTest extends TestCase
     {
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'شريك',
         ]);
 
         $this->actingAs($this->admin, 'admin-panel')
@@ -416,7 +416,7 @@ class PayoutRunTest extends TestCase
 
         BankDetail::create([
             'partner_user_id' => $this->partner->id,
-            'iban' => 'SA0380000000608010167519', 'account_holder_name' => 'شريك',
+            'iban' => 'SA2480000000000000000000', 'account_holder_name' => 'شريك',
         ]);
 
         $this->actingAs($finance, 'admin-panel')
@@ -455,7 +455,7 @@ class PayoutRunTest extends TestCase
         $body = $this->actingAs($this->admin, 'admin-panel')
             ->getJson('/admin/wallets/prt_'.$this->partner->id)->assertOk()->json();
 
-        $this->assertSame('SA0380000000608010167519', $body['bankDetails']['iban']);
+        $this->assertSame('SA2480000000000000000000', $body['bankDetails']['iban']);
         $this->assertCount(3, $body['recentLedger'], '2 earnings + 1 payout');
         $this->assertCount(1, $body['recentPayouts']);
     }

@@ -65,7 +65,7 @@ class ReadEndpointsTest extends TestCase
             // and the authorization letter is one of them for BOTH partner
             // types — so a fixture without it is legitimately incomplete.
             'authorization_letter_file' => 'file_test_authorization',
-            'iban'        => 'SA0380000000608010167519',
+            'iban'        => 'SA2480000000000000000000',
             'reviewed_at' => now(),
         ]);
 
