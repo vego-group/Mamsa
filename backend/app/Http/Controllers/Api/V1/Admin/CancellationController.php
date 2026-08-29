@@ -74,6 +74,12 @@ class CancellationController extends Controller
             'city'          => $b->unit?->city,
             'date'          => $b->cancelled_at?->toIso8601String(),
             'refund'        => round($refunded, 2),
+            // The frozen split, so no client reconstructs it from a
+            // VAT-inclusive total at today's rate. snake_case here to match the
+            // rest of this v1 surface; the admin panel uses camelCase.
+            'net_base'      => round((float) $b->subtotal, 2),
+            'commission'    => round((float) $b->commission_amount, 2),
+            'partner_share' => round((float) $b->partner_share, 2),
             // Lost Mamsa commission on the cancelled booking (shown negative).
             'impact'        => -round((float) $b->commission_amount, 2),
             'refund_status' => $this->refundStatus($refunded, (float) $b->total_amount),

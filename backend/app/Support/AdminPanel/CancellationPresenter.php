@@ -32,9 +32,25 @@ class CancellationPresenter
             'partnerName'  => $b->unit?->owner?->name ?? '',
             'at'           => $this->iso($b->cancelled_at),
             'reason'       => $b->cancellation_reason ?? '',
+            // VAT-INCLUSIVE. Deriving a money split from this figure charges
+            // commission on the VAT as well — 15% over — which is the fault the
+            // three fields below exist to remove.
             'bookingTotal' => $this->money($b->total_amount),
             'refundAmount' => $this->money($refunded),
-            // Lost commission = frozen amount, else 2% of subtotal (historical bookings have no frozen value).
+
+            // The frozen split, so no client has to reconstruct it.
+            //
+            // `impact` covers the platform's side only; the partner's side had
+            // no field at all, so a console wanting it had to compute from
+            // `bookingTotal` at TODAY's rate — wrong on both counts for a
+            // booking frozen at a different one.
+            'netBase'      => $this->money((float) $b->subtotal),
+            'commission'   => $this->money((float) $b->commission_amount),
+            'partnerShare' => $this->money((float) $b->partner_share),
+
+            // Negative because it is what the platform loses. Same number as
+            // `commission`, opposite sign — kept for the consoles already
+            // rendering it.
             'impact'       => -$this->money((float) $b->commission_amount),
             'refundStatus' => $this->refundStatusOf($b, $refunded),
             'mamsaOwned'   => (bool) ($b->unit?->mamsa_owned ?? false),
