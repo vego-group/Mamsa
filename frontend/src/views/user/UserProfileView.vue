@@ -58,10 +58,30 @@
             <div>
               <label class="block text-body-sm font-bold text-on-surface mb-1.5">رقم الجوال</label>
               <input :value="auth.user?.phone" class="field bg-surface-container cursor-not-allowed" dir="ltr" disabled />
-              <p class="text-[11px] text-on-surface-variant mt-1">رقم الجوال مرتبط بحسابك ولا يمكن تغييره</p>
+                <!-- This used to read "your number is tied to your account and
+                     cannot be changed". POST /user/change-phone has existed all
+                     along — the copy was simply wrong. -->
+                <button
+                  type="button"
+                  class="mt-2 text-primary text-body-sm font-bold hover:underline flex items-center gap-1"
+                  @click="openPhoneChange"
+                >
+                  <span class="material-symbols-outlined text-[16px]">edit</span>
+                  تغيير رقم الجوال
+                </button>
             </div>
           </div>
         </section>
+
+
+          <!-- DELETE /user/account — irreversible: revokes every token, clears
+               the profile and frees the phone number for re-registration. -->
+          <section class="pt-4 border-t border-outline-variant">
+            <button type="button" class="text-error text-body-sm font-bold hover:underline flex items-center gap-1.5" @click="deleteOpen = true">
+              <span class="material-symbols-outlined text-[18px]">delete_forever</span>
+              حذف الحساب نهائياً
+            </button>
+          </section>
 
         <div class="flex items-center justify-between">
           <button type="button" class="text-error text-body-sm font-bold hover:underline flex items-center gap-1.5" @click="logout">
@@ -82,6 +102,58 @@
         {{ toast.msg }}
       </div>
     </Transition>
+
+    <!-- Change phone: OTP goes to the NEW number, and that number must be sent
+         again on verify — the server does not hold it between the two calls. -->
+    <Transition name="fade">
+      <div v-if="phoneOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" @click.self="phoneOpen = false">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6" dir="rtl">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-title-sm text-title-sm text-on-surface">تغيير رقم الجوال</h3>
+            <button class="text-on-surface-variant hover:text-on-surface" @click="phoneOpen = false">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <template v-if="phoneStep === 'request'">
+            <label class="block text-body-sm font-bold text-on-surface mb-1.5">الرقم الجديد</label>
+            <input v-model="newPhone" class="field" dir="ltr" placeholder="05XXXXXXXX" inputmode="numeric" />
+            <p class="text-[11px] text-on-surface-variant mt-1">سيصلك رمز تحقق على الرقم الجديد</p>
+            <button class="mt-4 w-full h-11 bg-primary text-on-primary rounded-xl font-bold disabled:opacity-50" :disabled="phoneBusy" @click="requestPhoneOtp">
+              {{ phoneBusy ? 'جارٍ الإرسال…' : 'إرسال الرمز' }}
+            </button>
+          </template>
+
+          <template v-else>
+            <label class="block text-body-sm font-bold text-on-surface mb-1.5">رمز التحقق</label>
+            <input v-model="phoneCode" class="field text-center tracking-[0.4em]" dir="ltr" inputmode="numeric" maxlength="8" />
+            <p class="text-[11px] text-on-surface-variant mt-1">أُرسل إلى {{ newPhone }}</p>
+            <button class="mt-4 w-full h-11 bg-primary text-on-primary rounded-xl font-bold disabled:opacity-50" :disabled="phoneBusy || !phoneCode" @click="confirmPhoneChange">
+              {{ phoneBusy ? 'جارٍ التحقق…' : 'تأكيد التغيير' }}
+            </button>
+            <button class="mt-2 w-full text-body-sm text-on-surface-variant hover:underline" @click="phoneStep = 'request'">تغيير الرقم</button>
+          </template>
+        </div>
+      </div>
+    </Transition>
+
+    <Transition name="fade">
+      <div v-if="deleteOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" @click.self="deleteOpen = false">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6" dir="rtl">
+          <h3 class="font-title-sm text-title-sm text-on-surface mb-2">حذف الحساب نهائياً</h3>
+          <p class="text-body-sm text-on-surface-variant mb-4">
+            سيتم إلغاء جميع جلساتك ومسح بياناتك الشخصية. لا يمكن التراجع عن هذا الإجراء.
+          </p>
+          <div class="flex gap-2">
+            <button class="flex-1 h-11 border border-outline-variant rounded-xl font-bold" @click="deleteOpen = false">إلغاء</button>
+            <button class="flex-1 h-11 bg-error text-white rounded-xl font-bold disabled:opacity-50" :disabled="deleteBusy" @click="confirmDelete">
+              {{ deleteBusy ? 'جارٍ الحذف…' : 'حذف نهائياً' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
 
     <EmailVerifyModal :open="emailModalOpen" @close="emailModalOpen = false" @verified="onEmailVerified" />
   </div>
@@ -105,6 +177,64 @@ const toast = ref(null)
 const form = ref({ name: '', email: '' })
 const emailVerified = ref(false)
 const emailModalOpen = ref(false)
+
+const phoneOpen = ref(false)
+const phoneStep = ref('request')
+const phoneBusy = ref(false)
+const newPhone = ref('')
+const phoneCode = ref('')
+const deleteOpen = ref(false)
+const deleteBusy = ref(false)
+
+function openPhoneChange() {
+  phoneStep.value = 'request'
+  newPhone.value = ''
+  phoneCode.value = ''
+  phoneOpen.value = true
+}
+
+async function requestPhoneOtp() {
+  phoneBusy.value = true
+  try {
+    await userApi.changePhone(newPhone.value)
+    phoneStep.value = 'verify'
+    showToast('تم إرسال الرمز إلى الرقم الجديد')
+  } catch (e) {
+    showToast(e.response?.data?.message || 'تعذّر إرسال الرمز', 'error')
+  } finally {
+    phoneBusy.value = false
+  }
+}
+
+async function confirmPhoneChange() {
+  phoneBusy.value = true
+  try {
+    // The new number goes with the code — verify does not read it from session.
+    await userApi.verifyChangePhone(newPhone.value, phoneCode.value)
+    phoneOpen.value = false
+    showToast('تم تغيير رقم الجوال')
+    await auth.fetchMe()
+  } catch (e) {
+    showToast(e.response?.data?.message || 'رمز غير صحيح', 'error')
+  } finally {
+    phoneBusy.value = false
+  }
+}
+
+async function confirmDelete() {
+  deleteBusy.value = true
+  try {
+    await userApi.deleteAccount()
+    // Every token is already revoked server-side; clearing locally keeps the
+    // client from retrying with a credential that no longer exists.
+    await auth.logout()
+    router.push({ name: 'home' })
+  } catch (e) {
+    showToast(e.response?.data?.message || 'تعذّر حذف الحساب', 'error')
+    deleteBusy.value = false
+  }
+}
+
 
 function onEmailVerified() {
   emailVerified.value = true

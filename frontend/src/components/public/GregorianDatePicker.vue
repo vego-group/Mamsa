@@ -64,6 +64,14 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 const props = defineProps({
   modelValue: { type: String, default: '' },
   min: { type: String, default: '' },          // YYYY-MM-DD; earlier days disabled
+  max: { type: String, default: '' },          // YYYY-MM-DD; later days disabled
+  // Nights already taken, straight from GET /units/{id}/blocked-dates:
+  // [{ start, end }] with BOTH ends inclusive NIGHTS. Used for the check-IN
+  // field, where landing on a taken night is impossible. The check-OUT field
+  // passes `max` instead (see UnitDetailView): a stay start..end occupies
+  // nights start..end-1, so checking OUT on a blocked night is legal, and
+  // disabling it would hide a perfectly valid date.
+  blocked: { type: Array, default: () => [] },
   placeholder: { type: String, default: 'اختر التاريخ' },
 })
 const emit = defineEmits(['update:modelValue'])
@@ -97,6 +105,11 @@ const monthLabel = computed(() =>
   `${monthFmt.format(new Date(view.value.y, view.value.m, 1))} ${view.value.y}`,
 )
 
+// Ranges are inclusive at BOTH ends, so the test is <= on both sides.
+function isBlocked(value) {
+  return props.blocked.some((b) => b.start <= value && value <= b.end)
+}
+
 const cells = computed(() => {
   const { y, m } = view.value
   const first = new Date(y, m, 1).getDay()          // 0 = Sunday
@@ -105,7 +118,8 @@ const cells = computed(() => {
   for (let i = 0; i < first; i++) out.push(null)
   for (let d = 1; d <= days; d++) {
     const value = iso(y, m, d)
-    out.push({ day: d, value, disabled: props.min ? value < props.min : false })
+    const outOfRange = (props.min && value < props.min) || (props.max && value > props.max)
+    out.push({ day: d, value, disabled: Boolean(outOfRange) || isBlocked(value) })
   }
   return out
 })
