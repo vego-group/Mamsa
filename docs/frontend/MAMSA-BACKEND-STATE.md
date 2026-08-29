@@ -8,7 +8,11 @@ carried forward from an earlier reply — stale status lines in these documents 
 nearly caused a working feature to be reverted, so the discipline is: verify, then write.
 
 **Everything here is live on production and staging.** Nothing is pending. The open items are in §9
-and neither is code.
+and neither is code; §10 covers the one visible number that changed.
+
+*Last verified 2026-08-29 after the cancellation-rate and SQL-portability rounds. The staging ledger
+rebuild is **done**, not pending — earlier status tables in three of my replies said otherwise and
+have been corrected in place.*
 
 ---
 
@@ -184,10 +188,20 @@ live rate 0.10          legacy 0.02 (reconstructs pre-freeze rows only — never
 ```jsonc
 { "bookingTotal": 1150.00,   // VAT-INCLUSIVE — do not derive a split from this
   "netBase": 1000.00, "commission": 100.00, "partnerShare": 900.00,
+  "commissionRate": 0.10,    // the rate this row was FROZEN at
   "impact": -100.00 }        // unchanged: commission, negated
 ```
 
 A booking frozen at the old 2% reports **20**, never 100 — the rate travels with the booking.
+
+**`commissionRate` is on the row too** (`commission_rate` in snake_case). Without it a console shows
+frozen money beside a rate badge read from a local constant: 20 SAR under a "(10%)" label. Do **not**
+derive it as `commission / netBase` — commission is stored rounded to 2dp, so that division returns
+`0.10000345`, never `0.10`, and the drift grows as the booking shrinks.
+
+On a **Mamsa-owned** unit the frozen rate is **`1.0`** — the platform keeps the whole net base because
+there is no partner to pay. Not `0` (which reads as "no commission") and not `null` (which breaks
+`commission === rate × netBase`).
 
 ---
 
@@ -271,6 +285,29 @@ rather than the one your users take.*
 **A flaky test.** `SuspendedAccountTest` reaches the live FGC SMS gateway and fails auth
 non-deterministically; it passes on re-run. Affects no endpoint. Flagged because a red CI run that
 means nothing is one people learn to ignore.
+
+---
+
+## 10. One visible number changed — `avg_review_hours`
+
+Not a regression. The old value was computed with `TIMESTAMPDIFF(HOUR, …)`, which **truncates**: a
+14.2-hour gap was reported as 14. It now uses `MINUTE/60`.
+
+On staging the admin figure moved **883.3 → 884.1**. On production it is still 0 (no review data),
+so the shift will appear there the first time reviews land. If you compare the screen across that
+point, the increase is the correction, not a fault.
+
+Two things this did **not** touch, both checked rather than assumed:
+
+- **Your SLA thresholds.** There is no breach calculation in the backend at all. The approval row
+  carries only `submittedAt`, a full ISO timestamp to the second with offset
+  (`2026-07-17T12:32:36+03:00`), and no hours/SLA/wait/breach key. The truncated expression had
+  exactly two consumers, both display averages — and the admin-panel one never used it.
+- **Every other number.** 22 lines of real staging output compared before and after the refactor:
+  21 identical, and the only line that moved was the one above.
+
+⚠️ Since the SLA is computed on your side, the risk there is the `+03:00` offset being read as UTC —
+a three-hour error against a 48-hour threshold, far larger than anything discussed here.
 
 ---
 
