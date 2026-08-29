@@ -40,7 +40,7 @@ POST /user/email/resend     (no body)
 - **Validity 300s (5 min)** — unified with the phone OTP (your open question).
 - **5 wrong attempts** kill the code (`OTP_MAX_ATTEMPTS`); after that, only a new code helps. A stale-but-well-formed code after the kill or after expiry → `OTP_EXPIRED`.
 - Cooldown 60s, code 6 digits, throttled routes (5/min send + resend, 10/min verify).
-- ⚠️ **Staging test code is `111222`, not `123456`** — same fixed code as the phone OTP. Fixed codes are hard-disabled when `APP_ENV=production` (your production rule holds, enforced in one place for both channels).
+- ⚠️ **Staging test code is `<staging-otp>`, not `123456`** — same fixed code as the phone OTP. Fixed codes are hard-disabled when `APP_ENV=production` (your production rule holds, enforced in one place for both channels).
 
 ## 2. Booking gate — `EMAIL_VERIFICATION_REQUIRED`
 
@@ -73,6 +73,6 @@ One deliberate rule: booking emails go only to **verified** addresses (an unveri
 
 ## 5. Delivery notes
 
-- Everything is live on `staging.mamsaa.com` now; with the staging fixed code `111222` you can run the whole flow without a real inbox. Staging's mailer writes to server logs (we verify content on our side) — real SMTP delivery isn't wired on staging by design.
+- Everything is live on `staging.mamsaa.com` now; with the staging fixed code `<staging-otp>` you can run the whole flow without a real inbox. Staging's mailer writes to server logs (we verify content on our side) — real SMTP delivery isn't wired on staging by design.
 - Postman: `04 — User` folder gained the 3 email requests; `Create Booking` documents the gate.
 - Full flow for your UI: `POST /user/email` → OTP screen (60s resend timer from `resend_available_in`) → `verify` → poll `GET /auth/me` → retry the booking.

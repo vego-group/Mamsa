@@ -65,7 +65,7 @@ But it should be made deliberately rather than by default.
 
 ```jsonc
 "bankDetails": {
-  "iban": "SA4420000001234567891234",
+  "iban": "SA6220000000000000000000",
   "accountHolderName": "شركة الأفق للعقارات",
   "bankName": "بنك الرياض",              // server-derived, may be null
   "verified": true,
@@ -91,7 +91,7 @@ But it should be made deliberately rather than by default.
       destination money was sent to, and the reason it exists is that a disputed transfer needs to
       name who approved it.
 - [ ] The IBAN is returned **in full** here (admin surface). The partner-facing payout list only ever
-      gets `••••7519` — do not copy this component onto a partner-facing screen.
+      gets `••••0000` — do not copy this component onto a partner-facing screen.
 
 ---
 
@@ -114,7 +114,7 @@ was wrong.
 
 ```jsonc
 // GET /me/bank-details  (partner dashboard)
-{"iban":"SA4420000001234567891234","accountHolderName":"شركة الأفق للعقارات",
+{"iban":"SA6220000000000000000000","accountHolderName":"شركة الأفق للعقارات",
  "bankName":"بنك الرياض","verified":false,"verifiedAt":null,
  "rejectionReason":"اسم صاحب الحساب لا يطابق اسم الشريك",
  "updatedAt":"2026-08-15T16:35:14Z"}

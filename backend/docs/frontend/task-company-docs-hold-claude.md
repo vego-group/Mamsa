@@ -83,7 +83,7 @@ looking authoritative.
 
 ```jsonc
 {
-  "iban": "SA0380000000608010167519",
+  "iban": "SA2480000000000000000000",
   "accountHolderName": "…",
   "bankName": "البنك الأهلي السعودي",   // server-derived; may be null
   "verified": false,

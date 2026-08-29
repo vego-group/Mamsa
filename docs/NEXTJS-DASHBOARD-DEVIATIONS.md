@@ -36,7 +36,7 @@ handful of places where reality differs slightly from the contract, plus the aut
   is 5 minutes and we kept it consistent across the user site and dashboard. Adjust your countdown
   copy accordingly (or tell us if 60s is a hard requirement).
 - Rate limit: **3 sends per phone per 10 min** + a 60s resend cooldown + daily caps (10/phone, 30/IP).
-- **No debug/static code in production.** Staging only: `OTP_FIXED_CODE=111222`. The OTP is never in
+- **No debug/static code in production.** Staging only: `OTP_FIXED_CODE=<staging-otp>`. The OTP is never in
   any response body on any environment.
 
 ## 4. IDs are prefixed strings (§0.3 "opaque strings")

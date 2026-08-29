@@ -122,7 +122,7 @@
         <tr><td>User website (staging data)</td><td>your Next.js dev/preview → API <code>https://staging.mamsaa.com/api/v1</code></td></tr>
         <tr><td>Partner dashboard</td><td><code>partner.mamsaa.com</code> (or local) → API <code>https://staging.mamsaa.com</code> (root, no /api/v1)</td></tr>
         <tr><td>Admin panel</td><td><code>testvue.mamsaa.com/admin</code> — ⚠ production data · staging admin: local Vue → staging API</td></tr>
-        <tr><td>OTP on staging</td><td>fixed code <code>111222</code> (also echoed as <code>debug_otp</code>) · caps: 100/phone/day, 300/IP/day, 5/min burst</td></tr>
+        <tr><td>OTP on staging</td><td>fixed code <code><staging-otp></code> (also echoed as <code>debug_otp</code>) · caps: 100/phone/day, 300/IP/day, 5/min burst</td></tr>
         <tr><td>Approved partner (staging)</td><td><code>0512345678</code> — units in all 4 states, bookings, iCal feed</td></tr>
         <tr><td>Approved individual (staging)</td><td><code>0577777777</code> — clean account, no units</td></tr>
         <tr><td>Pending partners (staging)</td><td><code>0533333333</code>, <code>0599999999</code> — keep pending; they test the review screen</td></tr>
@@ -148,8 +148,8 @@ const SUITES=[
  {id:"1.6",t:"Offers & testimonials",s:["Open the offers section/page","Check testimonials block"],e:"Active offers and testimonials load from the API (not hardcoded)."},
  {id:"1.7",t:"Contact form",s:["Submit the contact form with valid data","Submit 6× rapidly"],e:"First submits succeed with confirmation; rapid submits hit the 5/min throttle with a polite message."}]},
 
-{id:"s2",title:"2 · User account — register & login",env:"staging",note:"Passwordless OTP. Staging code is always 111222.",tests:[
- {id:"2.1",t:"Register a new user",s:["Register with a fresh 05971… number","Enter OTP 111222","Complete profile (name)"],e:"Account created; you land signed-in; profile shows the name."},
+{id:"s2",title:"2 · User account — register & login",env:"staging",note:"Passwordless OTP. Staging code is always <staging-otp>.",tests:[
+ {id:"2.1",t:"Register a new user",s:["Register with a fresh 05971… number","Enter OTP <staging-otp>","Complete profile (name)"],e:"Account created; you land signed-in; profile shows the name."},
  {id:"2.2",t:"Intent guards",s:["Try LOGIN with a never-registered phone","Try REGISTER with an already-registered phone"],e:"Login → ‘not registered’ with a switch-to-register suggestion; Register → <span class='ar'>هذا الرقم مسجّل بالفعل</span> bouncing to login. No SMS wasted on either."},
  {id:"2.3",t:"Wrong OTP & lockout",s:["Request OTP, enter a wrong code 3×"],e:"Each attempt shows remaining tries; 3rd locks the code and asks to request a new one."},
  {id:"2.4",t:"Resend cooldown",s:["Request OTP, immediately press resend"],e:"Resend blocked for 60s with a countdown."},
@@ -176,7 +176,7 @@ const SUITES=[
  {id:"5.6",t:"Delete account",s:["Use a throwaway account → account deletion"],e:"Confirmation required; after deletion login says not registered."}]},
 
 {id:"s6",title:"6 · Join as partner (on the user website)",env:"staging",tests:[
- {id:"6.1",t:"Register — individual",s:["Join as partner → individual","Fresh phone + OTP 111222 + national ID (10 digits)"],e:"201 success; account has partner role; status is PENDING."},
+ {id:"6.1",t:"Register — individual",s:["Join as partner → individual","Fresh phone + OTP <staging-otp> + national ID (10 digits)"],e:"201 success; account has partner role; status is PENDING."},
  {id:"6.2",t:"Register — company",s:["Join as partner → company with CR number"],e:"Same as 6.1 with company type; CR stored, no national-ID field."},
  {id:"6.3",t:"Email verification",s:["After registering, enter the 6-digit code from the email screen","Try resend inside 60s"],e:"Email verified flag flips; resend respects the cooldown. (If email delivery is pending Resend DNS, code arrives once that’s live.)"},
  {id:"6.4",t:"Existing user upgrades to partner",s:["Use an existing normal user’s phone in the partner form (request OTP WITHOUT choosing register-intent)"],e:"Upgrade succeeds — no ‘already registered’ block on the partner flow."},
@@ -192,7 +192,7 @@ const SUITES=[
 
 {id:"s8",title:"8 · Partner dashboard — login & approval gate",env:"staging",note:"partner.mamsaa.com pointed at staging. Cookie session — check the browser doesn’t block third-party cookies in your setup.",tests:[
  {id:"8.1",t:"Pending partner is gated",s:["Try dashboard login with a PENDING partner (0533333333)"],e:"OTP accepted but entry refused with <span class='ar'>طلب انضمامك قيد المراجعة</span> — an under-review screen WITH a ‘try again’ action, not a dead end."},
- {id:"8.2",t:"Approved partner enters",s:["Log in with 0512345678 + OTP 111222"],e:"Straight to the dashboard; reloading keeps the session (2-hour cookie)."},
+ {id:"8.2",t:"Approved partner enters",s:["Log in with 0512345678 + OTP <staging-otp>"],e:"Straight to the dashboard; reloading keeps the session (2-hour cookie)."},
  {id:"8.3",t:"Approval unlocks the same login",s:["After 7.3, retry login with that newly-approved partner"],e:"The retry that previously said under-review now enters — no cache traps."},
  {id:"8.4",t:"Non-partner phone",s:["Try a regular user’s phone on the dashboard login"],e:"Clear ‘not registered as partner’ message pointing to Join-as-Partner."},
  {id:"8.5",t:"Logout",s:["Log out from the dashboard menu"],e:"Back to login; deep links to /units redirect to login."}]},

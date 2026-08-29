@@ -30,4 +30,4 @@ GET /api/v1/account
 ## Two notes
 
 1. **Pick one form and stick to it** app-wide. Postman and the docs keep `/user/email*` + `/auth/me` as the canonical names; the `/account/*` aliases are permanent, but mixing both in one codebase will confuse future greps.
-2. Everything else in the two email docs is unchanged — machine codes, 300s validity, 60s cooldown, 5 attempts, staging fixed code `111222`, and the `EMAIL_VERIFICATION_REQUIRED` booking gate (ON staging / OFF prod until you ship).
+2. Everything else in the two email docs is unchanged — machine codes, 300s validity, 60s cooldown, 5 attempts, staging fixed code `<staging-otp>`, and the `EMAIL_VERIFICATION_REQUIRED` booking gate (ON staging / OFF prod until you ship).

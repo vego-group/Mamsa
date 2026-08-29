@@ -77,7 +77,7 @@ Incidentally it confirms something useful: **1035 = 900 × 1.15**, i.e. producti
 | `+966555000002` | Individual (partner) | fixed code |
 | `+966555000003` | SuperAdmin | fixed code |
 | `+966537486167` | SuperAdmin | **real SMS** |
-| `+966500433980` | Individual + User | **real SMS** |
+| `+9665XXXXXXXX` | Individual + User | **real SMS** |
 
 Test mode is enabled again for the three demo numbers only; real numbers still receive a real SMS, and
 payments are always live Moyasar.

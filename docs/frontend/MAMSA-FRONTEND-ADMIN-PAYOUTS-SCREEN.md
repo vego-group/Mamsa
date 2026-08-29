@@ -55,7 +55,7 @@ A real staging row:
   "partnerType": "individual",
   "amount": 87800,                                  // exactly what will be paid
   "bookingsCount": 22,
-  "iban": "SA0380000000608010167519",               // FULL — the accountant types this into the bank
+  "iban": "SA2480000000000000000000",               // FULL — the accountant types this into the bank
   "bankName": "مصرف الراجحي",                        // may be null
   "accountHolderName": "محمد الشريك الفردي",
   "lastPaidAt": null,                               // ISO, null if never paid
@@ -79,7 +79,7 @@ A real staging row:
 ### ⚠️ Never offer an amount input
 
 `amount` sent in the record body is **read and discarded**. Proven on staging: a request carrying
-`amount: 999999.99` and a junk IBAN recorded `87800` to `••••7519`.
+`amount: 999999.99` and a junk IBAN recorded `87800` to `••••0000`.
 
 A field the user can fill that silently does nothing is worse than no field — it implies control that
 does not exist.

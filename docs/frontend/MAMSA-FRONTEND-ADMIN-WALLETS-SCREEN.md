@@ -126,7 +126,7 @@ Everything from the list row, **plus** three blocks:
 
 ```jsonc
 {
-  "iban": "SA0380000000608010167519",     // FULL iban — admin surface only
+  "iban": "SA2480000000000000000000",     // FULL iban — admin surface only
   "accountHolderName": "محمد الشريك الفردي",
   "bankName": "مصرف الراجحي",              // server-derived, may be null
   "verified": true,
@@ -140,7 +140,7 @@ Everything from the list row, **plus** three blocks:
 - [ ] **`null` when no account has ever been saved** — render an empty state, not a skeleton.
 - [ ] `bankName` may be `null` for an unrecognised bank code. Neutral state, never block on it.
 - [ ] The **full IBAN appears here**. It must not leak to any partner-facing view — partners only
-      ever see `••••7519`.
+      ever see `••••0000`.
 - [ ] Verify/reject controls belong here → see `MAMSA-FRONTEND-BANK-VERIFICATION.md`.
 
 ### 3.2 `recentLedger` — a bounded preview

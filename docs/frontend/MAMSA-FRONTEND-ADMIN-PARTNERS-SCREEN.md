@@ -52,7 +52,7 @@ A real row:
   "type": "company",                       // company | individual
   "city": "",
   "email": "mnahil@vego.sa",
-  "phone": "+966500433980",
+  "phone": "+9665XXXXXXXX",
   "joinedAt": "2026-07-17T07:24:52+03:00",
   "unitsCount": 0,
   "bookingsCount": 0,

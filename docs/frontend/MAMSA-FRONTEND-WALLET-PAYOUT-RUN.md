@@ -48,7 +48,7 @@ A real run against 22 real bookings:
 ```jsonc
 // GET /admin/payouts/eligible
 {"partnerId":"prt_4","partnerName":"محمد الشريك الفردي","partnerType":"individual",
- "amount":87800,"bookingsCount":22,"iban":"SA0380000000608010167519",
+ "amount":87800,"bookingsCount":22,"iban":"SA2480000000000000000000",
  "bankName":"مصرف الراجحي","accountHolderName":"محمد الشريك الفردي",
  "lastPaidAt":null,"lastPaidPeriod":null}
 
@@ -56,7 +56,7 @@ A real run against 22 real bookings:
 {"ok":true,"payoutId":"pay_1","reference":"PO-2026-08-0001"}
 
 // what was actually recorded
-ref=PO-2026-08-0001  amount=87800  bookings=22  iban=••••7519  period=2026-07
+ref=PO-2026-08-0001  amount=87800  bookings=22  iban=••••0000  period=2026-07
 ```
 
 The partner immediately sees it:

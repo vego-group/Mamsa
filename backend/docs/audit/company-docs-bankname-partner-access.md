@@ -138,7 +138,7 @@ bank code".
 ```jsonc
 // GET and PUT /me/bank-details
 {
-  "iban": "SA0380000000608010167519",
+  "iban": "SA2480000000000000000000",
   "accountHolderName": "…",
   "bankName": "البنك الأهلي السعودي",   // ← server-derived
   "verified": false,

@@ -74,7 +74,7 @@ GET /admin/payouts?periodMonth=2026-07&partnerId=&status=&page=&pageSize=&search
     "periodMonth": "2026-07", "amount": 87800, "bookingsCount": 22,
     "currency": "SAR", "status": "paid", "paidAt": "2026-08-15T16:26:18Z",
     "bankReference": "FT-STAGING-0001",
-    "ibanMasked": "••••7519", "bankName": "مصرف الراجحي", "note": null
+    "ibanMasked": "••••0000", "bankName": "مصرف الراجحي", "note": null
   }],
   "total": 1, "page": 1, "pageSize": 10,
   "totalAmount": 87800, "totalBookingsCount": 22

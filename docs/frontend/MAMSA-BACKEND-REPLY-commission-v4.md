@@ -25,7 +25,7 @@ session where the command runs, not with you.
 When it does, this is the exact sequence, with your conditions built in:
 
 ```
-0. state the target by name and prove it            → staging.mamsaa.com, DB u184390120_mamsa_stg_db
+0. state the target by name and prove it            → staging.mamsaa.com, DB <staging-database>
 1. dump partner_ledger_entries, payouts, and the
    bookings.payout_id column                        → before any delete
 2. delete 73 ledger entries (50 earning · 1 payout · 22 adjustment)

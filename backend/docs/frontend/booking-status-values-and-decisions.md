@@ -193,7 +193,7 @@ If you need working production logins for testing, use the real-phone accounts:
 | Phone | Roles |
 |---|---|
 | `+966537486167` | SuperAdmin |
-| `+966500433980` | Individual (partner, approved) + User |
+| `+9665XXXXXXXX` | Individual (partner, approved) + User |
 
 Reverting is possible in ~30 seconds if it turns out to be needed, but the security posture is much
 better as it stands — this closed the last open item from the security audit.

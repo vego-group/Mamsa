@@ -260,7 +260,7 @@ interface PartnerPayout {
   amount: number;
   bookingsCount: number;
   currency: 'SAR';
-  iban: string;                 // masked: "••••7519"
+  iban: string;                 // masked: "••••0000"
   bankName: string;
   accountHolderName: string;
   status: 'paid' | 'reversed';

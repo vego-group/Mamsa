@@ -15,7 +15,7 @@ the specialized docs (linked per section) and in the Postman collection
 | **Partner-dashboard API** | `https://api.mamsaa.com` (**root — no `/api/v1`**) | **httpOnly session cookie** | `partner.mamsaa.com` |
 | **Admin API** | `https://api.mamsaa.com/api/v1/admin` | Bearer token (email+password login) | admin panel |
 
-Staging equivalent for all three: `https://staging.mamsaa.com` (fixed OTP `111222`, `debug_otp`
+Staging equivalent for all three: `https://staging.mamsaa.com` (fixed OTP `<staging-otp>`, `debug_otp`
 echoed, Moyasar test keys). CORS: your origins are allowlisted per environment — `localhost:3000–3002`,
 `5173/5174`, `mamsa-*.vercel.app` (pattern) on staging; the real domains on prod. Vercel **preview**
 deploys must target staging (`SameSite` rules — `NEXTJS-DASHBOARD-PRODUCTION.md` §3).

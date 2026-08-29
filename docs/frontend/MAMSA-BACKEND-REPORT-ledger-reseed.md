@@ -12,7 +12,7 @@ for is below.
 
 ```
 connection : mysql
-database   : u184390120_mamsa_stg_db
+database   : <staging-database>
 app env    : local
 ```
 
@@ -34,7 +34,7 @@ entries   earning       payout        adjustment   payouts   net balance
 storage/app/private/ledger-dumps/20260829-113053.json     35,855 bytes
 
   taken_at                 2026-08-29T11:30:53+03:00
-  database                 u184390120_mamsa_stg_db
+  database                 <staging-database>
   ledger entries captured  73
   payouts captured          1
   booking payout links     22

@@ -11,7 +11,7 @@ Printable/repo version of the interactive plan (`Mamsa-UAT-Test-Plan.html`) — 
 | User website (staging data) | Next.js dev/preview → `https://staging.mamsaa.com/api/v1` |
 | Partner dashboard | `partner.mamsaa.com` (or local) → `https://staging.mamsaa.com` (root, no /api/v1) |
 | Admin panel | `testvue.mamsaa.com/admin` = ⚠ production · staging admin: local Vue → staging API |
-| OTP on staging | fixed `111222` (echoed as `debug_otp`) · caps 100/phone/day, 300/IP/day, 5/min burst |
+| OTP on staging | fixed `<staging-otp>` (echoed as `debug_otp`) · caps 100/phone/day, 300/IP/day, 5/min burst |
 | Approved partner | `0512345678` — units in all 4 states, bookings, iCal feed |
 | Approved individual | `0577777777` — clean, no units |
 | Pending partners | `0533333333`, `0599999999` — keep pending (they test the review screen) |
@@ -70,11 +70,11 @@ Printable/repo version of the interactive plan (`Mamsa-UAT-Test-Plan.html`) — 
 
 ## 2 · User account — register & login  `staging`
 
-> Passwordless OTP. Staging code is always 111222.
+> Passwordless OTP. Staging code is always <staging-otp>.
 
 ### [ ] T-2.1 — Register a new user
 1. Register with a fresh 05971… number
-2. Enter OTP 111222
+2. Enter OTP <staging-otp>
 3. Complete profile (name)
 
 **Expected:** Account created; you land signed-in; profile shows the name.
@@ -198,7 +198,7 @@ Printable/repo version of the interactive plan (`Mamsa-UAT-Test-Plan.html`) — 
 
 ### [ ] T-6.1 — Register — individual
 1. Join as partner → individual
-2. Fresh phone + OTP 111222 + national ID (10 digits)
+2. Fresh phone + OTP <staging-otp> + national ID (10 digits)
 
 **Expected:** 201 success; account has partner role; status is PENDING.
 
@@ -271,7 +271,7 @@ Printable/repo version of the interactive plan (`Mamsa-UAT-Test-Plan.html`) — 
 **Expected:** OTP accepted but entry refused with طلب انضمامك قيد المراجعة — an under-review screen WITH a ‘try again’ action, not a dead end.
 
 ### [ ] T-8.2 — Approved partner enters
-1. Log in with 0512345678 + OTP 111222
+1. Log in with 0512345678 + OTP <staging-otp>
 
 **Expected:** Straight to the dashboard; reloading keeps the session (2-hour cookie).
 
