@@ -120,7 +120,14 @@
               <li v-for="doc in documents" :key="doc.key" class="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-3">
                 <span class="material-symbols-outlined text-[18px] text-gray-400">description</span>
                 <span class="flex-1 text-[13px] text-gray-700">{{ docLabel(doc.key) }}</span>
-                <span class="text-[12px] font-semibold" :class="docMeta(doc.status).cls">{{ docMeta(doc.status).label }}</span>
+                  <!-- A reviewer approving a listing needs to OPEN the document,
+                       not read a badge that stands in for one. -->
+                  <a v-if="doc.fileUrl" :href="doc.fileUrl" target="_blank" rel="noopener"
+                     class="text-[12px] font-semibold text-primary hover:underline inline-flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+                    فتح
+                  </a>
+                  <span class="text-[12px] font-semibold" :class="docMeta(doc.status).cls">{{ docMeta(doc.status).label }}</span>
               </li>
             </ul>
             <p v-else class="text-[13px] text-gray-400 py-6 text-center">{{ t('approvals.noDocuments') }}</p>

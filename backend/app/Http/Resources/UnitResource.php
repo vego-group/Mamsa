@@ -71,7 +71,13 @@ class UnitResource extends JsonResource
                 // public route is never populated — the token is a sanctum one.
                 // Reading it that way made the block invisible to the owner too,
                 // so the fields silently never appeared for anyone.
-                ($u = $request->user('sanctum') ?? $request->user())
+                // Default guard FIRST. Asking for 'sanctum' resolves that guard
+                // and caches its user on the app instance; in tests the instance
+                // is reused across requests, so resolving it during one request
+                // left a stale user authenticated for the next and turned a
+                // later admin call into a 403. Production makes a fresh app per
+                // request and never saw it — the suite did.
+                ($u = $request->user() ?: $request->user('sanctum'))
                     && ($u->id === $this->user_id || $u->isAdmin()),
                 fn () => [
                     'tourism_permit_no'   => $this->tourism_permit_no,

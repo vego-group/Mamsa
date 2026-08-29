@@ -190,6 +190,38 @@ class UnitDocumentTest extends TestCase
         $this->assertStringNotContainsString('deed.jpg', $body);
     }
 
+    public function test_the_admin_review_row_reflects_the_units_own_document(): void
+    {
+        $admin = User::factory()->create(['is_active' => true]);
+        $admin->assignRole('Admin');
+
+        $this->partner->partnerDetail()->create([
+            'type' => 'individual',
+            'status' => \App\Models\PartnerDetail::STATUS_APPROVED,
+            // The three files the row USED to be derived from. None of them is
+            // proof of property ownership, and an approved partner made the row
+            // read "verified" while no deed existed anywhere.
+            'authorization_letter_file' => 'file_auth',
+            'vat_certificate_file'      => 'file_vat',
+        ]);
+        $this->unit->update(['approval_status' => 'pending']);
+
+        $row = fn () => collect(
+            $this->actingAs($admin, 'sanctum')
+                ->getJson("/api/v1/admin/requests/{$this->unit->id}")
+                ->assertOk()->json('data.partner.documents')
+        )->firstWhere('key', 'ownership');
+
+        // No deed on the unit → missing, despite the unrelated partner files.
+        $this->assertSame('missing', $row()['status']);
+
+        $this->unit->update(['ownership_doc_file' => 'units/1/docs/deed.pdf']);
+
+        $after = $row();
+        $this->assertSame('pending', $after['status']);
+        $this->assertStringContainsString('deed.pdf', $after['fileUrl']);
+    }
+
     public function test_the_owner_does_see_them(): void
     {
         $this->unit->update([

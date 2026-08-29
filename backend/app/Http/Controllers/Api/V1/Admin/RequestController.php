@@ -92,15 +92,20 @@ class RequestController extends Controller
                 'city'        => $unit->city,
                 'is_verified' => $detail?->status === PartnerDetail::STATUS_APPROVED,
                 'rating'      => $rating !== null ? round((float) $rating, 1) : null,
-                'documents'   => $this->partnerDocuments($detail),
+                'documents'   => $this->partnerDocuments($detail, $unit),
             ],
             'submitted_at' => $unit->created_at?->toIso8601String(),
             'timeline'     => $timeline,
         ]);
     }
 
-    /** @return array<int, array{key: string, status: string}> */
-    private function partnerDocuments(?PartnerDetail $d): array
+    /**
+     * The three rows the review screen renders. `ownership` is about THIS unit;
+     * the other two are about the partner.
+     *
+     * @return array<int, array{key: string, status: string, fileUrl?: string}>
+     */
+    private function partnerDocuments(?PartnerDetail $d, Unit $unit): array
     {
         if (! $d) {
             return [];
@@ -108,11 +113,28 @@ class RequestController extends Controller
         $verified = $d->status === PartnerDetail::STATUS_APPROVED;
         $state = fn (bool $has) => ! $has ? 'missing' : ($verified ? 'verified' : 'pending');
 
-        return [
+        // The `ownership` row is labelled "مستندات ملكية العقار" on the review
+        // screen, but it used to be derived from the partner's authorisation
+        // letter, VAT certificate or operator licence — none of which is proof
+        // of owning a property. It reported on the wrong documents entirely, so
+        // uploading a real deed left it reading "غير متوفر" while an unrelated
+        // partner file could turn it green.
+        //
+        // It now reads the unit's own ownership document. A reviewer opening
+        // the row gets the file itself, not a badge standing in for one.
+        $ownership = $unit->ownership_doc_file;
+
+        return array_values(array_filter([
             ['key' => 'identity',  'status' => $state((bool) ($d->national_id || $d->cr_number))],
             ['key' => 'bank',      'status' => $state((bool) $d->iban)],
-            ['key' => 'ownership', 'status' => $state((bool) ($d->authorization_letter_file || $d->vat_certificate_file || $d->operator_license_file))],
-        ];
+            array_filter([
+                'key'     => 'ownership',
+                // Not $state(): an ownership document is verified when an admin
+                // has looked at THIS file, and approving the partner is not that.
+                'status'  => filled($ownership) ? 'pending' : 'missing',
+                'fileUrl' => \App\Models\DashboardUpload::resolveUrl($ownership),
+            ], fn ($v) => $v !== null),
+        ]));
     }
 
     public function approve(Unit $unit): JsonResponse
