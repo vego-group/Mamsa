@@ -1,124 +1,202 @@
 # Mamsa backend — everything that changed, and where it is now
 
-**From:** backend · **Date:** 2026-08-28
+**From:** backend · **Updated:** 2026-08-29 *(supersedes the 2026-08-28 version)*
 **For:** all three Next.js apps — `mamsa-app` (www) · `mamsa-partner-dashboard` · `mamsa-admin-dashboard`
 
-One document replacing eleven. Everything below is **verified against production today**, not
-copied from an earlier reply — three of you have nearly reverted working features because a status
-line in one of my docs had gone stale, so every claim here was re-checked before it was written.
+One document replacing twenty. Every claim below was **re-checked against production today**, not
+carried forward from an earlier reply — stale status lines in these documents have three times
+nearly caused a working feature to be reverted, so the discipline is: verify, then write.
 
-**Everything in this document is live on production and on staging.** Two items are explicitly
-marked open at the end; nothing else is pending.
+**Everything here is live on production and staging.** Nothing is pending. The open items are in §9
+and neither is code.
 
 ---
 
 ## 0. If you read one section
 
-| you were doing this | stop, because |
+| you may still be doing this | stop — see |
 |---|---|
-| deriving commission by multiplying a total | the rate changed 2% → **10%**, is frozen per booking, and is now returned. §5 |
-| ignoring `meta` on `GET /units` | `?page=`/`?per_page=` work and ordering is stable. Anyone with >12 units was invisible past page 1. §2 |
-| sending `start_date`/`end_date` and assuming they filtered | they were **ignored until 2026-08-27**. They work now. §2 |
-| reading `cancellation_policy` as a refund promise | it used to return a dead value. Now the effective preset. §4 |
-| showing `message` from a 404 to a user | it leaked our model names. Now a generic message + `code`. §4 |
-| using one image URL at five sizes | `variants` + `width`/`height` shipped. §3 |
-| disabling calendar days up to a booking's `end_date` | `blocked-dates` returns **nights** — `end` is one day earlier. §2 |
+| deriving commission by multiplying a total | rate is **10%**, frozen per booking, and returned. §5 |
+| treating `price_per_night` as pre-VAT | it is **VAT-inclusive**. §4 |
+| computing VAT as `gross × 0.15` yourself | read `taxes` — ours is derived by subtraction so it can't drift. §4 |
+| ignoring `meta` on `GET /units` | paging works and ordering is stable. Anyone with >12 units was invisible past page 1. §2 |
+| assuming `start_date`/`end_date` filtered | they were **ignored until 2026-08-27**. They work now. §2 |
+| reading `cancellation_policy` as a refund promise | it used to return a dead value. §3 |
+| showing a 404 `message` to a user | it leaked our model names. §3 |
+| one image URL at five sizes | `variants` + `width`/`height`. §6 |
+| disabling calendar days through a booking's `end_date` | `blocked-dates` returns **nights** — `end` is a day earlier. §2 |
+| deriving a cancellation's partner impact from `bookingTotal` | that total is VAT-inclusive. The frozen split is on the row now. §5 |
 
 ---
 
-## 1. Base URLs
+## 1. Base URLs and envelopes
 
 ```
 production   https://api.mamsaa.com
 staging      https://staging.mamsaa.com
 ```
 
-Three surfaces, three envelopes — unchanged:
-
 | surface | mount | auth | error shape |
 |---|---|---|---|
 | guest app | `/api/v1/*` | Bearer | `{ message, code }` |
-| partner dashboard | root (`/me`, `/units`, …) | cookie session | `{ error: { code, message, fields? } }`, validation = **400** |
-| admin console | `/admin/*` | cookie session | `{ message, code, fields? }`, validation = **422** |
+| partner dashboard | root (`/me`, `/units`, …) | cookie session | `{ error: { code, message, fields? } }`, validation **400** |
+| admin console | `/admin/*` | cookie session | `{ message, code, fields? }`, validation **422** |
+
+Field naming follows the surface: `/api/v1` is snake_case, the two dashboards are camelCase.
 
 ---
 
 ## 2. Search, availability and the calendar
 
-### `GET /units` — three parameters used to be accepted and ignored
-
-That is worse than rejecting them, because you built promises on top. All three work now.
+### `GET /units`
 
 ```
-GET /units?city=riyadh&start_date=2026-09-05&end_date=2026-09-08&sort=price_asc&per_page=24&page=2
+?city=riyadh&start_date=2026-09-05&end_date=2026-09-08&sort=price_asc&per_page=24&page=2&ids[]=34
 ```
 
 | parameter | notes |
 |---|---|
-| `start_date` + `end_date` | excludes units with a conflicting booking (`confirmed` **or** `pending_payment`), a partner closure, or an imported iCal block. **Send both or neither — one alone is a `422`** |
-| `sort` | `price_asc` · `price_desc` · `rating` · `newest`. Unknown/absent → featured first, then newest ("موصى به") |
-| `per_page` | 1–50, default 12 |
-| `page` | standard |
-| `city` | slug (`riyadh`), English (`Riyadh`) or Arabic (`الرياض`) all work |
+| `start_date` + `end_date` | excludes units with a conflicting booking (`confirmed` **or** `pending_payment`), a partner closure, or an iCal block. **Send both or neither — one alone is `422`** |
+| `sort` | `price_asc` · `price_desc` · `rating` · `newest`. Unknown/absent → featured first, then newest |
+| `per_page` | 1–50, default 12 · `page` standard |
+| `city` | slug (`riyadh`), English (`Riyadh`) or Arabic (`الرياض`) |
 | `ids[]` | max 50. Unpublished units stay hidden even when named by id |
 
-**Ordering is now deterministic.** There was previously no `ORDER BY` at all — not an unstable
-sort, none — so paging could show one unit twice and never show another. Every sort ends with `id`.
+**Ordering is deterministic.** There was previously no `ORDER BY` at all, so paging could show one
+unit twice and never show another. Every sort ends with `id`.
 
 `meta` is stable: `{ current_page, last_page, per_page, total }`.
 
 ### `GET /units/{id}/blocked-dates?from=&to=`
 
-Unauthenticated. `from` defaults to today, `to` to +6 months, window capped at 400 days. Ranges are
-merged.
+Unauthenticated. `from` defaults to today, `to` to +6 months, capped at 400 days, ranges merged.
 
-```jsonc
-{ "from": "…", "to": "…", "blocked": [ { "start": "2026-10-05", "end": "2026-10-09" } ] }
-```
+⚠️ **`end` is the last unavailable NIGHT, not the booking's end date.** A booking of 10-05 → 10-10
+returns `end: 10-09`, because the 10th is the changeover day and is bookable. Disable
+`start … end` inclusive and the calendar matches the booking endpoint exactly.
 
-⚠️ **`end` is the last unavailable NIGHT, not the booking's end date.** That example is a real
-booking of **10-05 → 10-10**: it returns `end: 10-09` because the 10th is the changeover day and is
-bookable. Disable `start … end` inclusive and the calendar agrees with the booking endpoint exactly.
+### Changeover days and double-booking
 
-### Changeover days
+A stay occupies nights `[start, end)` — the changeover day belongs to the arriving guest. This was
+once *inconsistent*: an arrival on the 15th was refused while a departure on the 10th was allowed.
 
-A stay occupies nights `[start, end)`. A booking of 10→15 uses the nights of the 10th–14th; the
-15th is free for the next guest. This used to be **inconsistent** — an arrival on the 15th was
-refused while a departure on the 10th was allowed, the same situation answered two ways.
-
-### Double-booking is now prevented at the database level
-
-`POST /bookings` always re-checked availability, but outside any transaction or lock — two requests
-could both read "free" and both succeed. The check and the insert now run in one transaction behind
-a row lock. Proven with 8 genuinely parallel requests: **1 created, 7 refused, 1 row**.
-
-**Keep your checkout check.** Someone can still book while your guest fills in the form. The two
-refusals are distinguishable:
+`POST /bookings` now checks and inserts inside a transaction behind a row lock. Proven with 8
+parallel requests: **1 created, 7 refused, 1 row**. Keep your checkout check — someone can still
+book while your guest fills the form. The two refusals are distinguishable:
 
 ```
 "الوحدة محجوزة في هذه الفترة"      another booking
 "الوحدة غير متاحة في هذه الفترة"    the partner closed the dates
 ```
 
-### A staging fixture for testing this end to end
+### Staging fixture for end-to-end testing
 
 ```
-staging · unit 2 · confirmed booking 2026-10-05 → 2026-10-10
+staging · unit 2 · confirmed booking 2026-10-05 → 2026-10-10   (permanent)
 ```
 
-Permanent — it will not be cleaned up. All three surfaces agree on every boundary: search hides it
-for `10-06→10-08`, offers it for `10-10→10-12`, the calendar returns nights `10-05…10-09`, and the
-probe matches.
+All three surfaces agree on every boundary: search hides it for `10-06→10-08`, offers it for
+`10-10→10-12`, the calendar returns nights `10-05…10-09`, the probe matches.
 
 ---
 
-## 3. Images
+## 3. Fields and error shapes
 
-`GET /units` and `/units/{id}` — each image now carries:
+**On the unit resource:** `created_at` (ISO 8601) and `owner` on the **list**, not just the detail —
+the list never loaded the relation, so every card showed a blank host and an unlit badge.
+
+**`cancellation_policy` means something now.** It used to echo a dead enum (`no_cancel` /
+`48_hours`) the refund engine never read, so using it as a pre-payment fallback showed a refund
+schedule that would never be honoured. It now carries the **effective preset key**, always equal to
+`cancellation_policy_details.template`.
+
+**The complete vocabulary is three values** — verified on production today:
+
+```
+flexible · moderate · strict
+```
+
+Never null: a unit that never chose one inherits the platform default and the field reports what
+would be enforced.
+
+**404s no longer leak internals:**
+
+```
+before   {"message":"No query results for model [App\\Models\\Unit] 999999"}
+now      {"message":"المورد غير موجود","code":"NOT_FOUND"}
+```
+
+Unhandled 500s return `{ message, code: "SERVER_ERROR" }`. **Validation and auth shapes are
+unchanged.**
+
+**On the booking resource:** `user_id`, `guest_name` (always populated now) and
+`guests_detail: { adults, children }` beside the scalar `guests` total. `guests` deliberately stays
+a number — the partner and admin consoles read it as one.
+
+---
+
+## 4. Price basis — `price_per_night` is VAT-INCLUSIVE
+
+`Pricing::breakdown(1000, nights: 1)`, run on production today:
+
+```
+total              1000.00     ← what the guest pays. Nothing is added at checkout
+subtotal            869.57     ← = 1000 / 1.15
+vat                 130.43
+commission           86.96     ← 10% of the NET BASE, never of the gross
+partner_share       782.61
+
+subtotal + vat = 1000.00       commission + share = 869.57
+```
+
+⚠️ **Don't compute the VAT yourself.** `subtotal` comes from a division and `vat` from a
+**subtraction**, so `subtotal + vat === total` holds *exactly*. Computing `gross × 0.15`
+independently will occasionally land a halala away from the invoice. Read `pricing.total`,
+`pricing.subtotal`, `pricing.taxes`; `tax_percent` is on the unit resource so nobody hardcodes 15.
+
+A display-time estimate before the quote returns is fine. Just don't use your own figure once the
+server has given you one.
+
+**Partner-facing:** a partner typing 360 is setting what the *guest* pays. At 10% they receive
+`360/1.15 − 10% = 281.74` per night. Worth stating in the partner UI.
+
+---
+
+## 5. Commission — 10%
+
+```
+live rate 0.10          legacy 0.02 (reconstructs pre-freeze rows only — never merge them)
+```
+
+- **Frozen per booking.** A rate change never re-prices an existing booking.
+- **Returned, so stop deriving it:** `commission_rate` on `/api/v1/bookings/{id}` (admin/owner only
+  — a guest never sees the platform's margin), `commissionRate` on the partner dashboard and
+  `/admin/bookings/{id}`.
+- **Reports aggregate per row.** Three admin pages once applied one rate to a total; on a single 10%
+  booking that under-reported by 800 SAR.
+- **A zero commission is reported as zero.** Nothing imputes any more — a fallback that guessed
+  couldn't tell a legitimate zero from an unwritten one.
+
+### Cancellation rows carry the frozen split
+
+`/admin/cancellations` (camelCase) and `/api/v1/admin/cancellations` (snake_case):
 
 ```jsonc
-{ "id": 91, "url": "…", "is_main": true,
-  "width": 1600, "height": 1200,
+{ "bookingTotal": 1150.00,   // VAT-INCLUSIVE — do not derive a split from this
+  "netBase": 1000.00, "commission": 100.00, "partnerShare": 900.00,
+  "impact": -100.00 }        // unchanged: commission, negated
+```
+
+A booking frozen at the old 2% reports **20**, never 100 — the rate travels with the booking.
+
+---
+
+## 6. Images
+
+Each image on `GET /units` and `/units/{id}`:
+
+```jsonc
+{ "id": 91, "url": "…", "is_main": true, "width": 1600, "height": 1200,
   "variants": { "thumb": "…_thumb.webp", "card": "…_card.webp", "full": "…_full.webp" } }
 ```
 
@@ -129,99 +207,32 @@ probe matches.
 | `full` | 2048 long edge | contain — never cropped |
 | `url` | original | untouched, not deprecated |
 
-- **`variants` is `null`, never a fake.** A photo without derivatives returns null rather than three
-  copies of the original — that is your signal to fall back to `url`.
-- **Never upscaled.** A 432×768 portrait asked for `card` comes back 432×324, not blown up.
+- **`variants` is `null`, never a fake** — your signal to fall back to `url`.
+- **Never upscaled.** A 432×768 portrait asked for `card` returns 432×324.
 - **`width`/`height` describe the ORIGINAL**, which shares its aspect with `full` and nothing else.
-  Put them on the `full` `<img>` only. `thumb` and `card` are always 4:3 — size those in CSS.
+  Put them on the `full` `<img>` only — `thumb` and `card` are always 4:3, so size those in CSS.
 
-**Upload rules** (partner + admin consoles):
-
-| | |
-|---|---|
-| formats | jpeg · png · webp · **heic** (converted to JPEG on receipt) |
-| min resolution | long edge ≥1024, short edge ≥576 — orientation-agnostic, so portraits are not auto-rejected |
-| max size | 10 MB |
-| aspect ratio | **not enforced** |
-| EXIF | orientation baked into the pixels, then **all metadata stripped** |
+**Upload rules:** jpeg · png · webp · **heic** (converted on receipt) · min long edge 1024 / short
+edge 576 · max 10 MB · aspect ratio **not** enforced · EXIF orientation baked in and **all metadata
+stripped**.
 
 That last one closed a live data leak: photos were stored as raw bytes, so a partner's phone photo
-published the property's GPS coordinates to anyone with a metadata viewer.
+published the property's GPS coordinates.
 
 ---
 
-## 4. Fields and error shapes
+## 7. Text fields
 
-**New on the unit resource:**
-
-- `created_at` — ISO 8601. `newest` sorting is impossible without it.
-- `owner` on the **list**, not just the detail. It existed on `/units/{id}` but the list never
-  loaded the relation, so every card showed a blank host and an unlit verification badge.
-
-**`cancellation_policy` now means something.** It used to echo a dead enum column (`no_cancel` /
-`48_hours`) that the refund engine never read — so using it as a pre-payment fallback showed a
-refund schedule that would never be honoured. It now carries the **effective preset key**, always
-equal to `cancellation_policy_details.template`.
-
-**The complete vocabulary is three values:**
-
-```
-flexible · moderate · strict
-```
-
-Not `24_hours`, `7_days` or `non_refundable` — those do not exist here. Never null: a unit that
-never chose one inherits the platform default and the field reports what would be enforced.
-
-**404s no longer leak internals.**
-
-```
-before   {"message":"No query results for model [App\\Models\\Unit] 999999"}
-after    {"message":"المورد غير موجود","code":"NOT_FOUND"}
-```
-
-Unhandled 500s return `{ message, code: "SERVER_ERROR" }`. **Validation and auth shapes are
-unchanged** — you already parse those.
-
-**On the booking resource:** `user_id`, `guest_name` (now always populated) and
-`guests_detail: { adults, children }` alongside the scalar `guests` total.
-
-`guests` deliberately stays a number: the partner and admin consoles read it as one, and renaming it
-to an object would break both to save the storefront a line.
-
----
-
-## 5. Commission — 2% → 10%
-
-**The guest price does not change.** Commission comes out of the partner's share of the net base:
-
-```
-base 1000  →  guest pays 1150 · VAT 150 · commission 100 · partner 900
-```
-
-- **Frozen per booking.** A rate change never re-prices an existing booking.
-- **Returned, so stop deriving it:** `commission_rate` on `/api/v1/bookings/{id}` (admin/owner only
-  — a guest never sees the platform's margin), `commissionRate` on the partner dashboard and
-  `/admin/bookings/{id}`.
-- **Reports aggregate per row**, never one rate applied to a total. Three admin pages used to get
-  this wrong; on a single 10% booking the old expression under-reported by 800 SAR.
-
-Not on `/partner/ledger` or `/payouts/summary`: a ledger entry is a money movement, not a booking —
-a payout spans many and an adjustment has no rate at all.
-
----
-
-## 6. Text fields
-
-- **`description` limit is 2000 characters** (was a guessed 500 that nobody ever confirmed).
-  Counted in **characters**, not bytes.
-- **`strip_tags` removed** from `description`, `name`, `district` and `address`. It was not a
-  sanitiser: a `<` followed by anything but a space deleted everything through the next `>`. Since
-  `>` opens a note line in your markup, `"شروط <= ثلاثة\n> ملاحظة"` was stored as `"شروط  ملاحظة"` —
-  corrupted in the column, not the render. `"<200م من المسجد"` became `""`.
+- **`description` limit is 2000 characters** (the old 500 was a guess nobody confirmed), counted in
+  **characters**, not bytes.
+- **`strip_tags` removed** from `description`, `name`, `district`, `address`. It was not a
+  sanitiser: `<` followed by anything but a space deleted everything through the next `>`. Since `>`
+  opens a note line, `"شروط <= ثلاثة\n> ملاحظة"` stored as `"شروط  ملاحظة"`, and
+  `"<200م من المسجد"` became `""` — corrupted in the column, not the render.
 - Newlines and every marker (`#` `##` `*` `**` `-` `>` `»` `•` `–` `—`) round-trip byte for byte.
-- **The 10-character minimum gates submit, not save** — a draft may hold nothing.
+- **The 10-character minimum gates submit, not save.**
 
-**Clearing an optional field**, one rule everywhere:
+**Clearing an optional field**, one rule:
 
 | body | effect |
 |---|---|
@@ -230,75 +241,84 @@ a payout spans many and an adjustment has no rate at all.
 | `[]` or `null` (arrays) | cleared |
 | `["wifi"]` | replaces the whole set |
 
-⚠️ **`photoFileIds` is the exception worth knowing.** Photos with no `fileId` (predating the upload
-flow) are **preserved** across any `photoFileIds` write — they cannot appear in a list you send, so
-deleting them would answer a limit of the request format rather than anyone's intent. There are
-currently zero such rows anywhere.
+⚠️ **`photoFileIds` exception:** photos with no `fileId` (predating the upload flow) are
+**preserved** across any `photoFileIds` write — they can't appear in a list you send, so deleting
+them would answer a limit of the request format rather than intent. Zero such rows exist anywhere.
 
 ---
 
-## 7. Two things still open
+## 8. Endpoints added
 
-**1. `Vary: Accept` — half fixed, and the other half is not ours.**
-
-Production sits behind Hostinger's CDN, which content-negotiates images: the same `.jpg` URL is
-served as WebP to a browser that accepts it and as JPEG otherwise, with a 7-day cache. The origin
-now sends `Vary: Accept` — verified — but **the edge strips it**. Any cache between the edge and the
-user could therefore store one format and serve it to everyone. Closing it needs a Hostinger support
-ticket, not a config change.
-
-Measure against production with a browser `Accept` header, or you are measuring the CDN's JPEG path
-rather than the one your users take.
-
-**2. The staging partner ledger still holds the old 98% shares.** 50 earning entries at the old rate
-sit under a recorded payout of 87,800 SAR; regenerating at 90% could drive a balance negative.
-Three options are on the table and it needs a decision — production is unaffected (zero bookings).
+| | |
+|---|---|
+| `GET /units/{id}/blocked-dates` | calendar feed, unauthenticated |
+| `GET /units?ids[]=` | fetch a known set, max 50 |
+| `GET /units/sitemap` | `{id, updated_at}[]`, unauthenticated, unpaginated |
+| `GET /bookings/{id}/review` | the object, or a bare `null` at 200 — unreviewed is not a 404 |
 
 ---
 
-## 8. Not built, and openly so
+## 9. Two things open, neither of them code
+
+**`Vary: Accept`.** Production sits behind Hostinger's CDN, which content-negotiates images — the
+same `.jpg` URL is served as WebP to a browser that accepts it, with a 7-day cache. The **origin now
+sends `Vary: Accept`**, verified; **the edge strips it**. Any cache between the edge and the user
+could store one format and serve it to everyone. Closing it needs a Hostinger ticket.
+
+*Measure against production with a browser `Accept` header, or you're measuring the CDN's JPEG path
+rather than the one your users take.*
+
+**A flaky test.** `SuspendedAccountTest` reaches the live FGC SMS gateway and fails auth
+non-deterministically; it passes on re-run. Affects no endpoint. Flagged because a red CI run that
+means nothing is one people learn to ignore.
+
+---
+
+## 10. Not built, and openly so
 
 | | why |
 |---|---|
-| `first_name` / `last_name` | two columns, a migration to split existing names, every write path. Needs a slot, not a patch |
-| `avatar_url` on the user | no avatar storage exists; the field would be null forever |
-| image `alt` | needs a partner form field. **Generate it your side** — if it ships, the API key will be additive |
-| guest ↔ host messaging | a feature, not a field: table, read permissions, notification decision |
+| `first_name` / `last_name` | two columns, a migration to split existing names, every write path |
+| `avatar_url` on the user | no avatar storage exists; it would be null forever |
+| image `alt` | needs a partner form field. **Generate it your side** — if it ships, the key will be additive |
+| guest ↔ host messaging | deferred by the www team |
+| booking on someone else's behalf | deferred; the account is the guest |
 | cancellation contract (`total_amount`, `forfeited_amount`, `tier_label` as data, `cancelled_by` values) | agreed to do as one coherent piece |
-| booking on someone else's behalf | deferred by the www team; the account is the guest |
-| commission proration on refunds | nothing to prorate — commission is only realised at `completed`, and a cancelled booking never gets there |
+| commission proration on refunds | nothing to prorate — commission is realised only at `completed`, and a cancelled booking never gets there |
 
 ---
 
-## 9. Where the detail lives
+## 11. Verified on production today
+
+```
+Pricing::breakdown(1000,1)   total 1000 · subtotal 869.57 · vat 130.43
+                             commission 86.96 · partner_share 782.61
+commission                   live 0.10 · legacy 0.02
+cancellation policies        flexible, moderate, strict
+description max              2000
+unit resource                created_at ✓ · owner ✓ · cancellation_policy "moderate"
+image keys                   height · id · is_main · url · variants · width
+404                          {"message":"المورد غير موجود","code":"NOT_FOUND"}
+consistency check            checked 0 / 0 · skipped 0
+repo vs production           300 files · 0 differing · 0 missing
+```
+
+Backend suite: **409 passed, 1807 assertions.**
+
+---
+
+## 12. Where the detail lives
 
 | topic | document |
 |---|---|
-| images contract + the CDN measurement | `MAMSA-BACKEND-REPLY-unit-images.md`, `-2.md` |
+| images contract, and the CDN measurement | `MAMSA-BACKEND-REPLY-unit-images.md`, `-2.md` |
 | description limits and `strip_tags` | `MAMSA-BACKEND-REPLY-description-formatting.md`, `-followup.md` |
 | double-booking, changeover days, `blocked-dates` | `MAMSA-BACKEND-REPLY-booking-availability.md` |
 | search, pagination, error shapes | `MAMSA-BACKEND-REPLY-open-requests.md` |
 | `ids[]`, sitemap, booking review, staging fixture | `MAMSA-BACKEND-REPLY-gaps-shipped.md` |
-| commission reconciliation | `MAMSA-BACKEND-REPLY-commission-v2.md` |
-| admin unit form + the map-pin input bug | `MAMSA-FRONTEND-ADMIN-UNIT-EDIT.md`, `MAMSA-FRONTEND-ADMIN-LOCATION-INPUT.md` |
+| commission, rounds 1–5 | `MAMSA-BACKEND-REPLY-commission-v2.md` … `-v6.md` |
+| price / VAT basis | `MAMSA-BACKEND-REPLY-price-vat-basis.md` |
+| cancellation row split | `MAMSA-BACKEND-REPLY-cancellation-split.md` |
+| staging ledger rebuild | `MAMSA-BACKEND-REPORT-ledger-reseed.md` |
+| admin unit form, map-pin input bug | `MAMSA-FRONTEND-ADMIN-UNIT-EDIT.md`, `MAMSA-FRONTEND-ADMIN-LOCATION-INPUT.md` |
 | running a staging copy of your app | `MAMSA-FRONTEND-STAGING-DEPLOY.md` |
-
----
-
-## 10. Verified today against production
-
-```
-GET /units/sitemap                        200
-GET /units?ids[]=34                       200
-GET /units/35/blocked-dates               200
-GET /units?start_date=… (alone)           422
-GET /units/999999    {"message":"المورد غير موجود","code":"NOT_FOUND"}
-GET /units?city=riyadh                    total 2
-created_at            2026-08-24T18:12:39Z
-owner on list         present
-cancellation_policy   moderate
-image keys            height · id · is_main · url · variants · width
-commission            live 0.10 · legacy 0.02 (pre-freeze rows only)
-```
-
-Backend suite: **390 passed, 1761 assertions.**
