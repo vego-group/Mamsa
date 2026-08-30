@@ -233,6 +233,26 @@ function homeForStoredUser() {
   return { name: 'account' } // regular renter → their bookings dashboard
 }
 
+// A lazily-imported view whose chunk is gone — the usual cause is a deploy
+// that replaced assets/ while this tab stayed open. There is nothing to recover
+// to in-page: the code for the destination no longer exists in this build, so
+// reload once at the intended URL and let the fresh index.html resolve it.
+//
+// Guarded against a loop: if the reload does not fix it, the flag stops us from
+// reloading forever on a genuinely broken chunk.
+router.onError((error, to) => {
+  const isChunkError = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i
+    .test(error?.message || '')
+
+  if (!isChunkError) return
+
+  const key = 'chunk-reload-attempted'
+  if (sessionStorage.getItem(key) === to.fullPath) return
+
+  try { sessionStorage.setItem(key, to.fullPath) } catch { /* private mode */ }
+  window.location.assign(to.fullPath)
+})
+
 router.beforeEach((to) => {
   const token = localStorage.getItem('access_token')
 

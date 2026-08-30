@@ -16,6 +16,16 @@
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
+  # A MISSING fingerprinted asset must 404, not fall through to index.html.
+  # Every deploy replaces assets/ with new hashes, so a browser holding the
+  # previous index.html asks for a chunk that no longer exists. Falling back to
+  # the SPA returned 200 text/html, the dynamic import() failed to parse it as a
+  # module, and vue-router aborted the navigation SILENTLY — the user stayed put
+  # with no error. A real 404 makes it fail loudly enough for the router's
+  # onError to reload the page.
+  RewriteCond %{REQUEST_URI} ^/assets/
+  RewriteRule ^ - [L,R=404]
+
   # Everything else → the SPA entrypoint.
   RewriteRule ^ index.html [L]
 </IfModule>
