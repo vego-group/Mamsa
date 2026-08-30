@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Partner;
 
+use App\Support\Units\UnitWriter;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\Unit;
@@ -34,6 +35,10 @@ class UnitController extends Controller
             'bathrooms'           => ['nullable', 'integer', 'min:1', 'max:10'],
             'city'                => ['required', 'string', 'max:100'],
             'district'            => ['nullable', 'string', 'max:150'],
+            // Required to submit for review (UnitWriter::submitErrors), and this
+            // surface had no way to set it — a partner could never satisfy a
+            // gate they could not reach.
+            'address'             => ['nullable', 'string', 'max:255'],
             'lat'                 => ['nullable', 'numeric'],
             'lng'                 => ['nullable', 'numeric'],
             // Bounded to match the shared writer. Left unbounded, this surface
@@ -94,6 +99,10 @@ class UnitController extends Controller
             'bathrooms'           => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10'],
             'city'                => ['sometimes', 'string', 'max:100'],
             'district'            => ['nullable', 'string', 'max:150'],
+            // Required to submit for review (UnitWriter::submitErrors), and this
+            // surface had no way to set it — a partner could never satisfy a
+            // gate they could not reach.
+            'address'             => ['nullable', 'string', 'max:255'],
             'lat'                 => ['nullable', 'numeric'],
             'lng'                 => ['nullable', 'numeric'],
             // Bounded to match the shared writer. Left unbounded, this surface
@@ -148,6 +157,20 @@ class UnitController extends Controller
         return response()->json(['message' => 'تم الحذف']);
     }
 
+    /** UnitWriter field names → the names this surface accepts. */
+    private const SUBMIT_FIELD_MAP = [
+        'name'                 => 'unit_name',
+        'type'                 => 'unit_type',
+        'pricePerNight'        => 'price',
+        'tourismLicenseNumber' => 'tourism_permit_no',
+        'tourismLicenseFileId' => 'tourism_permit_file',
+        'photos'               => 'images',
+        // `location` covers lat AND lng together — the check is that the pair
+        // lands inside Saudi, not that either number is present, so splitting it
+        // across two fields would report a failure neither one caused.
+        'location'             => 'location',
+    ];
+
     public function submit(Request $request, Unit $unit): JsonResponse
     {
         if ($unit->user_id !== $request->user()->id) {
@@ -156,6 +179,27 @@ class UnitController extends Controller
 
         if (! in_array($unit->approval_status, ['draft', 'rejected'])) {
             return response()->json(['message' => 'لا يمكن تقديم هذه الوحدة'], 422);
+        }
+
+        // The dashboard has always run these checks; this surface flipped the
+        // status with none of them, so a listing could reach an admin's review
+        // queue with no location, no licence number and no licence file. One
+        // rule, both surfaces — UnitWriter::submitErrors is the single owner.
+        if ($errors = UnitWriter::submitErrors($unit)) {
+            return response()->json([
+                'message' => 'الوحدة غير مكتملة، أكمل البيانات المطلوبة قبل الإرسال',
+                'code'    => 'UNIT_INCOMPLETE',
+                // Mapped to the names THIS surface uses, so a client can put the
+                // message on the field the partner actually edits. The writer
+                // speaks the dashboard's camelCase; v1 is snake_case, and
+                // returning its keys verbatim would point at inputs that do not
+                // exist here.
+                'errors'  => collect($errors)
+                    ->mapWithKeys(fn (string $msg, string $field) => [
+                        self::SUBMIT_FIELD_MAP[$field] ?? $field => [$msg],
+                    ])
+                    ->all(),
+            ], 422);
         }
 
         $unit->update(['approval_status' => 'pending']);

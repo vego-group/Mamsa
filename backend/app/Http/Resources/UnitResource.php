@@ -80,6 +80,12 @@ class UnitResource extends JsonResource
                 ($u = $request->user() ?: $request->user('sanctum'))
                     && ($u->id === $this->user_id || $u->isAdmin()),
                 fn () => [
+                    // Gated with the compliance fields, NOT public: the exact
+                    // street of an occupied home is not something a guest needs
+                    // before booking, and the public payload stays byte-identical.
+                    // The edit form needs it, so the owner must get it back —
+                    // without this a saved address reloads blank and looks lost.
+                    'address'             => $this->address,
                     'tourism_permit_no'   => $this->tourism_permit_no,
                     'company_license_no'  => $this->company_license_no,
                     'tourism_permit_url'  => \App\Models\DashboardUpload::resolveUrl($this->tourism_permit_file),
