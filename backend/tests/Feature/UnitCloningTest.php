@@ -109,6 +109,8 @@ class UnitCloningTest extends TestCase
 
         // A hundred rows called the same thing are unusable in the partner's
         // own list — the door number is the only thing telling them apart.
+        // The source is the first door, not an unlabelled odd one out.
+        $this->assertSame('شقة برج الملقا - 401', $names['401']);
         $this->assertSame('شقة برج الملقا - 402', $names['402']);
         $this->assertSame('شقة برج الملقا - 403', $names['403']);
         $this->assertCount(3, $names->unique());

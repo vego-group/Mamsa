@@ -103,9 +103,18 @@ final class UnitCloner
                 ->reject(fn ($n) => in_array($n, $taken, true))
                 ->values();
 
-            // The source is the first member, so it consumes the first number.
+            // The source is the first member, so it consumes the first number —
+            // and gets it in its name like every other apartment. Leaving the
+            // original unlabelled puts one odd row at the top of a list of a
+            // hundred, which reads as a bug rather than as the first door.
+            // nameFor() is evaluated while apartment_no is still null, so it
+            // appends rather than replacing.
             if (blank($source->apartment_no) && $wanted->isNotEmpty()) {
-                $source->forceFill(['apartment_no' => $wanted->shift()])->save();
+                $first = $wanted->shift();
+                $source->forceFill([
+                    'apartment_no' => $first,
+                    'unit_name'    => self::nameFor($source, $first),
+                ])->save();
             }
 
             foreach ($wanted as $number) {
