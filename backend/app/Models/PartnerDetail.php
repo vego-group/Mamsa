@@ -19,6 +19,7 @@ class PartnerDetail extends Model
         'cr_number',
         'cr_file',
         'iban',
+        'bank_certificate_file',
         'authorization_letter_file',
         'vat_certificate_file',
         'operator_license_file',

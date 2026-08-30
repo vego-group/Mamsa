@@ -222,6 +222,55 @@ class UnitDocumentTest extends TestCase
         $this->assertStringContainsString('deed.pdf', $after['fileUrl']);
     }
 
+    public function test_the_bank_certificate_is_stored_on_the_PARTNER_not_the_unit(): void
+    {
+        $second = $this->makeUnit($this->partner);
+
+        $this->actingAs($this->partner, 'sanctum')
+            ->postJson("/api/v1/partner/units/{$this->unit->id}/documents", [
+                'type' => 'bank_certificate',
+                'file' => UploadedFile::fake()->create('iban.pdf', 50, 'application/pdf'),
+            ])->assertCreated();
+
+        // One bank account serves every listing. Storing it per unit would keep
+        // duplicate copies that can drift apart, so it lands on partner_details
+        // and is immediately true of the partner's OTHER units as well.
+        $detail = $this->partner->partnerDetail()->first();
+        $this->assertNotNull($detail->bank_certificate_file);
+        $this->assertNull($this->unit->fresh()->ownership_doc_file);
+        $this->assertNull($second->fresh()->ownership_doc_file);
+    }
+
+    public function test_the_admin_bank_row_needs_both_the_iban_and_the_document(): void
+    {
+        $admin = User::factory()->create(['is_active' => true]);
+        $admin->assignRole('Admin');
+        $detail = $this->partner->partnerDetail()->create([
+            'type' => 'individual',
+            'status' => \App\Models\PartnerDetail::STATUS_APPROVED,
+        ]);
+        $this->unit->update(['approval_status' => 'pending']);
+
+        $row = fn () => collect(
+            $this->actingAs($admin, 'sanctum')
+                ->getJson("/api/v1/admin/requests/{$this->unit->id}")
+                ->assertOk()->json('data.partner.documents')
+        )->firstWhere('key', 'bank');
+
+        $this->assertSame('missing', $row()['status'], 'no iban, no file');
+
+        // An IBAN alone used to make this row green. A number nobody can check
+        // against a document is not verification — but it is not "nothing on
+        // file" either, so it reports as incomplete rather than missing.
+        $detail->update(['iban' => 'SA2480000000000000000000']);
+        $this->assertSame('pending', $row()['status'], 'iban without a document');
+
+        $detail->update(['bank_certificate_file' => 'units/1/docs/iban.pdf']);
+        $after = $row();
+        $this->assertSame('verified', $after['status']);
+        $this->assertStringContainsString('iban.pdf', $after['fileUrl']);
+    }
+
     public function test_the_owner_does_see_them(): void
     {
         $this->unit->update([

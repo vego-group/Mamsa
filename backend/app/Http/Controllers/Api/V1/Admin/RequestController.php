@@ -126,7 +126,23 @@ class RequestController extends Controller
 
         return array_values(array_filter([
             ['key' => 'identity',  'status' => $state((bool) ($d->national_id || $d->cr_number))],
-            ['key' => 'bank',      'status' => $state((bool) $d->iban)],
+            // Was `iban` alone: a typed number with nothing behind it, so a
+            // reviewer approving a payout destination had no document to open.
+            // The IBAN is still required — a certificate without a number is
+            // not a usable account — but the row now carries the proof too.
+            array_filter([
+                'key'     => 'bank',
+                // Three states, not two. Nothing on file is `missing`; one of
+                // the two present is `pending` — incomplete, but there IS
+                // something to look at, and a row carrying a file link while
+                // reading "غير متوفر" contradicts itself.
+                'status'  => match (true) {
+                    filled($d->iban) && filled($d->bank_certificate_file) => $verified ? 'verified' : 'pending',
+                    filled($d->iban) || filled($d->bank_certificate_file) => 'pending',
+                    default => 'missing',
+                },
+                'fileUrl' => \App\Models\DashboardUpload::resolveUrl($d->bank_certificate_file),
+            ], fn ($v) => $v !== null),
             array_filter([
                 'key'     => 'ownership',
                 // Not $state(): an ownership document is verified when an admin

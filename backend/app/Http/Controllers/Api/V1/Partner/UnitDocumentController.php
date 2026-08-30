@@ -30,10 +30,18 @@ use Illuminate\Support\Facades\Storage;
  */
 class UnitDocumentController extends Controller
 {
-    /** Column per document type — the request never names a column directly. */
-    private const COLUMNS = [
-        'tourism_permit' => 'tourism_permit_file',
-        'ownership_doc'  => 'ownership_doc_file',
+    /**
+     * Where each document lives. The request names a TYPE, never a column.
+     *
+     * `bank_certificate` is scoped to the partner, not the unit: one bank
+     * account serves every listing they own, so storing it per unit would keep
+     * duplicate copies that can drift apart. The upload is offered on the unit
+     * form because that is where a partner is already attaching paperwork.
+     */
+    private const TYPES = [
+        'tourism_permit'   => ['scope' => 'unit',    'column' => 'tourism_permit_file'],
+        'ownership_doc'    => ['scope' => 'unit',    'column' => 'ownership_doc_file'],
+        'bank_certificate' => ['scope' => 'partner', 'column' => 'bank_certificate_file'],
     ];
 
     /** POST /partner/units/{unit}/documents */
@@ -42,7 +50,7 @@ class UnitDocumentController extends Controller
         $this->authorizeUnit($request, $unit);
 
         $data = $request->validate([
-            'type' => ['required', 'in:'.implode(',', array_keys(self::COLUMNS))],
+            'type' => ['required', 'in:'.implode(',', array_keys(self::TYPES))],
             // Images as well as PDF: a deed or licence is photographed at least
             // as often as it is scanned, and the dashboard's own rules for these
             // kinds allow both. A PDF-only rule here would reject the common case.
@@ -55,16 +63,16 @@ class UnitDocumentController extends Controller
             'file.max'      => 'حجم الملف يجب ألا يتجاوز 10 ميجابايت.',
         ]);
 
-        $column = self::COLUMNS[$data['type']];
+        [$holder, $column] = $this->target($request, $unit, $data['type']);
 
         // Replacing a document removes the previous file, but ONLY when the old
         // value is a path this surface wrote. A `file_...` id belongs to a
         // DashboardUpload row that the dashboard owns and may reference
         // elsewhere, so deleting its bytes from here would break that surface.
-        $previous = $unit->{$column};
+        $previous = $holder->{$column};
 
         $path = $request->file('file')->store("units/{$unit->id}/docs", 'public');
-        $unit->update([$column => $path]);
+        $holder->update([$column => $path]);
 
         if (filled($previous) && ! str_starts_with((string) $previous, 'file_')) {
             Storage::disk('public')->delete($previous);
@@ -84,18 +92,42 @@ class UnitDocumentController extends Controller
     {
         $this->authorizeUnit($request, $unit);
 
-        abort_unless(isset(self::COLUMNS[$type]), 404, 'نوع المستند غير صحيح');
+        abort_unless(isset(self::TYPES[$type]), 404, 'نوع المستند غير صحيح');
 
-        $column = self::COLUMNS[$type];
-        $value  = $unit->{$column};
+        [$holder, $column] = $this->target($request, $unit, $type);
+        $value = $holder->{$column};
 
         if (filled($value) && ! str_starts_with((string) $value, 'file_')) {
             Storage::disk('public')->delete($value);
         }
 
-        $unit->update([$column => null]);
+        $holder->update([$column => null]);
 
         return response()->json(['message' => 'تم حذف المستند']);
+    }
+
+    /**
+     * The record that stores this document, and the column on it.
+     *
+     * @return array{0: \Illuminate\Database\Eloquent\Model, 1: string}
+     */
+    private function target(Request $request, Unit $unit, string $type): array
+    {
+        $spec = self::TYPES[$type];
+
+        if ($spec['scope'] === 'partner') {
+            // firstOrCreate, not a bare relation read: a partner who has not
+            // completed KYC yet still has paperwork to hand in, and failing on
+            // a missing row would block them for no reason they could act on.
+            $detail = $request->user()->partnerDetail()->firstOrCreate(
+                ['user_id' => $request->user()->id],
+                ['type' => 'individual'],
+            );
+
+            return [$detail, $spec['column']];
+        }
+
+        return [$unit, $spec['column']];
     }
 
     private function authorizeUnit(Request $request, Unit $unit): void

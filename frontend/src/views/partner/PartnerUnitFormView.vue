@@ -121,17 +121,7 @@
               <input v-model="form.address" class="field" dir="rtl" placeholder="حي الملقا، طريق الملك عبدالعزيز" />
             </div>
 
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-body-sm font-bold text-on-surface mb-1.5">خط العرض (Latitude)</label>
-                <input v-model.number="form.lat" type="number" step="any" class="field" dir="ltr" placeholder="24.7136" />
-              </div>
-              <div>
-                <label class="block text-body-sm font-bold text-on-surface mb-1.5">خط الطول (Longitude)</label>
-                <input v-model.number="form.lng" type="number" step="any" class="field" dir="ltr" placeholder="46.6753" />
-              </div>
-            </div>
-            <p class="text-[11px] text-on-surface-variant -mt-1">الموقع يجب أن يكون داخل حدود المملكة، وإلا تُرفض الوحدة عند الإرسال للمراجعة.</p>
+            <LocationPicker v-model:model-lat="form.lat" v-model:model-lng="form.lng" />
 
             <div class="grid grid-cols-2 gap-3">
               <div>
@@ -267,6 +257,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PartnerLayout from '@/layouts/PartnerLayout.vue'
 import { partnerApi } from '@/api/partner'
+import LocationPicker from '@/components/partner/LocationPicker.vue'
 import UnitCalendarSection from '@/components/partner/UnitCalendarSection.vue'
 
 const route = useRoute()
@@ -311,8 +302,11 @@ const form = ref({
 const documentTypes = [
   { type: 'tourism_permit', label: 'رخصة السياحة', hint: 'مطلوبة لإرسال الوحدة للمراجعة' },
   { type: 'ownership_doc', label: 'مستند ملكية العقار', hint: 'صك الملكية أو عقد الإيجار — اختياري حالياً' },
+  // Stored on the PARTNER, not this unit: one bank account serves every listing
+  // they own. Uploading it here updates it for all of them.
+  { type: 'bank_certificate', label: 'توثيق الحساب البنكي', hint: 'خطاب الآيبان من البنك — يخص حسابك، ويسري على كل وحداتك' },
 ]
-const docs = ref({ tourism_permit: null, ownership_doc: null })
+const docs = ref({ tourism_permit: null, ownership_doc: null, bank_certificate: null })
 const docBusy = ref(null)
 
 async function onDocSelected(e, type) {
@@ -367,6 +361,7 @@ async function loadUnit() {
     docs.value = {
       tourism_permit: u.tourism_permit_url ?? null,
       ownership_doc: u.ownership_doc_url ?? null,
+      bank_certificate: u.bank_certificate_url ?? null,
     }
     form.value = {
       unit_name: u.name,
