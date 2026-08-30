@@ -98,6 +98,22 @@ class UnitCloningTest extends TestCase
         $this->assertEmpty($group->filter(fn ($u) => blank($u->calendar_token)));
     }
 
+    public function test_each_clone_carries_its_door_number_in_its_name(): void
+    {
+        $unit = $this->sourceUnit(['unit_name' => 'شقة برج الملقا']);
+
+        UnitCloner::assign($unit, ['401', '402', '403']);
+
+        $names = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)
+            ->pluck('unit_name', 'apartment_no');
+
+        // A hundred rows called the same thing are unusable in the partner's
+        // own list — the door number is the only thing telling them apart.
+        $this->assertSame('شقة برج الملقا - 402', $names['402']);
+        $this->assertSame('شقة برج الملقا - 403', $names['403']);
+        $this->assertCount(3, $names->unique());
+    }
+
     public function test_a_clone_of_an_approved_listing_has_not_itself_been_approved(): void
     {
         $unit = $this->sourceUnit(['approval_status' => 'approved']);

@@ -136,7 +136,13 @@ final class UnitCloner
             ->when(! $copyDocuments, fn ($c) => $c->except(self::DOCUMENTS))
             ->all();
 
-        $clone = Unit::create($attributes + [
+        // array_merge, NOT the `+` union operator: union keeps the LEFT side's
+        // value on a duplicate key, so `unit_name` — which IS copied from the
+        // source — silently won over the override below and every apartment in
+        // the building came out with the same name. The other overrides only
+        // escaped that because their keys are in NOT_COPIED and so absent from
+        // $attributes; this was one column away from being right by accident.
+        $clone = Unit::create(array_merge($attributes, [
             'unit_group_id'   => $groupId,
             'apartment_no'    => $number,
             // The door number is what tells two otherwise identical listings
@@ -145,7 +151,7 @@ final class UnitCloner
             'code'            => self::uniqueCode(),
             'calendar_token'  => Str::random(60),
             'approval_status' => 'draft',
-        ]);
+        ]));
 
         // Photos are SHARED, not duplicated on disk: a hundred copies of the
         // same eight images is storage spent to say nothing new. Deletion is
