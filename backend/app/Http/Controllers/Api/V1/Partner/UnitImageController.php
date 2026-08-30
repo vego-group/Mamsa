@@ -69,7 +69,7 @@ class UnitImageController extends Controller
         $this->authorizeImage($unit, $image);
 
         $wasMain = $image->is_main;
-        $this->deleteFile($image->path);
+        $this->deleteFile($image->path, $image->id);
         $image->delete();
 
         // Keep a main image if the deleted one was primary.
@@ -105,9 +105,29 @@ class UnitImageController extends Controller
     }
 
     /** Remove the underlying file (skip legacy/absolute URLs). */
-    private function deleteFile(string $path): void
+    /**
+     * Unlink the stored file — unless another listing still points at it.
+     *
+     * Cloned units in a multi-unit building SHARE their photo paths rather than
+     * carrying a hundred byte-identical copies (see UnitCloner). That makes the
+     * row the thing being deleted and the file merely reference-counted: without
+     * this check, removing one photo from apartment 402 would blank that photo
+     * for all 99 of its siblings, and the only evidence would be broken images.
+     *
+     * The caller deletes the row AFTER this runs, so the row being removed is
+     * still present and is excluded by id.
+     */
+    private function deleteFile(string $path, ?int $exceptImageId = null): void
     {
-        if (! str_starts_with($path, 'http://') && ! str_starts_with($path, 'https://')) {
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return;
+        }
+
+        $stillReferenced = UnitImage::where('path', $path)
+            ->when($exceptImageId, fn ($q) => $q->whereKeyNot($exceptImageId))
+            ->exists();
+
+        if (! $stillReferenced) {
             Storage::disk('public')->delete($path);
         }
     }

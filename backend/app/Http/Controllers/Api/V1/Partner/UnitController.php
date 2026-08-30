@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Partner;
 
+use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitWriter;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
@@ -207,6 +208,56 @@ class UnitController extends Controller
         $this->notifyAdminsOfRequest($unit);
 
         return response()->json(new UnitResource($unit->fresh()));
+    }
+
+    /**
+     * POST /partner/units/{unit}/apartments — turn one listing into a building.
+     *
+     * A partner with 100 identical apartments builds ONE of them properly, then
+     * says which door numbers exist. Every number becomes a real, separately
+     * bookable unit sharing this one's spec and photos, tied together by a
+     * `unit_group_id`.
+     *
+     * Numbers already in the group are skipped rather than rejected, so a call
+     * that times out partway can simply be repeated.
+     */
+    public function apartments(Request $request, Unit $unit): JsonResponse
+    {
+        if ($unit->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'غير مصرح'], 403);
+        }
+
+        $data = $request->validate([
+            // Either an explicit list…
+            'numbers'        => ['required_without:from', 'array', 'max:'.UnitCloner::MAX_GROUP],
+            'numbers.*'      => ['string', 'max:20'],
+            // …or a range, because typing 401-420 by hand is how a door gets missed.
+            'from'           => ['required_without:numbers', 'integer', 'min:0', 'max:99999'],
+            'to'             => ['required_with:from', 'integer', 'min:0', 'max:99999', 'gte:from'],
+            'prefix'         => ['nullable', 'string', 'max:5'],
+            // Off by default: a permit issued per apartment does not cover its
+            // neighbours, and copying it would put an admin in front of 99
+            // listings evidenced by a licence that is not theirs.
+            'copy_documents' => ['nullable', 'boolean'],
+        ]);
+
+        $numbers = $data['numbers'] ?? collect(range($data['from'], $data['to']))
+            ->map(fn ($n) => ($data['prefix'] ?? '').$n)
+            ->all();
+
+        if (($size = UnitCloner::projectedSize($unit, $numbers)) > UnitCloner::MAX_GROUP) {
+            return response()->json([
+                'message' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد، والمطلوب '.$size,
+                'code'    => 'GROUP_TOO_LARGE',
+            ], 422);
+        }
+
+        $group = UnitCloner::assign($unit, $numbers, (bool) ($data['copy_documents'] ?? false));
+
+        return response()->json([
+            'message' => 'تم إنشاء '.$group->count().' وحدة في المبنى',
+            'data'    => UnitResource::collection($group->load(['images', 'features'])),
+        ], 201);
     }
 
     /**

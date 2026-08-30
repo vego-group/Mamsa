@@ -21,6 +21,8 @@ class Unit extends Model
         'unit_name',
         'unit_type',
         'code',
+        'unit_group_id',
+        'apartment_no',
         'price',
         'capacity',
         'bedrooms',

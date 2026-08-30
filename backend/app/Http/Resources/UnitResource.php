@@ -86,6 +86,14 @@ class UnitResource extends JsonResource
                     // The edit form needs it, so the owner must get it back —
                     // without this a saved address reloads blank and looks lost.
                     'address'             => $this->address,
+                    // Multi-unit building membership. Gated with the rest, not
+                    // because a door number is a secret, but because the PUBLIC
+                    // payload is a contract the frontend has signed off at
+                    // exactly 30 keys — and the guest card shows the building,
+                    // not the door. The partner's own list needs both to tell a
+                    // hundred otherwise identical listings apart.
+                    'unit_group_id'       => $this->unit_group_id,
+                    'apartment_no'        => $this->apartment_no,
                     'tourism_permit_no'   => $this->tourism_permit_no,
                     'company_license_no'  => $this->company_license_no,
                     'tourism_permit_url'  => \App\Models\DashboardUpload::resolveUrl($this->tourism_permit_file),

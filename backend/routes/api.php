@@ -194,6 +194,10 @@ Route::prefix('v1')->group(function () {
                 Route::delete('{unit}', [Partner\UnitController::class, 'destroy'])->name('destroy');
                 Route::post('{unit}/submit', [Partner\UnitController::class, 'submit'])->name('submit');
 
+                // Multi-unit buildings: one built listing becomes every
+                // apartment that shares its spec, grouped by unit_group_id.
+                Route::post('{unit}/apartments', [Partner\UnitController::class, 'apartments'])->name('apartments');
+
                 // Availability calendar (anti double-booking): manual closures + iCal sync.
                 Route::get('{unit}/calendar', [Partner\CalendarController::class, 'show'])->name('calendar.show');
                 Route::put('{unit}/calendar', [Partner\CalendarController::class, 'update'])->name('calendar.update');
