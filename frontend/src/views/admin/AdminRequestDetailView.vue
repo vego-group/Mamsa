@@ -97,11 +97,15 @@
                 <p class="text-[11px] text-gray-400">{{ tile.label }}</p>
               </div>
             </div>
-            <div class="bg-gray-50 rounded-xl py-8 text-center">
-              <span class="material-symbols-outlined text-[28px] text-gray-400">location_on</span>
-              <p class="text-[13px] font-semibold text-gray-600 mt-1">{{ [unit.district, unit.city].filter(Boolean).join(', ') }}</p>
-              <p class="text-[11px] text-gray-400">{{ t('approvals.mapPreview') }}</p>
-            </div>
+            <!-- Was a static placeholder reading "معاينة الخريطة (تتطلب تكاملاً)".
+                 A reviewer approving a listing has to see WHERE it is; a pin
+                 icon and a district name is not a location. -->
+            <LocationMap
+              :lat="unit.lat"
+              :lng="unit.lng"
+              :place="[unit.district, unit.city].filter(Boolean).join(', ')"
+              height-class="h-64"
+            />
           </div>
 
           <!-- Amenities -->
@@ -190,6 +194,7 @@
 </template>
 
 <script setup>
+import LocationMap from '@/components/LocationMap.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AdminLayout from '@/layouts/AdminLayout.vue'
