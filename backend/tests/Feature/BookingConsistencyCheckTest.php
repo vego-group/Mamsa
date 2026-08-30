@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Booking;
+use App\Models\PartnerLedgerEntry;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -107,7 +108,47 @@ class BookingConsistencyCheckTest extends TestCase
             ->assertSuccessful();
     }
 
-    private function booking(float $subtotal, float $rate, float $commission, float $share): Booking
+    public function test_a_completed_booking_whose_share_never_reached_the_ledger_is_caught(): void
+    {
+        // The exact shape of staging bookings 66 and 67: the arithmetic is
+        // perfect — 100 + 900 === 1000 — and the partner was still never paid.
+        // Every existing check passed on this row for three days.
+        $booking = $this->booking(1000, 0.10, 100, 900, Booking::STATUS_COMPLETED);
+
+        // Whatever the observer credited on create, drop it: that is the state
+        // a zero share at completion time leaves behind, and no later backfill
+        // goes back to post it.
+        PartnerLedgerEntry::where('ref_type', 'booking')
+            ->where('ref_id', (string) $booking->id)->delete();
+
+        $this->artisan('bookings:check-consistency')
+            ->expectsOutputToContain('1 completed booking(s) owe a share that never reached the ledger')
+            ->assertFailed();
+    }
+
+    public function test_a_credited_completed_booking_passes(): void
+    {
+        $this->booking(1000, 0.10, 100, 900, Booking::STATUS_COMPLETED);
+
+        // The observer credits it on create, so coverage is satisfied.
+        $this->artisan('bookings:check-consistency')
+            ->expectsOutputToContain('every completed booking with a share has an earning entry')
+            ->assertSuccessful();
+    }
+
+    public function test_a_completed_booking_with_nothing_to_credit_is_reported_not_failed(): void
+    {
+        // Mamsa-owned: the platform keeps the whole net base. Correctly
+        // uncredited — but counted out loud, because a growing number of these
+        // is its own smell.
+        $this->booking(1000, 1.0, 1000, 0, Booking::STATUS_COMPLETED);
+
+        $this->artisan('bookings:check-consistency')
+            ->expectsOutputToContain('1 completed booking(s) carry no share to credit')
+            ->assertSuccessful();
+    }
+
+    private function booking(float $subtotal, float $rate, float $commission, float $share, string $status = Booking::STATUS_CONFIRMED): Booking
     {
         $owner = User::factory()->create();
 
@@ -130,7 +171,7 @@ class BookingConsistencyCheckTest extends TestCase
             'commission_amount' => $commission,
             'partner_share'     => $share,
             'total_amount'      => $subtotal * 1.15,
-            'status'            => Booking::STATUS_CONFIRMED,
+            'status'            => $status,
         ]);
     }
 }

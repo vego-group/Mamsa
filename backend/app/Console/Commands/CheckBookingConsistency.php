@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Models\Booking;
+use App\Models\PartnerLedgerEntry;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -92,10 +93,44 @@ class CheckBookingConsistency extends Command
             $this->warn('  If that number is unexpected, the rows are worth a look before trusting the result below.');
         }
 
-        if ($brokenCount === 0 && $rateMismatch === 0) {
+        // Ledger COVERAGE — a separate invariant from the arithmetic above.
+        //
+        // A row can add up perfectly and still never have been credited. That is
+        // not hypothetical: staging bookings 66 and 67 sat `completed` with a
+        // correct 1,296.00 share and no earning entry for three days, because
+        // they were created already-completed while partner_share still defaulted
+        // to 0. recordEarning() returns null on a zero share — correctly, but
+        // SILENTLY — and the observer only fires on creation or a status change,
+        // so when the share was filled in later by a saveQuietly() backfill,
+        // nothing ever went back to post the entry it now owed.
+        //
+        // Nothing checked for it. The arithmetic check passed, the totals looked
+        // clean, and one partner was quietly short 2,592.00 SAR.
+        [$uncredited, $uncreditedRows, $zeroShare] = $this->ledgerCoverage($limit);
+
+        if ($brokenCount === 0 && $rateMismatch === 0 && $uncredited === 0) {
             $this->info('✓ every checked row adds up: commission + partner share === subtotal');
+            $this->info('✓ every completed booking with a share has an earning entry');
+
+            if ($zeroShare > 0) {
+                $this->warn("⚠ {$zeroShare} completed booking(s) carry no share to credit — correctly uncredited, but worth knowing.");
+            }
 
             return self::SUCCESS;
+        }
+
+        if ($uncredited > 0) {
+            $this->error("✗ {$uncredited} completed booking(s) owe a share that never reached the ledger");
+            $this->table(
+                ['booking', 'share', 'partner', 'status'],
+                $uncreditedRows->map(fn (Booking $b) => [
+                    $b->id,
+                    number_format((float) $b->partner_share, 2),
+                    $b->unit?->user_id ?? '—',
+                    $b->status,
+                ])->all(),
+            );
+            $this->line('  Repair with: php artisan wallet:backfill-earnings');
         }
 
         if ($brokenCount > 0) {
@@ -124,5 +159,40 @@ class CheckBookingConsistency extends Command
         $this->line('Anything else needs a look before it is touched — the numbers are money.');
 
         return self::FAILURE;
+    }
+
+    /**
+     * Completed bookings whose partner share never became a ledger entry.
+     *
+     * A share of zero is EXCLUDED from the fault and counted separately: those
+     * are correctly uncredited (there is nothing to credit), but a growing
+     * number of them is its own smell, so the count is reported rather than
+     * dropped.
+     *
+     * @return array{0:int,1:\Illuminate\Support\Collection<int,Booking>,2:int}
+     */
+    private function ledgerCoverage(int $limit): array
+    {
+        $owed = Booking::query()
+            ->where('status', Booking::STATUS_COMPLETED)
+            ->where('partner_share', '>', 0)
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('partner_ledger_entries')
+                    ->where('type', PartnerLedgerEntry::TYPE_EARNING)
+                    ->where('ref_type', 'booking')
+                    ->whereColumn('ref_id', 'bookings.id');
+            });
+
+        $zeroShare = Booking::query()
+            ->where('status', Booking::STATUS_COMPLETED)
+            ->where(fn ($q) => $q->whereNull('partner_share')->orWhere('partner_share', '<=', 0))
+            ->count();
+
+        return [
+            (clone $owed)->count(),
+            (clone $owed)->with('unit')->orderBy('id')->limit($limit)->get(),
+            $zeroShare,
+        ];
     }
 }
