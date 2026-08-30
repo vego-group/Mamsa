@@ -33,6 +33,15 @@
           أدخل الرمز المكوّن من 6 أرقام المرسل إلى
           <span class="font-bold text-on-surface" dir="ltr">{{ email }}</span>
         </p>
+          <!-- Same amber chip the phone OTP screens use. On staging the
+               address is usually a fixture nobody can open, so without the code
+               in the response the email gate could not be tested by hand.
+               The API only sends debug_otp outside production. -->
+          <div v-if="debugOtp" class="mb-3 flex items-center justify-between bg-amber-50 border border-amber-300 rounded-xl px-3 py-2">
+            <span class="text-amber-700 text-[12px] font-bold">رمز التطوير:</span>
+            <button type="button" class="font-numeric-data font-bold text-[17px] tracking-[4px] text-amber-800 hover:text-primary transition-colors"
+                    @click="code = debugOtp">{{ debugOtp }}</button>
+          </div>
         <input
           v-model="code" inputmode="numeric" maxlength="6" dir="ltr" placeholder="••••••"
           class="w-full px-3.5 py-3 bg-surface-container-low border border-outline-variant rounded-xl text-center tracking-[8px] text-[20px] font-numeric-data focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all mb-2"
@@ -82,6 +91,7 @@ const auth = useAuthStore()
 const step = ref('email')
 const email = ref('')
 const code = ref('')
+const debugOtp = ref(null)
 const error = ref('')
 const busy = ref(false)
 const codeDead = ref(false)
@@ -118,6 +128,8 @@ async function sendCode() {
   busy.value = true
   try {
     const { data } = await userApi.addEmail(email.value)
+      // Only ever present outside production — the API decides, not the client.
+      debugOtp.value = data.data?.debug_otp ?? null
     step.value = 'code'
     codeDead.value = false
     startCountdown(data.data?.resend_available_in ?? 60)
@@ -163,6 +175,7 @@ async function resend() {
   busy.value = true
   try {
     const { data } = await userApi.resendEmailOtp()
+      debugOtp.value = data.data?.debug_otp ?? null
     codeDead.value = false
     code.value = ''
     startCountdown(data.data?.resend_available_in ?? 60)

@@ -47,16 +47,26 @@ class EmailController extends Controller
 
         // Re-submitting the exact same unverified email = a resend request.
         if ($email === strtolower((string) $user->email) && ! $user->email_verified_at) {
-            $this->emails->resendPending($user);
+            $code = $this->emails->resendPending($user);
         } else {
-            $this->emails->start($user, $email);
+            $code = $this->emails->start($user, $email);
         }
 
-        return $this->success([
+        $data = [
             'email'               => $email,
             'verified'            => false,
             'resend_available_in' => (int) config('otp.resend_seconds', 60),
-        ], 'تم إرسال رمز التحقق إلى بريدك الإلكتروني');
+        ];
+
+        // Same rule the phone flow already follows: outside production the code
+        // comes back in the response. On staging the address is often a fixture
+        // that nobody can open (user@mamsa.test), so without this the email gate
+        // is untestable by hand — which is exactly what it was.
+        if (! app()->isProduction()) {
+            $data['debug_otp'] = $code;
+        }
+
+        return $this->success($data, 'تم إرسال رمز التحقق إلى بريدك الإلكتروني');
     }
 
     /** POST /user/email/verify — 6-digit code, 5 attempts, then the code dies. */
@@ -85,12 +95,18 @@ class EmailController extends Controller
     {
         $user = $request->user();
 
-        $this->emails->resendPending($user);
+        $code = $this->emails->resendPending($user);
 
-        return $this->success([
+        $data = [
             'email'               => $user->email,
             'verified'            => false,
             'resend_available_in' => (int) config('otp.resend_seconds', 60),
-        ], 'تم إعادة إرسال رمز التحقق');
+        ];
+
+        if (! app()->isProduction()) {
+            $data['debug_otp'] = $code;
+        }
+
+        return $this->success($data, 'تم إعادة إرسال رمز التحقق');
     }
 }

@@ -41,14 +41,15 @@ class EmailVerificationService
      *
      * @throws EmailVerificationException RATE_LIMITED
      */
-    public function start(User $user, string $email): void
+    /** @return string the issued code — callers expose it only outside production. */
+    public function start(User $user, string $email): string
     {
         $this->assertCooldownPassed($user);
 
         // Changing the address invalidates any previous verification.
         $user->forceFill(['email' => $email, 'email_verified_at' => null])->save();
 
-        $this->issue($user);
+        return $this->issue($user);
     }
 
     /**
@@ -56,14 +57,16 @@ class EmailVerificationService
      *
      * @throws EmailVerificationException RATE_LIMITED / EMAIL_INVALID
      */
-    public function resendPending(User $user): void
+    /** @return string the issued code — callers expose it only outside production. */
+    public function resendPending(User $user): string
     {
         if (blank($user->email) || $user->email_verified_at) {
             throw EmailVerificationException::noPendingEmail();
         }
 
         $this->assertCooldownPassed($user);
-        $this->issue($user);
+
+        return $this->issue($user);
     }
 
     /**
@@ -185,7 +188,8 @@ class EmailVerificationService
     }
 
     /** Store a fresh code and email it to the user's current address. */
-    private function issue(User $user): void
+    /** @return string the code that was issued. */
+    private function issue(User $user): string
     {
         $code       = $this->generateCode();
         $expMinutes = (int) config('otp.exp_minutes', 5);
@@ -205,6 +209,8 @@ class EmailVerificationService
         );
 
         Mail::to($user->email)->send(new EmailVerificationCode($code, $expMinutes));
+
+        return $code;
     }
 
     private function key(User $user): string

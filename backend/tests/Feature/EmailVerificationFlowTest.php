@@ -287,4 +287,41 @@ class EmailVerificationFlowTest extends TestCase
         $this->artisan('bookings:checkin-reminders')->assertSuccessful();
         Notification::assertCount(1);
     }
+
+    public function test_the_code_comes_back_outside_production_and_never_inside_it(): void
+    {
+        $user = User::factory()->create(['is_active' => true, 'email' => null]);
+
+        // Staging addresses are fixtures nobody can open (user@mamsa.test), so
+        // without this the email gate cannot be exercised by hand at all.
+        $code = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/user/email', ['email' => 'tester@mamsa.test'])
+            ->assertOk()
+            ->json('data.debug_otp');
+
+        $this->assertNotNull($code, 'the code must be readable off production');
+        $this->assertMatchesRegularExpression('/^\d{6}$/', $code);
+
+        // And it must actually be the code, not a decoration.
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/user/email/verify', ['code' => $code])
+            ->assertOk();
+
+        $this->assertNotNull($user->fresh()->email_verified_at);
+    }
+
+    public function test_production_never_returns_the_code(): void
+    {
+        // The one property that matters: a real inbox is the only channel in
+        // production. Returning it in the response would hand every caller a
+        // free verification for any address they can type.
+        app()->detectEnvironment(fn () => 'production');
+
+        $user = User::factory()->create(['is_active' => true, 'email' => null]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/user/email', ['email' => 'real@example.com'])
+            ->assertOk()
+            ->assertJsonMissingPath('data.debug_otp');
+    }
 }
