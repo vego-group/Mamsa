@@ -154,6 +154,33 @@ with no CORS errors.
 
 ---
 
+## 2.9 Before ANY deploy: take the contract snapshot
+
+Not optional, and not a judgement call. Run this **before** touching the server
+and **after**, then attach the diff to the note that goes to the frontend —
+whatever the change was, and whoever asked for it.
+
+```bash
+# on the server, BEFORE deploying
+/opt/alt/php84/usr/bin/php artisan api:snapshot --out=/tmp/before.json
+
+# …deploy…
+
+/opt/alt/php84/usr/bin/php artisan api:snapshot --out=/tmp/after.json
+/opt/alt/php84/usr/bin/php artisan api:snapshot --diff=/tmp/before.json --against=/tmp/after.json
+```
+
+The diff exits non-zero when routes or public response shapes moved, so a
+script can gate on it. It records key sets and status codes only, never values,
+so it is safe to send.
+
+Why it is a step and not an intention: this comparison has always been part of
+the procedure and it slipped four times, never from unwillingness — it lived in
+memory rather than producing anything. A missing file is visible. If there is
+no diff attached, the deploy procedure did not complete.
+
+---
+
 ## 3. Redeploy (every staging release)
 
 **Staging API** — push the backend subtree, then pull on the server:
