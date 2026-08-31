@@ -222,8 +222,8 @@
           :key="unit.id"
           :unit="unit"
           :badge="badge(unit)"
-          :favorited="favorites.has(unit.id)"
-          @favorite="toggleFavorite(unit.id)"
+          :favorited="isFavorite(unit)"
+          @favorite="toggleFavorite(unit)"
         />
       </div>
     </section>
@@ -347,8 +347,8 @@
           v-for="unit in picks"
           :key="unit.id"
           :unit="unit"
-          :favorited="favorites.has(unit.id)"
-          @favorite="toggleFavorite(unit.id)"
+          :favorited="isFavorite(unit)"
+          @favorite="toggleFavorite(unit)"
         />
       </div>
 
@@ -542,7 +542,7 @@ const listingSection = ref(null)
 const popular = ref([])
 const popularLoading = ref(true)
 // Shared, API-backed favorites (persisted for logged-in users).
-const { favoriteIds: favorites, load: loadFavorites, toggle: toggleFav } = useFavorites()
+const { load: loadFavorites, toggle: toggleFav, isFavorite } = useFavorites()
 
 // مختارات لك — curated rail filtered by category chip.
 const picks = ref([])
@@ -744,9 +744,9 @@ function badge(unit) {
   return { label: 'مميز', class: 'bg-black/60 text-white' }
 }
 
-function toggleFavorite(id) {
+function toggleFavorite(unit) {
   // Guests are sent to login — hearts only persist for authenticated users.
-  if (!toggleFav(id)) router.push({ name: 'login' })
+  if (!toggleFav(unit)) router.push({ name: 'login' })
 }
 
 async function scrollToListing() {

@@ -14,6 +14,15 @@ class UnitResource extends JsonResource
             'name'                => $this->unit_name,
             'type'                => $this->unit_type,
             'code'                => $this->code,
+            // The STABLE identity of a listing, for favourites, links and any
+            // client-side cache.
+            //
+            // `id` is not that for a building: the card shows whichever
+            // apartment is free, so the same building comes back as a different
+            // id once one is booked — and a favourited building then reads as
+            // unfavourited. Always present, so a client never has to branch:
+            // the group's ULID for a building, `u<id>` for a standalone unit.
+            'listing_id'          => $this->unit_group_id ?: 'u'.$this->id,
             // How many apartments in this building are bookable. 1 for a
             // standalone listing, so a client can read it unconditionally.
             // Present only where the controller computed it -- a resource that

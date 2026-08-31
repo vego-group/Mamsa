@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\User;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\Unit;
+use App\Support\Booking\Availability;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -24,7 +25,15 @@ class FavoriteController extends Controller
             ->where('approval_status', 'approved')
             ->where('status', 'available')
             ->latest('favorites.created_at')
-            ->get();
+            ->get()
+            // One card per building, like the storefront. A guest who
+            // favourited a tower wants it once, not once per apartment — and
+            // rows predating the canonicalisation in store() can still be
+            // spread across siblings.
+            ->unique(fn (Unit $u) => $u->unit_group_id ?: 'u'.$u->id)
+            ->values();
+
+        Availability::attachCounts($units);
 
         return response()->json(UnitResource::collection($units)->resolve($request));
     }
@@ -38,8 +47,12 @@ class FavoriteController extends Controller
             'الوحدة غير متاحة'
         );
 
+        // Stored against the building's FIRST apartment, never the one the card
+        // happened to show. The card's unit changes as apartments get booked,
+        // so favouriting the same building twice on different days would
+        // otherwise leave two rows the guest sees as two listings.
         // firstOrCreate keeps it idempotent under the (user, unit) unique index.
-        $request->user()->favorites()->firstOrCreate(['unit_id' => $unit->id]);
+        $request->user()->favorites()->firstOrCreate(['unit_id' => $this->canonical($unit)]);
 
         return response()->noContent();
     }
@@ -47,8 +60,30 @@ class FavoriteController extends Controller
     /** DELETE /user/favorites/{unit} */
     public function destroy(Request $request, Unit $unit): Response
     {
-        $request->user()->favorites()->where('unit_id', $unit->id)->delete();
+        // Removes the building, whichever apartment the guest is looking at —
+        // and sweeps any sibling rows left by favourites saved before store()
+        // canonicalised. Deleting only this unit's row would leave the heart
+        // lit with nothing the guest could click to clear it.
+        $request->user()->favorites()
+            ->whereIn('unit_id', $this->siblingIds($unit))
+            ->delete();
 
         return response()->noContent();
+    }
+
+    /** The apartment a building is favourited against: its lowest id. */
+    private function canonical(Unit $unit): int
+    {
+        return $unit->unit_group_id
+            ? (int) Unit::where('unit_group_id', $unit->unit_group_id)->min('id')
+            : (int) $unit->id;
+    }
+
+    /** @return list<int> */
+    private function siblingIds(Unit $unit): array
+    {
+        return $unit->unit_group_id
+            ? Unit::where('unit_group_id', $unit->unit_group_id)->pluck('id')->all()
+            : [(int) $unit->id];
     }
 }

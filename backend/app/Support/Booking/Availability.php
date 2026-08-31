@@ -108,6 +108,48 @@ final class Availability
     }
 
     /**
+     * Stamp `available_count` on each unit — how many apartments of its
+     * building are bookable, over the window given (or simply listed, if none).
+     *
+     * One query for the whole page rather than one per card. Lives here rather
+     * than on the listing controller because the favourites page needs the
+     * identical number, and two implementations of "how many are free" is how
+     * two screens end up disagreeing.
+     *
+     * @param  \Illuminate\Support\Collection<int, Unit>  $units
+     */
+    public static function attachCounts($units, ?string $start = null, ?string $end = null): void
+    {
+        $groups = $units->pluck('unit_group_id')->filter()->unique()->values();
+        $counts = collect();
+
+        if ($groups->isNotEmpty()) {
+            $siblings = Unit::query()
+                ->whereIn('unit_group_id', $groups)
+                ->where('approval_status', 'approved')
+                ->where('status', 'available');
+
+            if ($start && $end) {
+                self::onlyFree($siblings, $start, $end);
+            }
+
+            $counts = $siblings
+                ->select('unit_group_id', \Illuminate\Support\Facades\DB::raw('COUNT(*) as aggregate'))
+                ->groupBy('unit_group_id')
+                ->pluck('aggregate', 'unit_group_id');
+        }
+
+        foreach ($units as $unit) {
+            // A standalone unit is a building of one. Reporting null would make
+            // every existing listing look like it had no availability.
+            $unit->setAttribute(
+                'available_count',
+                $unit->unit_group_id ? (int) ($counts[$unit->unit_group_id] ?? 0) : 1,
+            );
+        }
+    }
+
+    /**
      * Every occupied range in the window, merged into the fewest spans.
      *
      * Both ends are INCLUSIVE and describe NIGHTS, which is what a calendar

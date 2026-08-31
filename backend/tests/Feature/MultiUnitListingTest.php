@@ -220,6 +220,67 @@ class MultiUnitListingTest extends TestCase
         $this->assertSame(4, $body['available_count']);
     }
 
+    public function test_a_building_has_one_stable_listing_id(): void
+    {
+        $source = $this->building(3);
+        $standalone = $this->listing('فيلا مستقلة');
+
+        $rows = collect($this->getJson('/api/v1/units')->assertOk()->json('data'));
+
+        // Every apartment of a building answers with the same listing_id, and a
+        // standalone unit still gets one — a client should never have to branch.
+        $ids = Unit::where('unit_group_id', $source->unit_group_id)->get()
+            ->map(fn ($u) => $this->getJson("/api/v1/units/{$u->id}")->json('data.listing_id')
+                ?? $this->getJson("/api/v1/units/{$u->id}")->json('listing_id'));
+
+        $this->assertCount(1, $ids->unique(), 'all apartments share one listing_id');
+        $this->assertSame($source->unit_group_id, $ids->first());
+
+        $solo = $rows->firstWhere('id', $standalone->id);
+        $this->assertSame('u'.$standalone->id, $solo['listing_id']);
+    }
+
+    public function test_favouriting_a_building_survives_its_card_changing(): void
+    {
+        $source = $this->building(3);
+        $guest  = User::factory()->create(['is_active' => true]);
+        $guest->assignRole('User');
+
+        // Favourited from the apartment the card shows today…
+        $this->actingAs($guest, 'sanctum')
+            ->postJson("/api/v1/user/favorites/{$source->id}")->assertNoContent();
+
+        // …and removed tomorrow from a different apartment, because that one
+        // got booked and the card moved on. Deleting only the row for the unit
+        // in hand would leave the heart lit with nothing to clear it.
+        $other = Unit::where('unit_group_id', $source->unit_group_id)
+            ->where('id', '!=', $source->id)->firstOrFail();
+
+        $this->actingAs($guest, 'sanctum')
+            ->deleteJson("/api/v1/user/favorites/{$other->id}")->assertNoContent();
+
+        $this->assertSame(0, $guest->favorites()->count());
+    }
+
+    public function test_a_favourited_building_is_listed_once(): void
+    {
+        $source = $this->building(3);
+        $guest  = User::factory()->create(['is_active' => true]);
+        $guest->assignRole('User');
+
+        // Two apartments favourited directly — the shape legacy rows have.
+        foreach (Unit::where('unit_group_id', $source->unit_group_id)->take(2)->get() as $u) {
+            $guest->favorites()->firstOrCreate(['unit_id' => $u->id]);
+        }
+
+        $rows = $this->actingAs($guest, 'sanctum')
+            ->getJson('/api/v1/user/favorites')->assertOk()->json();
+        $rows = $rows['data'] ?? $rows;
+
+        $this->assertCount(1, $rows, 'a building is one favourite, not one per apartment');
+        $this->assertSame(3, $rows[0]['available_count']);
+    }
+
     private function book(Unit $unit, string $start, string $end): void
     {
         Booking::create([

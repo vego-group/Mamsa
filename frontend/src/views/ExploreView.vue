@@ -73,7 +73,7 @@
       </div>
 
       <div v-else class="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory -mx-4 px-4">
-        <UnitRailCard v-for="unit in popular" :key="unit.id" :unit="unit" :favorited="favorites.has(unit.id)" @favorite="toggleFavorite(unit.id)" />
+        <UnitRailCard v-for="unit in popular" :key="unit.id" :unit="unit" :favorited="isFavorite(unit)" @favorite="toggleFavorite(unit)" />
       </div>
     </section>
 
@@ -141,7 +141,7 @@
         </div>
       </div>
       <div v-else-if="picks.length" class="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory -mx-4 px-4">
-        <UnitRailCard v-for="unit in picks" :key="unit.id" :unit="unit" :favorited="favorites.has(unit.id)" @favorite="toggleFavorite(unit.id)" />
+        <UnitRailCard v-for="unit in picks" :key="unit.id" :unit="unit" :favorited="isFavorite(unit)" @favorite="toggleFavorite(unit)" />
       </div>
       <div v-else class="text-center py-10 text-on-surface-variant text-body-sm">لا توجد وحدات في هذه الفئة حالياً</div>
     </section>
@@ -223,7 +223,7 @@ const popularLoading = ref(true)
 const budgets = ref([])
 const cities = ref([])
 // Shared, API-backed favorites (persisted for logged-in users).
-const { favoriteIds: favorites, load: loadFavorites, toggle: toggleFav } = useFavorites()
+const { load: loadFavorites, toggle: toggleFav, isFavorite } = useFavorites()
 
 // مختارات لك — chip-filtered curated rail.
 const picks = ref([])
@@ -260,9 +260,9 @@ function mainImage(unit) {
 function formatMoney(v) {
   return new Intl.NumberFormat('en-US').format(Number(v) || 0)
 }
-function toggleFavorite(id) {
+function toggleFavorite(unit) {
   // Guests are sent to login — hearts only persist for authenticated users.
-  if (!toggleFav(id)) router.push({ name: 'login' })
+  if (!toggleFav(unit)) router.push({ name: 'login' })
 }
 
 // Catalogue cards lead to the filtered search-results page.

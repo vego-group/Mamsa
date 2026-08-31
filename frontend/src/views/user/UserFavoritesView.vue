@@ -38,8 +38,8 @@
           :key="unit.id"
           :unit="unit"
           fluid
-          :favorited="favoriteIds.has(unit.id)"
-          @favorite="unfavorite(unit.id)"
+          :favorited="isFavorite(unit)"
+          @favorite="unfavorite(unit)"
         />
       </div>
     </div>
@@ -55,24 +55,26 @@ import PublicFooter from '@/components/public/PublicFooter.vue'
 import AccountNav from '@/components/user/AccountNav.vue'
 import UnitRailCard from '@/components/public/UnitRailCard.vue'
 import { userApi } from '@/api/user'
-import { useFavorites } from '@/composables/useFavorites'
+import { useFavorites, listingKey } from '@/composables/useFavorites'
 
-const { favoriteIds, toggle } = useFavorites()
+const { favoriteIds, toggle, isFavorite } = useFavorites()
 
 const loading = ref(true)
 const units = ref([])
 
-function unfavorite(unitId) {
-  toggle(unitId)
+function unfavorite(unit) {
+  toggle(unit)
   // Remove from this page immediately — the heart has no "off" state here.
-  units.value = units.value.filter((u) => u.id !== unitId)
+  // Matched on the listing, so a building leaves as one card rather than
+  // stranding a sibling row behind it.
+  units.value = units.value.filter((u) => listingKey(u) !== listingKey(unit))
 }
 
 onMounted(async () => {
   try {
     const { data } = await userApi.favorites()
     units.value = data.data ?? data ?? []
-    favoriteIds.value = new Set(units.value.map((u) => u.id))
+    favoriteIds.value = new Set(units.value.map(listingKey))
   } catch {
     units.value = []
   }
