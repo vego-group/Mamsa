@@ -200,4 +200,50 @@ class MultiUnitListingTest extends TestCase
 
         $this->assertSame(5, Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->count());
     }
+
+    public function test_the_count_is_a_total_not_an_increment(): void
+    {
+        // The bug a partner hit within minutes: a building already numbered
+        // 401-405, told "5", became TEN — because 1..5 all looked missing.
+        $unit = $this->listing();
+        UnitCloner::assign($unit, ['401', '402', '403', '404', '405']);
+
+        $this->actingAs($this->partner, 'sanctum')
+            ->postJson("/api/v1/partner/units/{$unit->id}/apartments", ['count' => 5])
+            ->assertStatus(201);
+
+        $this->assertSame(5, Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->count());
+    }
+
+    public function test_growing_a_building_continues_its_own_numbering(): void
+    {
+        $unit = $this->listing();
+        UnitCloner::assign($unit, ['401', '402']);
+
+        $this->actingAs($this->partner, 'sanctum')
+            ->postJson("/api/v1/partner/units/{$unit->id}/apartments", ['count' => 4])
+            ->assertStatus(201);
+
+        // 403 and 404 — not 1 and 2. A door number the partner chose carries
+        // meaning a generated sequence would talk over.
+        $this->assertSame(
+            ['401', '402', '403', '404'],
+            Unit::where('unit_group_id', $unit->fresh()->unit_group_id)
+                ->pluck('apartment_no')->sort()->values()->all()
+        );
+    }
+
+    public function test_a_smaller_count_never_deletes_an_apartment(): void
+    {
+        $unit = $this->listing();
+        UnitCloner::assign($unit, ['401', '402', '403']);
+
+        $this->actingAs($this->partner, 'sanctum')
+            ->postJson("/api/v1/partner/units/{$unit->id}/apartments", ['count' => 1])
+            ->assertStatus(201);
+
+        // An apartment may already hold a booking. Shrinking silently would
+        // cancel a stay nobody asked to cancel.
+        $this->assertSame(3, Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->count());
+    }
 }

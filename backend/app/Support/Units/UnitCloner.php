@@ -123,6 +123,74 @@ final class UnitCloner
         });
     }
 
+    /**
+     * Make the building hold exactly `$total` apartments.
+     *
+     * "I have 5 units" is a TOTAL, not an instruction to create five more. The
+     * first implementation generated doors 1..N and added any that were
+     * missing, which on a building already numbered 401-405 read every one of
+     * 1..5 as absent and doubled it to ten. A partner saying "5" twice must get
+     * five both times.
+     *
+     * Shrinking is refused rather than performed: an apartment may already hold
+     * a booking, and silently deleting one to satisfy a smaller number would
+     * cancel a stay nobody asked to cancel. Removing one is a deliberate act on
+     * that unit.
+     *
+     * @return Collection<int,Unit> the whole group
+     */
+    public static function ensureTotal(Unit $source, int $total, bool $copyDocuments = false): Collection
+    {
+        $existing = $source->unit_group_id
+            ? Unit::where('unit_group_id', $source->unit_group_id)->pluck('apartment_no')->all()
+            : [];
+
+        // With no group yet the source has no door number either, and assign()
+        // spends the first number on it — so ask for `total`, not `total - 1`.
+        // Once the group exists every member is already numbered and only the
+        // shortfall is new.
+        $needed = $source->unit_group_id
+            ? $total - count($existing)
+            : $total;
+
+        if ($needed <= 0) {
+            return $source->unit_group_id
+                ? Unit::where('unit_group_id', $source->unit_group_id)->orderBy('apartment_no')->get()
+                : collect([$source]);
+        }
+
+        return self::assign($source, self::nextNumbers($existing, $source, $needed), $copyDocuments);
+    }
+
+    /**
+     * Door numbers for `$needed` new apartments that collide with none in use.
+     *
+     * Continues the building's own numbering where it is numeric — 401-405 plus
+     * two more is 406 and 407, not 1 and 2 — because a door number a partner
+     * chose carries meaning a generated sequence would talk over.
+     *
+     * @param  array<int, string|null>  $existing
+     * @return list<string>
+     */
+    private static function nextNumbers(array $existing, Unit $source, int $needed): array
+    {
+        $taken = collect($existing)->push($source->apartment_no)->filter()->map(strval(...));
+
+        $numeric = $taken->filter(fn ($n) => ctype_digit($n))->map(fn ($n) => (int) $n);
+        $next    = $numeric->isNotEmpty() ? $numeric->max() + 1 : 1;
+
+        $numbers = [];
+
+        while (count($numbers) < $needed) {
+            if (! $taken->contains((string) $next)) {
+                $numbers[] = (string) $next;
+            }
+            $next++;
+        }
+
+        return $numbers;
+    }
+
     /** How many rows a group would hold after adding `$numbers`. */
     public static function projectedSize(Unit $source, array $numbers): int
     {

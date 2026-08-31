@@ -247,25 +247,48 @@ class UnitController extends Controller
             'copy_documents' => ['nullable', 'boolean'],
         ]);
 
-        $numbers = match (true) {
-            isset($data['numbers']) => $data['numbers'],
-            isset($data['from'])    => collect(range($data['from'], $data['to']))
-                ->map(fn ($n) => ($data['prefix'] ?? '').$n)->all(),
-            default                 => collect(range(1, $data['count']))
-                ->map(fn ($n) => ($data['prefix'] ?? '').$n)->all(),
-        };
+        $copyDocuments = (bool) ($data['copy_documents'] ?? false);
 
-        if (($size = UnitCloner::projectedSize($unit, $numbers)) > UnitCloner::MAX_GROUP) {
-            return response()->json([
-                'message' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد، والمطلوب '.$size,
-                'code'    => 'GROUP_TOO_LARGE',
-            ], 422);
+        // `count` is a TOTAL — "I have five units" — while numbers and ranges
+        // name specific doors. Treating the total as a list of doors 1..N is
+        // what turned a building of 401-405 into ten apartments.
+        if (isset($data['count'])) {
+            if ($data['count'] > UnitCloner::MAX_GROUP) {
+                return $this->groupTooLarge((int) $data['count']);
+            }
+
+            $group = UnitCloner::ensureTotal($unit, (int) $data['count'], $copyDocuments);
+
+            return $this->groupResponse($group);
         }
 
-        $group = UnitCloner::assign($unit, $numbers, (bool) ($data['copy_documents'] ?? false));
+        $numbers = isset($data['numbers'])
+            ? $data['numbers']
+            : collect(range($data['from'], $data['to']))
+                ->map(fn ($n) => ($data['prefix'] ?? '').$n)->all();
 
+        if (($size = UnitCloner::projectedSize($unit, $numbers)) > UnitCloner::MAX_GROUP) {
+            return $this->groupTooLarge($size);
+        }
+
+        $group = UnitCloner::assign($unit, $numbers, $copyDocuments);
+
+        return $this->groupResponse($group);
+    }
+
+    private function groupTooLarge(int $size): JsonResponse
+    {
         return response()->json([
-            'message' => 'تم إنشاء '.$group->count().' وحدة في المبنى',
+            'message' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد، والمطلوب '.$size,
+            'code'    => 'GROUP_TOO_LARGE',
+        ], 422);
+    }
+
+    /** @param  \Illuminate\Support\Collection<int, Unit>  $group */
+    private function groupResponse($group): JsonResponse
+    {
+        return response()->json([
+            'message' => 'المبنى يحتوي الآن على '.$group->count().' وحدة',
             'data'    => UnitResource::collection($group->load(['images', 'features'])),
         ], 201);
     }
