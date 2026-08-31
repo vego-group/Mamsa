@@ -6,8 +6,11 @@ namespace Tests\Feature;
 
 use App\Models\Booking;
 use App\Models\PartnerLedgerEntry;
+use App\Notifications\LedgerCheckFailed;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -146,6 +149,73 @@ class BookingConsistencyCheckTest extends TestCase
         $this->artisan('bookings:check-consistency')
             ->expectsOutputToContain('1 completed booking(s) carry no share to credit')
             ->assertSuccessful();
+    }
+
+    public function test_the_alert_flag_notifies_active_super_admins_of_a_finding(): void
+    {
+        Notification::fake();
+        $admin = User::factory()->create(['is_active' => true]);
+        Role::findOrCreate('SuperAdmin', 'web');
+        $admin->assignRole('SuperAdmin');
+
+        $booking = $this->booking(1000, 0.10, 100, 900, Booking::STATUS_COMPLETED);
+        PartnerLedgerEntry::where('ref_type', 'booking')
+            ->where('ref_id', (string) $booking->id)->delete();
+
+        $this->artisan('bookings:check-consistency --alert')->assertFailed();
+
+        Notification::assertSentTo($admin, LedgerCheckFailed::class,
+            fn (LedgerCheckFailed $n) => $n->uncredited === 1);
+    }
+
+    public function test_a_clean_run_alerts_nobody(): void
+    {
+        Notification::fake();
+        $admin = User::factory()->create(['is_active' => true]);
+        Role::findOrCreate('SuperAdmin', 'web');
+        $admin->assignRole('SuperAdmin');
+
+        $this->booking(1000, 0.10, 100, 900, Booking::STATUS_COMPLETED);
+
+        $this->artisan('bookings:check-consistency --alert')->assertSuccessful();
+
+        // An alert that fires on a healthy ledger trains people to ignore it.
+        Notification::assertNothingSent();
+    }
+
+    public function test_a_manual_run_stays_silent(): void
+    {
+        Notification::fake();
+        $admin = User::factory()->create(['is_active' => true]);
+        Role::findOrCreate('SuperAdmin', 'web');
+        $admin->assignRole('SuperAdmin');
+
+        $booking = $this->booking(1000, 0.10, 100, 900, Booking::STATUS_COMPLETED);
+        PartnerLedgerEntry::where('ref_type', 'booking')
+            ->where('ref_id', (string) $booking->id)->delete();
+
+        // Someone at a terminal is already reading the output.
+        $this->artisan('bookings:check-consistency')->assertFailed();
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_a_suspended_super_admin_is_not_alerted(): void
+    {
+        Notification::fake();
+        Role::findOrCreate('SuperAdmin', 'web');
+        $suspended = User::factory()->create(['is_active' => false]);
+        $suspended->assignRole('SuperAdmin');
+
+        $booking = $this->booking(1000, 0.10, 100, 900, Booking::STATUS_COMPLETED);
+        PartnerLedgerEntry::where('ref_type', 'booking')
+            ->where('ref_id', (string) $booking->id)->delete();
+
+        $this->artisan('bookings:check-consistency --alert')
+            ->expectsOutputToContain('no active super admin exists to notify')
+            ->assertFailed();
+
+        Notification::assertNothingSent();
     }
 
     private function booking(float $subtotal, float $rate, float $commission, float $share, string $status = Booking::STATUS_CONFIRMED): Booking

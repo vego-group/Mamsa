@@ -30,6 +30,16 @@ Schedule::command('bookings:checkin-reminders')
 // into unit blocked dates. 15 min = the industry-standard iCal sync window.
 Schedule::command('calendar:sync')->everyFifteenMinutes()->withoutOverlapping()->appendOutputTo($scheduleLog);
 
+// Nightly money check: the split arithmetic AND ledger coverage. --alert makes
+// a finding travel to a person; the gap that went unnoticed for three days on
+// staging did so while every surface reported healthy, so a result that lands
+// only in a log file is not a result. 02:30 Riyadh — after bookings:complete at
+// 00:30, so the stays that finished today are already credited and cannot be
+// reported as uncredited for the few hours in between.
+Schedule::command('bookings:check-consistency --alert')
+    ->dailyAt('02:30')->timezone('Asia/Riyadh')
+    ->withoutOverlapping()->appendOutputTo($scheduleLog);
+
 // Release dates held by abandoned checkouts: unpaid pending bookings expire
 // after 60 min (the frontend reuses a pending booking within that window).
 Schedule::command('bookings:expire-pending')->everyFifteenMinutes()->withoutOverlapping()->appendOutputTo($scheduleLog);

@@ -6,8 +6,11 @@ namespace App\Console\Commands;
 
 use App\Models\Booking;
 use App\Models\PartnerLedgerEntry;
+use App\Models\User;
+use App\Notifications\LedgerCheckFailed;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Ask the money columns whether they still add up.
@@ -38,7 +41,8 @@ class CheckBookingConsistency extends Command
 {
     protected $signature = 'bookings:check-consistency
         {--tolerance=0.01 : Allowed rounding drift, in SAR}
-        {--limit=50 : Maximum offending rows to print}';
+        {--limit=50 : Maximum offending rows to print}
+        {--alert : Notify super admins when something is found. For the scheduler.}';
 
     protected $description = 'Verify commission_amount + partner_share === subtotal on every booking';
 
@@ -154,11 +158,44 @@ class CheckBookingConsistency extends Command
             $this->warn("⚠ {$rateMismatch} row(s) where commission_amount does not equal subtotal × commission_rate");
         }
 
+        // Scheduled runs alert; a human running this at a terminal is already
+        // looking at the output and does not need an email about it.
+        if ($this->option('alert')) {
+            $this->alertAdmins($uncredited, $brokenCount, $rateMismatch);
+        }
+
         $this->newLine();
         $this->line('Repair a row that simply never froze with: php artisan bookings:freeze-commission');
         $this->line('Anything else needs a look before it is touched — the numbers are money.');
 
         return self::FAILURE;
+    }
+
+    /**
+     * Tell the super admins. A finding that reaches only a log file is read a
+     * week later, which for a money fault is the same as not finding it.
+     *
+     * Failure to notify must NOT change the command's exit status: the check
+     * did its job, and a broken mail transport is a separate problem from a
+     * broken ledger.
+     */
+    private function alertAdmins(int $uncredited, int $brokenSplit, int $rateMismatch): void
+    {
+        try {
+            $admins = User::role('SuperAdmin')->where('is_active', true)->get();
+
+            if ($admins->isEmpty()) {
+                $this->warn('⚠ --alert was passed but no active super admin exists to notify.');
+
+                return;
+            }
+
+            Notification::send($admins, new LedgerCheckFailed($uncredited, $brokenSplit, $rateMismatch));
+            $this->line("  alerted {$admins->count()} super admin(s)");
+        } catch (\Throwable $e) {
+            report($e);
+            $this->warn('⚠ could not send the alert: '.$e->getMessage());
+        }
     }
 
     /**
