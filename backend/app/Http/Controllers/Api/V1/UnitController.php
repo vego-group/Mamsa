@@ -307,7 +307,7 @@ class UnitController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    public function show(Unit $unit): UnitResource|JsonResponse
+    public function show(Request $request, Unit $unit): UnitResource|JsonResponse
     {
         if (! in_array($unit->unit_type, Unit::SUPPORTED_TYPES, true)
             || $unit->approval_status !== 'approved'
@@ -317,10 +317,21 @@ class UnitController extends Controller
 
         $unit->load(['images', 'features', 'owner.partnerDetail', 'reviews.user', 'cancellationPolicy.tiers']);
 
-        // No date window here, so this is "how many apartments in this building
-        // are listed", not "free for your stay". The date-aware number comes
-        // from /units/{id}/availability, which the checkout step already calls.
-        Availability::attachCounts(collect([$unit]));
+        // Dates are OPTIONAL but honoured, so arriving here from a dated search
+        // does not flash "5 available" before the probe corrects it to 2. The
+        // same validation shape as the listing: `nullable` with `required_with`,
+        // because `sometimes` skips an absent field and takes `required_with`
+        // with it, letting half a window through to be silently ignored.
+        $dates = $request->validate([
+            'start_date' => ['nullable', 'required_with:end_date', 'date'],
+            'end_date'   => ['nullable', 'required_with:start_date', 'date', 'after:start_date'],
+        ]);
+
+        Availability::attachCounts(
+            collect([$unit]),
+            $dates['start_date'] ?? null,
+            $dates['end_date'] ?? null,
+        );
 
         return new UnitResource($unit);
     }

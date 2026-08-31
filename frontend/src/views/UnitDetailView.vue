@@ -192,6 +192,11 @@
               </div>
 
               <div class="space-y-3 mb-4">
+                <p v-if="scarce" class="flex items-center gap-1 text-[12px] font-bold text-error">
+                  <span class="material-symbols-outlined text-[16px]">local_fire_department</span>
+                  {{ scarceLabel }}
+                </p>
+
                 <div class="grid grid-cols-2 gap-2">
                   <div>
                     <label class="block text-[12px] font-bold text-on-surface-variant mb-1.5">تسجيل الوصول</label>
@@ -277,6 +282,7 @@ import CancellationPolicyTiers from '@/components/public/CancellationPolicyTiers
 import GregorianDatePicker from '@/components/public/GregorianDatePicker.vue'
 import EmailVerifyModal from '@/components/user/EmailVerifyModal.vue'
 import { publicApi, bookingApi } from '@/api/public'
+import { useScarcity } from '@/composables/useScarcity'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -333,16 +339,32 @@ watch(() => booking.start_date, (start) => {
 })
 
 const quote = ref(null)
+// How many apartments are free for the CHOSEN nights, as opposed to how many
+// this building lists. Null until dates are picked, when the page falls back to
+// the unit's own (undated) count.
+const datedCount = ref(null)
 watch(() => [booking.start_date, booking.end_date], async () => {
   quote.value = null
+  datedCount.value = null
   if (!unit.value || !booking.start_date || !booking.end_date || nights.value <= 0) return
   try {
     const { data: avail } = await publicApi.checkAvailability(unit.value.id, booking.start_date, booking.end_date)
     if (avail.available && avail.pricing) quote.value = avail.pricing
+    // The probe counts across the whole building, so this is the number that
+    // must be on screen once a guest has chosen their nights — showing the
+    // listing-wide count next to specific dates is the disagreement in a
+    // quieter place.
+    if (typeof avail.available_count === 'number') datedCount.value = avail.available_count
   } catch {
     /* quote is cosmetic here — booking still re-checks availability */
   }
 })
+
+// Scarcity for whichever count is authoritative right now.
+const { scarce, scarceLabel } = useScarcity(() => ({
+  ...(unit.value || {}),
+  available_count: datedCount.value ?? unit.value?.available_count,
+}))
 
 const nights = computed(() => {
   if (!booking.start_date || !booking.end_date) return 0

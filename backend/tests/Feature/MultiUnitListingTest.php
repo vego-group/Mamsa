@@ -281,6 +281,35 @@ class MultiUnitListingTest extends TestCase
         $this->assertSame(3, $rows[0]['available_count']);
     }
 
+    public function test_the_detail_page_count_honours_the_dates_asked_for(): void
+    {
+        $source = $this->building(5);
+        $this->book($source, '2026-08-31', '2026-09-03');
+
+        // Undated: how many apartments this building lists.
+        $plain = $this->getJson("/api/v1/units/{$source->id}")->assertOk()->json();
+        $plain = $plain['data'] ?? $plain;
+        $this->assertSame(5, $plain['available_count']);
+
+        // Dated: how many are free for THOSE nights. A detail page showing 5
+        // while the card that led here showed 4 is the same disagreement in a
+        // quieter place.
+        $dated = $this->getJson("/api/v1/units/{$source->id}?start_date=2026-08-31&end_date=2026-09-03")
+            ->assertOk()->json();
+        $dated = $dated['data'] ?? $dated;
+        $this->assertSame(4, $dated['available_count']);
+    }
+
+    public function test_half_a_date_window_is_refused_rather_than_ignored(): void
+    {
+        $source = $this->building(2);
+
+        // Silently ignoring it would report the undated count under a URL that
+        // asked for a specific night.
+        $this->getJson("/api/v1/units/{$source->id}?start_date=2026-08-31")
+            ->assertStatus(422);
+    }
+
     private function book(Unit $unit, string $start, string $end): void
     {
         Booking::create([
