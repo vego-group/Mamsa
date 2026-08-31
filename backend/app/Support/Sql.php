@@ -26,6 +26,24 @@ final class Sql
         return DB::connection()->getDriverName() === 'sqlite';
     }
 
+    /**
+     * The key that makes a multi-unit building ONE row.
+     *
+     * `COALESCE(unit_group_id, id)` is the obvious form and it is wrong twice:
+     * it mixes a 26-char ULID with a bigint, and — worse — any expression that
+     * collapses to a constant for ungrouped rows would fold every standalone
+     * unit in the catalogue into a single listing. So an ungrouped unit gets a
+     * key of its OWN id, prefixed so it can never collide with a real ULID.
+     *
+     * Concatenation is the part that differs: MySQL has CONCAT, sqlite has `||`.
+     */
+    public static function groupKey(string $groupCol, string $idCol): string
+    {
+        return self::isSqlite()
+            ? "COALESCE({$groupCol}, 'u' || {$idCol})"
+            : "COALESCE({$groupCol}, CONCAT('u', {$idCol}))";
+    }
+
     /** 'YYYY-MM' bucket for a date/datetime column. */
     public static function ym(string $col): string
     {

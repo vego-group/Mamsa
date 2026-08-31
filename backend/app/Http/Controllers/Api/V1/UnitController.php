@@ -8,6 +8,8 @@ use App\Models\Booking;
 use App\Models\Unit;
 use App\Support\Booking\Availability;
 use App\Support\Pricing;
+use App\Support\Sql;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -143,13 +145,82 @@ class UnitController extends Controller
             Availability::onlyFree($query, $dates['start_date'], $dates['end_date']);
         }
 
+        // Collapse a multi-unit building into ONE card.
+        //
+        // A tower of 100 identical apartments is 100 rows -- each separately
+        // bookable, which is the point -- but showing 100 identical cards would
+        // bury every other partner on the page. So the listing shows one member
+        // per group and says how many are free.
+        //
+        // Done as a second query over the SAME filtered builder rather than a
+        // GROUP BY on this one: the representative still has to come back as a
+        // full model with its images, features, host and review aggregates, and
+        // a grouped select cannot carry those.
+        $representatives = (clone $query)->reorder()
+            ->select(DB::raw('MIN(units.id) as id'))
+            ->groupBy(DB::raw(Sql::groupKey('units.unit_group_id', 'units.id')))
+            ->pluck('id');
+
+        $query->whereIn('units.id', $representatives);
+
         self::applySort($query, (string) $request->query('sort', ''));
 
         // Caller-controlled page size, capped: an uncapped one is a way to ask
         // for the entire table in a single query.
         $perPage = min(max((int) $request->query('per_page', 12), 1), 50);
 
-        return UnitResource::collection($query->paginate($perPage));
+        $page = $query->paginate($perPage);
+
+        self::attachAvailableCounts(
+            $page->getCollection(),
+            $dates['start_date'] ?? null,
+            $dates['end_date'] ?? null,
+        );
+
+        return UnitResource::collection($page);
+    }
+
+    /**
+     * How many apartments in each building are actually bookable.
+     *
+     * Counted over the same window the search asked about, so "3 available"
+     * means three are free for THOSE nights -- not three exist. A count that
+     * ignored the dates would be a number the booking step then contradicts.
+     *
+     * One query for the whole page. A per-unit count would be a query per card.
+     *
+     * @param  \Illuminate\Support\Collection<int, Unit>  $units
+     */
+    private static function attachAvailableCounts($units, ?string $start, ?string $end): void
+    {
+        $groups = $units->pluck('unit_group_id')->filter()->unique()->values();
+
+        $counts = collect();
+
+        if ($groups->isNotEmpty()) {
+            $siblings = Unit::query()
+                ->whereIn('unit_group_id', $groups)
+                ->where('approval_status', 'approved')
+                ->where('status', 'available');
+
+            if ($start && $end) {
+                Availability::onlyFree($siblings, $start, $end);
+            }
+
+            $counts = $siblings
+                ->select('unit_group_id', DB::raw('COUNT(*) as aggregate'))
+                ->groupBy('unit_group_id')
+                ->pluck('aggregate', 'unit_group_id');
+        }
+
+        foreach ($units as $unit) {
+            // A standalone unit is a building of one. Reporting null here would
+            // make every existing listing look like it had no availability.
+            $unit->setAttribute(
+                'available_count',
+                $unit->unit_group_id ? (int) ($counts[$unit->unit_group_id] ?? 0) : 1,
+            );
+        }
     }
 
     /**
@@ -288,6 +359,11 @@ class UnitController extends Controller
         }
 
         $unit->load(['images', 'features', 'owner.partnerDetail', 'reviews.user', 'cancellationPolicy.tiers']);
+
+        // No date window here, so this is "how many apartments in this building
+        // are listed", not "free for your stay". The date-aware number comes
+        // from /units/{id}/availability, which the checkout step already calls.
+        self::attachAvailableCounts(collect([$unit]), null, null);
 
         return new UnitResource($unit);
     }

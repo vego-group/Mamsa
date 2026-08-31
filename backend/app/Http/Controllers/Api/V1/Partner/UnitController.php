@@ -229,21 +229,31 @@ class UnitController extends Controller
 
         $data = $request->validate([
             // Either an explicit list…
-            'numbers'        => ['required_without:from', 'array', 'max:'.UnitCloner::MAX_GROUP],
+            // Three ways to say the same thing, because partners think about
+            // this differently: "these exact doors", "401 through 420", or
+            // simply "I have five of them".
+            'numbers'        => ['required_without_all:from,count', 'array', 'max:'.UnitCloner::MAX_GROUP],
             'numbers.*'      => ['string', 'max:20'],
-            // …or a range, because typing 401-420 by hand is how a door gets missed.
-            'from'           => ['required_without:numbers', 'integer', 'min:0', 'max:99999'],
+            'from'           => ['required_without_all:numbers,count', 'integer', 'min:0', 'max:99999'],
             'to'             => ['required_with:from', 'integer', 'min:0', 'max:99999', 'gte:from'],
             'prefix'         => ['nullable', 'string', 'max:5'],
+            // The plain count. Numbers become 1..N, so the group still has a
+            // stable identity per apartment and re-sending the same count adds
+            // nothing — raising it to 8 later simply adds the missing three.
+            'count'          => ['required_without_all:numbers,from', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
             // Off by default: a permit issued per apartment does not cover its
             // neighbours, and copying it would put an admin in front of 99
             // listings evidenced by a licence that is not theirs.
             'copy_documents' => ['nullable', 'boolean'],
         ]);
 
-        $numbers = $data['numbers'] ?? collect(range($data['from'], $data['to']))
-            ->map(fn ($n) => ($data['prefix'] ?? '').$n)
-            ->all();
+        $numbers = match (true) {
+            isset($data['numbers']) => $data['numbers'],
+            isset($data['from'])    => collect(range($data['from'], $data['to']))
+                ->map(fn ($n) => ($data['prefix'] ?? '').$n)->all(),
+            default                 => collect(range(1, $data['count']))
+                ->map(fn ($n) => ($data['prefix'] ?? '').$n)->all(),
+        };
 
         if (($size = UnitCloner::projectedSize($unit, $numbers)) > UnitCloner::MAX_GROUP) {
             return response()->json([

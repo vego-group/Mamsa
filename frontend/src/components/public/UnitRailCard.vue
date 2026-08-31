@@ -32,6 +32,15 @@
     <div class="p-4">
       <h3 class="font-title-sm text-[15px] text-on-surface mb-2 leading-snug line-clamp-2 h-[44px]">{{ unit.name }}</h3>
 
+      <!-- Multi-unit building: one card for many identical apartments. Shown
+           only above 1 — every standalone listing reports 1, and a "1 متاحة"
+           badge on every card in the catalogue would be noise, not information. -->
+      <p v-if="unit.available_count > 1"
+         class="flex items-center gap-1 text-[12px] font-bold text-primary mb-2">
+        <span class="material-symbols-outlined text-[15px]">home_work</span>
+        {{ unit.available_count }} وحدات متاحة
+      </p>
+
       <div class="flex items-center flex-wrap gap-x-3 gap-y-1.5 text-on-surface-variant text-[12px] mb-3 pb-3 border-b border-outline-variant/50">
         <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">bed</span>{{ unit.bedrooms }} غرف</span>
         <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">group</span>{{ unit.capacity }} ضيوف</span>

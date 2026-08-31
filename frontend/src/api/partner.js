@@ -14,6 +14,9 @@ export const partnerApi = {
   getUnit: (id) => http.get(`/partner/units/${id}`),
   createUnit: (payload) => http.post('/partner/units', payload),
   updateUnit: (id, payload) => http.put(`/partner/units/${id}`, payload),
+  // Multi-unit buildings: turn one listing into `count` identical apartments,
+  // each separately bookable, grouped so the storefront shows a single card.
+  setApartmentCount: (id, count) => http.post(`/partner/units/${id}/apartments`, { count }),
   deleteUnit: (id) => http.delete(`/partner/units/${id}`),
   submitUnit: (id) => http.post(`/partner/units/${id}/submit`),
 

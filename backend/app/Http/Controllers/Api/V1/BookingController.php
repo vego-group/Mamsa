@@ -141,10 +141,7 @@ class BookingController extends Controller
             ->where('status', 'available')
             ->firstOrFail();
 
-        $nights  = (int) now()->parse($data['start_date'])->diffInDays($data['end_date']);
-        // The split is frozen here for the life of the booking, so the
-        // ownership flag has to be read at this moment — not inferred later.
-        $pricing = Pricing::breakdown((float) $unit->price, $nights, (bool) $unit->mamsa_owned);
+        $nights = (int) now()->parse($data['start_date'])->diffInDays($data['end_date']);
 
         /*
          * Check and create under a lock on the UNIT row.
@@ -160,20 +157,56 @@ class BookingController extends Controller
          * same unit queue, and the second sees the first's row.
          */
         try {
-            $booking = DB::transaction(function () use ($unit, $data, $pricing) {
-                Unit::whereKey($unit->id)->lockForUpdate()->first();
+            $booking = DB::transaction(function () use ($unit, $data, $nights) {
+                /*
+                 * A multi-unit building is ONE card, so the id the guest sends
+                 * is whichever apartment the listing happened to show. Booking
+                 * that exact row would fail while four of its five siblings sat
+                 * empty — and two guests clicking the same card would collide
+                 * on it. So the group is the thing being booked, and the server
+                 * picks a free apartment out of it.
+                 *
+                 * Every sibling is locked, ALWAYS in id order: two concurrent
+                 * bookings that locked the same rows in different orders would
+                 * deadlock rather than queue.
+                 */
+                $candidates = $unit->unit_group_id
+                    ? Unit::where('unit_group_id', $unit->unit_group_id)
+                        ->where('approval_status', 'approved')
+                        ->where('status', 'available')
+                        ->orderBy('id')->lockForUpdate()->get()
+                    : Unit::whereKey($unit->id)->lockForUpdate()->get();
 
-                // Kept as two checks so the guest is told which it is: another
-                // booking, or the partner having closed the dates.
-                if (Availability::conflictingBookings((int) $unit->id, $data['start_date'], $data['end_date'])->exists()) {
-                    throw new UnitUnavailable('الوحدة محجوزة في هذه الفترة');
+                $booked  = false;
+                $blocked = false;
+
+                foreach ($candidates as $candidate) {
+                    if (Availability::conflictingBookings((int) $candidate->id, $data['start_date'], $data['end_date'])->exists()) {
+                        $booked = true;
+
+                        continue;
+                    }
+
+                    if ($candidate->blockedDates()->overlapping($data['start_date'], $data['end_date'])->exists()) {
+                        $blocked = true;
+
+                        continue;
+                    }
+
+                    // Priced from the apartment actually allocated, not from the
+                    // one the card showed: siblings start identical but a partner
+                    // can reprice one, and the split is frozen for the life of
+                    // the booking.
+                    return $this->persist($candidate, $data, Pricing::breakdown(
+                        (float) $candidate->price, $nights, (bool) $candidate->mamsa_owned,
+                    ));
                 }
 
-                if ($unit->blockedDates()->overlapping($data['start_date'], $data['end_date'])->exists()) {
-                    throw new UnitUnavailable('الوحدة غير متاحة في هذه الفترة');
-                }
-
-                return $this->persist($unit, $data, $pricing);
+                // Kept as two messages so the guest is told which it is: taken,
+                // or closed by the partner.
+                throw new UnitUnavailable($booked || ! $blocked
+                    ? 'الوحدة محجوزة في هذه الفترة'
+                    : 'الوحدة غير متاحة في هذه الفترة');
             });
         } catch (UnitUnavailable $e) {
             return response()->json(['message' => $e->getMessage()], 422);

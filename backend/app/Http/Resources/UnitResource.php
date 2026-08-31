@@ -14,6 +14,11 @@ class UnitResource extends JsonResource
             'name'                => $this->unit_name,
             'type'                => $this->unit_type,
             'code'                => $this->code,
+            // How many apartments in this building are bookable. 1 for a
+            // standalone listing, so a client can read it unconditionally.
+            // Present only where the controller computed it -- a resource that
+            // guessed would be guessing about availability.
+            'available_count'     => $this->whenNotNull($this->available_count),
             'price'               => $this->price,
             'capacity'            => $this->capacity,
             'bedrooms'            => $this->bedrooms,

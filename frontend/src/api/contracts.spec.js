@@ -151,6 +151,11 @@ describe('partnerApi — unit gallery', () => {
 })
 
 describe('endpoints that existed on the backend but were never called', () => {
+  it('sets the apartment count on a unit', () => {
+    partnerApi.setApartmentCount(42, 5)
+    expect(http.post).toHaveBeenCalledWith('/partner/units/42/apartments', { count: 5 })
+  })
+
   it('reads a unit\'s blocked nights and public reviews', () => {
     publicApi.blockedDates(42, { from: '2026-09-01', to: '2026-10-01' })
     expect(http.get).toHaveBeenCalledWith('/units/42/blocked-dates', {

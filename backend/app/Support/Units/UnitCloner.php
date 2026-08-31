@@ -44,6 +44,13 @@ final class UnitCloner
         // Identity — both are UNIQUE. Copying `calendar_token` would hand every
         // apartment one iCal feed, so an external sync on 402 would rewrite the
         // calendars of the other 99.
+        //
+        // `unit_name` is NOT here: every apartment in a building shares its
+        // name. Suffixing it with the door number ("البرج - 402") was the first
+        // attempt, and the storefront exposed it as wrong — the collapsed card
+        // is the BUILDING, so it inherited a name ending in a door number that
+        // means nothing to a guest. The door is a field, `apartment_no`, and
+        // the partner's list renders it from there.
         'id', 'code', 'calendar_token',
         'unit_group_id', 'apartment_no',
         'created_at', 'updated_at',
@@ -103,18 +110,9 @@ final class UnitCloner
                 ->reject(fn ($n) => in_array($n, $taken, true))
                 ->values();
 
-            // The source is the first member, so it consumes the first number —
-            // and gets it in its name like every other apartment. Leaving the
-            // original unlabelled puts one odd row at the top of a list of a
-            // hundred, which reads as a bug rather than as the first door.
-            // nameFor() is evaluated while apartment_no is still null, so it
-            // appends rather than replacing.
+            // The source is the first member, so it consumes the first number.
             if (blank($source->apartment_no) && $wanted->isNotEmpty()) {
-                $first = $wanted->shift();
-                $source->forceFill([
-                    'apartment_no' => $first,
-                    'unit_name'    => self::nameFor($source, $first),
-                ])->save();
+                $source->forceFill(['apartment_no' => $wanted->shift()])->save();
             }
 
             foreach ($wanted as $number) {
@@ -154,9 +152,6 @@ final class UnitCloner
         $clone = Unit::create(array_merge($attributes, [
             'unit_group_id'   => $groupId,
             'apartment_no'    => $number,
-            // The door number is what tells two otherwise identical listings
-            // apart in the partner's own list.
-            'unit_name'       => self::nameFor($source, $number),
             'code'            => self::uniqueCode(),
             'calendar_token'  => Str::random(60),
             'approval_status' => 'draft',
@@ -177,16 +172,6 @@ final class UnitCloner
         $clone->features()->sync($source->features->pluck('id'));
 
         return $clone;
-    }
-
-    /** Base name plus the door number, without stacking suffixes on re-runs. */
-    private static function nameFor(Unit $source, string $number): string
-    {
-        $base = $source->apartment_no
-            ? Str::beforeLast($source->unit_name, ' - ' . $source->apartment_no)
-            : $source->unit_name;
-
-        return Str::limit(trim($base) . ' - ' . $number, 150, '');
     }
 
     /** `code` is UNIQUE; a 100-row loop is where a random collision finally happens. */

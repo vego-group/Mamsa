@@ -54,6 +54,19 @@
             <label class="block text-body-sm font-bold text-on-surface mb-1.5">عدد الغرف *</label>
             <input v-model.number="form.bedrooms" type="number" min="0" class="field" dir="ltr" required />
           </div>
+
+          <!-- Multi-unit buildings: one listing, many identical apartments.
+               Each becomes a separately bookable unit; the site shows ONE card
+               with the number still free beside it. -->
+          <div>
+            <label class="block text-body-sm font-bold text-on-surface mb-1.5">عدد الوحدات المتطابقة</label>
+            <input v-model.number="apartmentCount" type="number" min="1" max="100" class="field" dir="ltr" />
+            <p class="text-body-sm text-on-surface-variant mt-1">
+              لو عندك أكثر من وحدة بنفس المواصفات في نفس المبنى، اكتب العدد هنا.
+              هتظهر في الموقع كوحدة واحدة ومعاها عدد المتاح.
+            </p>
+            <p v-if="unitCountNotice" class="text-body-sm text-primary mt-1">{{ unitCountNotice }}</p>
+          </div>
         </div>
       </section>
 
@@ -307,6 +320,10 @@ const documentTypes = [
   { type: 'bank_certificate', label: 'توثيق الحساب البنكي', hint: 'خطاب الآيبان من البنك — يخص حسابك، ويسري على كل وحداتك' },
 ]
 const docs = ref({ tourism_permit: null, ownership_doc: null, bank_certificate: null })
+
+// How many identical apartments this listing stands for. 1 = an ordinary unit.
+const apartmentCount = ref(1)
+const unitCountNotice = ref('')
 const docBusy = ref(null)
 
 async function onDocSelected(e, type) {
@@ -437,12 +454,23 @@ async function save() {
   saving.value = true
   try {
     const payload = { ...form.value }
+    let unitId = route.params.id
     if (isEdit.value) {
-      await partnerApi.updateUnit(route.params.id, payload)
+      await partnerApi.updateUnit(unitId, payload)
       showToast('تم حفظ التعديلات')
     } else {
-      await partnerApi.createUnit(payload)
+      const created = await partnerApi.createUnit(payload)
+      unitId = created.data?.data?.id ?? created.data?.id
       showToast('تم إنشاء الوحدة كمسودة')
+    }
+
+    // Expanded AFTER the save, never before: the copies inherit whatever this
+    // unit holds, so running it on a half-filled draft would clone the gaps.
+    // Idempotent server-side — re-saving with the same count adds nothing.
+    if (Number(apartmentCount.value) > 1 && unitId) {
+      const { data } = await partnerApi.setApartmentCount(unitId, Number(apartmentCount.value))
+      unitCountNotice.value = data?.message || ''
+      showToast(data?.message || 'تم إنشاء الوحدات')
     }
     setTimeout(() => router.push({ name: 'partner-units' }), 700)
   } catch (e) {

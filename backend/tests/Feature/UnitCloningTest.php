@@ -98,22 +98,21 @@ class UnitCloningTest extends TestCase
         $this->assertEmpty($group->filter(fn ($u) => blank($u->calendar_token)));
     }
 
-    public function test_each_clone_carries_its_door_number_in_its_name(): void
+    public function test_every_apartment_shares_the_building_name_and_differs_by_door(): void
     {
         $unit = $this->sourceUnit(['unit_name' => 'شقة برج الملقا']);
 
         UnitCloner::assign($unit, ['401', '402', '403']);
 
-        $names = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)
-            ->pluck('unit_name', 'apartment_no');
+        $group = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->get();
 
-        // A hundred rows called the same thing are unusable in the partner's
-        // own list — the door number is the only thing telling them apart.
-        // The source is the first door, not an unlabelled odd one out.
-        $this->assertSame('شقة برج الملقا - 401', $names['401']);
-        $this->assertSame('شقة برج الملقا - 402', $names['402']);
-        $this->assertSame('شقة برج الملقا - 403', $names['403']);
-        $this->assertCount(3, $names->unique());
+        // One name for the whole building. Suffixing it per door was the first
+        // attempt and the storefront proved it wrong: the collapsed card IS the
+        // building, so it ended up titled after one arbitrary apartment.
+        $this->assertSame(['شقة برج الملقا'], $group->pluck('unit_name')->unique()->values()->all());
+
+        // The door is a field, and it is what tells them apart.
+        $this->assertSame(['401', '402', '403'], $group->pluck('apartment_no')->sort()->values()->all());
     }
 
     public function test_a_clone_of_an_approved_listing_has_not_itself_been_approved(): void
@@ -224,10 +223,14 @@ class UnitCloningTest extends TestCase
         $body = $this->getJson("/api/v1/units/{$unit->id}")->assertOk()->json();
         $payload = $body['data'] ?? $body;
 
-        // The public contract is signed off at exactly 30 keys; the guest card
-        // shows the building, not the door.
+        // The guest card shows the building, not the door.
         $this->assertArrayNotHasKey('apartment_no', $payload);
         $this->assertArrayNotHasKey('unit_group_id', $payload);
-        $this->assertCount(30, $payload);
+
+        // 31, not 30: `available_count` was added deliberately so the card can
+        // say how many apartments are free. Pinned so the NEXT key to appear
+        // here has to be a decision someone made on purpose.
+        $this->assertArrayHasKey('available_count', $payload);
+        $this->assertCount(31, $payload);
     }
 }
