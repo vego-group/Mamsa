@@ -175,6 +175,62 @@ class MultiUnitListingTest extends TestCase
         $this->assertCount(2, array_unique($ids));
     }
 
+    public function test_one_booked_apartment_does_not_grey_out_the_building(): void
+    {
+        // The bug as reported: booking apartment 401 for 31 Aug → 3 Sep greyed
+        // those nights out in the picker, while four apartments were free and
+        // the booking endpoint would have accepted them.
+        $source = $this->building(5);
+        $this->book($source, '2026-08-31', '2026-09-03');
+
+        $blocked = $this->getJson("/api/v1/units/{$source->id}/blocked-dates?from=2026-08-25&to=2026-09-10")
+            ->assertOk()->json('blocked');
+
+        $this->assertSame([], $blocked, 'four apartments are free — nothing is closed');
+    }
+
+    public function test_the_building_closes_only_when_every_apartment_is_taken(): void
+    {
+        $source = $this->building(3);
+
+        foreach (Unit::where('unit_group_id', $source->unit_group_id)->get() as $u) {
+            $this->book($u, '2026-08-31', '2026-09-03');
+        }
+
+        $blocked = $this->getJson("/api/v1/units/{$source->id}/blocked-dates?from=2026-08-25&to=2026-09-10")
+            ->assertOk()->json('blocked');
+
+        // Nights of the 31st, 1st and 2nd. The 3rd is a checkout morning and
+        // must stay selectable.
+        $this->assertSame([['start' => '2026-08-31', 'end' => '2026-09-02']], $blocked);
+    }
+
+    public function test_the_availability_probe_counts_the_whole_building(): void
+    {
+        $source = $this->building(5);
+        $this->book($source, '2026-08-31', '2026-09-03');
+
+        $body = $this->postJson("/api/v1/units/{$source->id}/availability", [
+            'start_date' => '2026-08-31', 'end_date' => '2026-09-03',
+        ])->assertOk()->json();
+
+        // A probe that said "unavailable" here would contradict the create
+        // endpoint, which would happily allocate one of the other four.
+        $this->assertTrue($body['available']);
+        $this->assertSame(4, $body['available_count']);
+    }
+
+    private function book(Unit $unit, string $start, string $end): void
+    {
+        Booking::create([
+            'unit_id' => $unit->id, 'user_id' => User::factory()->create()->id,
+            'start_date' => $start, 'end_date' => $end,
+            'guests' => 2, 'subtotal' => 1000, 'commission_rate' => 0.10,
+            'commission_amount' => 100, 'partner_share' => 900,
+            'total_amount' => 1150, 'status' => Booking::STATUS_CONFIRMED,
+        ]);
+    }
+
     public function test_the_partner_can_ask_for_a_plain_count(): void
     {
         $unit = $this->listing();

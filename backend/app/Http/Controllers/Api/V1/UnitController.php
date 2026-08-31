@@ -378,8 +378,13 @@ class UnitController extends Controller
         // Same predicate POST /bookings enforces — see Availability. A probe
         // that disagreed with the create is how a guest loses a booking at the
         // last step, so there is one definition and both read it.
-        $available = ! Availability::isTaken($unit, $request->start_date, $request->end_date);
-        $payload   = ['available' => $available];
+        // Counted across the building, not just the apartment the card showed:
+        // a probe answering for one unit told a guest the whole building was
+        // full while four of five apartments sat free — and the create endpoint
+        // would then have accepted the booking it had just refused.
+        $free      = Availability::freeCount($unit, $request->start_date, $request->end_date);
+        $available = $free > 0;
+        $payload   = ['available' => $available, 'available_count' => $free];
 
         // Server-computed breakdown for the checkout page — the exact same
         // math POST /bookings freezes, so the frontend never does money math.

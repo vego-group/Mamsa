@@ -85,6 +85,29 @@ final class Availability
     }
 
     /**
+     * How many apartments of this listing are free for the range.
+     *
+     * 1 or 0 for a standalone unit, so a caller can treat every listing the
+     * same way. For a building it is the number still bookable — asking
+     * isTaken() about the one unit the card happened to show reported the whole
+     * building full the moment a single apartment was taken.
+     */
+    public static function freeCount(Unit $unit, string $start, string $end): int
+    {
+        if (! $unit->unit_group_id) {
+            return self::isTaken($unit, $start, $end) ? 0 : 1;
+        }
+
+        $siblings = Unit::where('unit_group_id', $unit->unit_group_id)
+            ->where('approval_status', 'approved')
+            ->where('status', 'available');
+
+        self::onlyFree($siblings, $start, $end);
+
+        return $siblings->count();
+    }
+
+    /**
      * Every occupied range in the window, merged into the fewest spans.
      *
      * Both ends are INCLUSIVE and describe NIGHTS, which is what a calendar
@@ -97,9 +120,53 @@ final class Availability
      * needs to know a date cannot be chosen, and labelling a span "booked"
      * would publish how busy a partner's unit is to anyone who asks.
      *
+     * For a MULTI-UNIT BUILDING the question is different: a night is closed
+     * only when EVERY apartment is taken. Answering per-unit greyed out the
+     * whole building the moment one of five apartments was booked — the picker
+     * refusing dates the booking endpoint would happily have accepted, which is
+     * the exact disagreement this method exists to prevent.
+     *
      * @return list<array{start: string, end: string}>
      */
     public static function blockedRanges(Unit $unit, string $from, string $to): array
+    {
+        $units = $unit->unit_group_id
+            ? Unit::where('unit_group_id', $unit->unit_group_id)
+                ->where('approval_status', 'approved')
+                ->where('status', 'available')
+                ->get()
+            : collect([$unit]);
+
+        // A building whose apartments are all unlisted still has to answer for
+        // the unit that was asked about, rather than reporting nothing closed.
+        if ($units->isEmpty()) {
+            $units = collect([$unit]);
+        }
+
+        $total = $units->count();
+        $tally = [];
+
+        foreach ($units as $member) {
+            // Counted ONCE per apartment per night. A unit carrying both a
+            // booking and a manual closure on the same night would otherwise
+            // count twice and reach `total` while other apartments sat free.
+            foreach (self::occupiedNights($member, $from, $to) as $night) {
+                $tally[$night] = ($tally[$night] ?? 0) + 1;
+            }
+        }
+
+        $full = array_keys(array_filter($tally, fn (int $n) => $n >= $total));
+        sort($full);
+
+        return self::spansFrom($full);
+    }
+
+    /**
+     * The distinct nights one unit is occupied, clipped to the window.
+     *
+     * @return list<string>
+     */
+    private static function occupiedNights(Unit $unit, string $from, string $to): array
     {
         $spans = [];
 
@@ -111,7 +178,40 @@ final class Availability
             $spans[] = self::nights($block->start_date, $block->end_date);
         }
 
-        return self::merge(array_filter($spans), $from, $to);
+        $nights = [];
+
+        foreach (self::merge(array_filter($spans), $from, $to) as $span) {
+            for ($d = $span['start']; $d <= $span['end']; $d = date('Y-m-d', strtotime($d.' +1 day'))) {
+                $nights[$d] = true;
+            }
+        }
+
+        return array_keys($nights);
+    }
+
+    /**
+     * Consecutive nights fused into the fewest inclusive spans.
+     *
+     * @param  list<string>  $nights  sorted, distinct
+     * @return list<array{start: string, end: string}>
+     */
+    private static function spansFrom(array $nights): array
+    {
+        $spans = [];
+
+        foreach ($nights as $night) {
+            $last = count($spans) - 1;
+
+            if ($last >= 0 && $night === date('Y-m-d', strtotime($spans[$last]['end'].' +1 day'))) {
+                $spans[$last]['end'] = $night;
+
+                continue;
+            }
+
+            $spans[] = ['start' => $night, 'end' => $night];
+        }
+
+        return $spans;
     }
 
     /**
