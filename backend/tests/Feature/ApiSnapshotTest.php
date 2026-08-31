@@ -88,6 +88,33 @@ class ApiSnapshotTest extends TestCase
             ->assertFailed();
     }
 
+    public function test_row_count_is_not_a_contract_change(): void
+    {
+        // Diffing production against staging lit up /units/sitemap with "keys"
+        // 2..13 — array INDICES. Staging simply had more listings. A snapshot
+        // that reports data volume as a contract change is one people learn to
+        // ignore, which costs more than the tool is worth.
+        $owner = \App\Models\User::factory()->create();
+        $mk = fn (string $name) => $owner->units()->create([
+            'unit_name' => $name, 'unit_type' => 'apartment',
+            'code' => 'SNP'.fake()->unique()->numerify('#####'),
+            'price' => 400, 'capacity' => 2, 'bedrooms' => 1,
+            'approval_status' => 'approved', 'status' => 'available',
+            'calendar_token' => str()->random(60),
+        ]);
+
+        $mk('وحدة أولى');
+        $before = $this->take('a');
+
+        $mk('وحدة ثانية');
+        $mk('وحدة ثالثة');
+        $after = $this->take('b');
+
+        $this->artisan("api:snapshot --diff={$before} --against={$after}")
+            ->expectsOutputToContain('No contract change')
+            ->assertSuccessful();
+    }
+
     public function test_the_snapshot_carries_no_values(): void
     {
         $raw = file_get_contents($this->take('a'));

@@ -162,22 +162,43 @@ class ApiSnapshot extends Command
             return [];
         }
 
+        // A bare list is described by its ELEMENT shape, never its indices.
+        // Reporting 0,1,2… as keys made row COUNT look like a contract change:
+        // diffing staging against production lit up /units/sitemap purely
+        // because staging has more listings. A snapshot that cries wolf on data
+        // volume is one people stop running.
+        if (array_is_list($body)) {
+            return $this->prefixed('[].', $body[0] ?? null);
+        }
+
         $keys = array_keys($body);
 
         if (isset($body['data']) && is_array($body['data'])) {
-            $first = $body['data'][0] ?? $body['data'];
-
-            if (is_array($first)) {
-                foreach (array_keys($first) as $k) {
-                    $keys[] = 'data[].'.$k;
-                }
-            }
+            $first = array_is_list($body['data']) ? ($body['data'][0] ?? null) : $body['data'];
+            $keys  = array_merge($keys, $this->prefixed('data[].', $first));
         }
 
         $keys = array_values(array_unique(array_map('strval', $keys)));
         sort($keys);
 
         return $keys;
+    }
+
+    /**
+     * Element keys under a prefix — the shape of a row, not the rows.
+     *
+     * @return array<int, string>
+     */
+    private function prefixed(string $prefix, mixed $element): array
+    {
+        if (! is_array($element)) {
+            return [];
+        }
+
+        return array_map(
+            fn ($k) => $prefix.$k,
+            array_filter(array_keys($element), fn ($k) => ! is_int($k)),
+        );
     }
 
     private function renderDiff(): int
