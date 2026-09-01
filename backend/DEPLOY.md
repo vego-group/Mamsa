@@ -6,6 +6,11 @@ How the Laravel API is deployed to Hostinger **shared** hosting via SSH.
 > run on `file`/`database`/`sync` drivers. For the full documented stack
 > (Docker + Redis + Supervisor + Nginx) use a **VPS** instead.
 
+> ⚠️ **Production deliberately runs less code than `main`.** Never `git pull`,
+> `git checkout .` or `git restore` on that server — multi-unit is held back and
+> its migration was never run there, so pulling would 500 every listing request.
+> Read [`DEPLOY-HOLDBACKS.md`](DEPLOY-HOLDBACKS.md) before deploying anything.
+
 ## Server layout
 
 ```
