@@ -47,6 +47,13 @@ const router = createRouter({
     },
     {
       path: '/bookings/:id',
+      // The booking confirmation email links to /my-reservations/{id}, which is
+      // the path the production storefront serves. Same screen, so it is an
+      // alias rather than a second route: navigation still generates
+      // /bookings/{id} by name, and the auth guard covers both because the meta
+      // is shared. A guest opening the invoice link now lands somewhere real
+      // instead of on a blank page.
+      alias: '/my-reservations/:id',
       name: 'booking-detail',
       component: () => import('@/views/user/UserBookingDetailView.vue'),
       meta: { requiresAuth: true },
