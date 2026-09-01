@@ -9,6 +9,7 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Support\Units\UnitCloner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -29,6 +30,13 @@ class MultiUnitListingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // The dates below are literal on purpose: 31 Aug → 3 Sep crosses a month
+        // boundary, which is exactly where night arithmetic goes wrong. Written
+        // against the real clock they were valid for one day — `after_or_equal:
+        // today` started rejecting them the moment the date rolled over. Freeze
+        // the clock instead of relativising them, so the coverage survives.
+        $this->travelTo(Carbon::parse('2026-08-30 09:00:00'));
 
         foreach (['Individual', 'Admin', 'SuperAdmin', 'User'] as $r) {
             Role::findOrCreate($r, 'web');
