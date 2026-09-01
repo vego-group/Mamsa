@@ -28,5 +28,20 @@
         </table>
     @endif
 
+    {{-- The tax invoice. The link lands on the reservation page rather than the
+         invoice endpoint, which needs a Bearer token no mail client can carry. --}}
+    @isset($invoiceUrl)
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 12px;">
+            <tr>
+                <td style="background:#0f766e;border-radius:8px;">
+                    <a href="{{ $invoiceUrl }}" style="display:inline-block;padding:12px 22px;font-size:14px;font-weight:bold;color:#ffffff;text-decoration:none;">عرض الفاتورة الضريبية</a>
+                </td>
+            </tr>
+        </table>
+        <p style="margin:0 0 24px;font-size:12px;color:#9ca3af;">
+            تحتاج تسجيل الدخول بنفس رقم الجوال المرتبط بالحجز.
+        </p>
+    @endisset
+
     <p style="margin:0;font-size:14px;color:#6b7280;">نتمنى لك إقامة سعيدة 🌙</p>
 @endsection
