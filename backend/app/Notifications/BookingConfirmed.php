@@ -73,9 +73,20 @@ class BookingConfirmed extends Notification
 
     public function toSms(object $notifiable): string
     {
+        $this->booking->loadMissing('unit');
         $unit = $this->booking->unit->unit_name ?? '';
 
-        return 'ممسى: تم تأكيد حجزك لوحدة "' . $unit . '" من ' . $this->booking->start_date
-            . ' إلى ' . $this->booking->end_date . '. رقم الحجز: #' . $this->booking->id;
+        // start_date/end_date are cast to `date`, so interpolating them printed
+        // "2026-10-01 00:00:00". That midnight is not the check-in time and not
+        // anything the guest chose — it is the cast leaking into a message a
+        // person reads. Print the day, and put the real arrival time beside it,
+        // which is what the guest was looking for in the first place.
+        $start   = $this->booking->start_date->format('Y-m-d');
+        $end     = $this->booking->end_date->format('Y-m-d');
+        $checkin = substr((string) ($this->booking->unit->checkin_time ?? '15:00'), 0, 5);
+
+        return 'ممسى: تم تأكيد حجزك لوحدة "'.$unit.'" من '.$start
+            .' إلى '.$end.'، وقت الدخول '.$checkin
+            .'. رقم الحجز: #'.$this->booking->id;
     }
 }
