@@ -27,30 +27,33 @@ abstract class TestCase extends BaseTestCase
      */
     protected function setUp(): void
     {
-        $connection = $this->rawEnv('DB_CONNECTION');
-        $database   = $this->rawEnv('DB_DATABASE');
+        // Every service the container defines and tests must not touch. Fixing
+        // only the one that hurt is what let the cache leak survive the
+        // database fix; the rule is the class, not the instance.
+        $required = [
+            'DB_CONNECTION'        => 'sqlite',
+            'DB_DATABASE'          => ':memory:',
+            'CACHE_STORE'          => 'array',
+            'SESSION_DRIVER'       => 'array',
+            'QUEUE_CONNECTION'     => 'sync',
+            'MAIL_MAILER'          => 'array',
+            'BROADCAST_CONNECTION' => 'null',
+        ];
 
-        // The cache is shared state too. When it resolved to the container's
-        // real Redis, rate-limit counters persisted between tests and between
-        // runs, and suites failed with 429s that reproduced nowhere else.
-        $cache = $this->rawEnv('CACHE_STORE');
+        foreach ($required as $key => $expected) {
+            $actual = $this->rawEnv($key);
 
-        if ($cache !== null && $cache !== 'array') {
-            throw new RuntimeException(
-                "Refusing to run tests: CACHE_STORE resolved to [{$cache}], not array.\n"
-                .'Tests would share one cache — rate limiters and all — across runs.'
-            );
-        }
-
-        if ($connection !== 'sqlite' || $database !== ':memory:') {
-            throw new RuntimeException(
-                'Refusing to run tests: the resolved database is '
-                ."[{$connection}] / [{$database}], not sqlite / :memory:.\n"
-                ."RefreshDatabase would drop every table in it.\n\n"
-                ."Inside Docker, pass the overrides explicitly:\n"
-                ."  docker compose exec -T -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: \\\n"
-                ."    -e DB_HOST=127.0.0.1 backend php artisan test\n"
-            );
+            // Absent is fine: outside Docker the container defines nothing and
+            // phpunit.xml's own value applies. Present-and-wrong is not.
+            if ($actual !== null && $actual !== $expected) {
+                throw new RuntimeException(
+                    "Refusing to run tests: {$key} resolved to [{$actual}], not [{$expected}].\n"
+                    ."Tests would reach shared infrastructure — a real database, cache, queue or mail\n"
+                    ."transport — instead of an isolated one.\n\n"
+                    ."phpunit.xml must declare it with <server>, not <env>: PHPUnit's <env force=\"true\">\n"
+                    ."writes \$_ENV and putenv() but NOT \$_SERVER, and Laravel reads \$_SERVER first.\n"
+                );
+            }
         }
 
         parent::setUp();
