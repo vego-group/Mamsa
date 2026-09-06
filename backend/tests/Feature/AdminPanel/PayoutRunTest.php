@@ -8,8 +8,11 @@ use App\Models\BankDetail;
 use App\Models\Booking;
 use App\Models\PartnerLedgerEntry;
 use App\Models\Payout;
+use App\Models\PartnerWallet;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\PayoutEligibility;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -478,4 +481,104 @@ class PayoutRunTest extends TestCase
 
         $this->assertFalse($second['hasMore']);
     }
+    /* ---- T20: the eligibility race (v1.2 §3) ---- */
+
+    /**
+     * The balance a payout is judged against must be read INSIDE the
+     * transaction that writes the payout.
+     *
+     * It was not: `record()` evaluated eligibility — including the
+     * minimum-balance rule — and computed the payable amount before opening
+     * its transaction and without any lock. A ledger debit landing in that
+     * window (a refund settling, which after the complaints work is driven by
+     * an inbound webhook and so can arrive at any instant) left the payout
+     * recorded against a balance that had already changed. The accountant had
+     * moved real money by then, so the stale figure was the one that persisted.
+     *
+     * Proving that by racing two requests is not possible in-process: one
+     * connection cannot race itself, the same limitation
+     * {@see \Tests\Feature\BookingAvailabilityTest} documents for double
+     * bookings. What IS provable, and is the part the code controls, is the
+     * ordering: the eligibility read must observe an open transaction. On the
+     * pre-fix code it observes level 0 and this test fails.
+     *
+     * The row lock itself is a MySQL guarantee that SQLite ignores, so this
+     * pins the ordering rather than the blocking; the lock is exercised for
+     * real on staging and production, which run MySQL.
+     *
+     * The comparison is against a BASELINE, not against zero. RefreshDatabase
+     * already holds a transaction open around every test, so `> 0` is true no
+     * matter what the controller does — the first version of this test asserted
+     * exactly that and passed against the unfixed code, proving nothing. What
+     * distinguishes the two is whether the controller opens a FURTHER level of
+     * its own before reading the balance.
+     */
+    public function test_eligibility_is_evaluated_inside_the_payout_transaction(): void
+    {
+        $this->verifiedBank();
+        $this->earned(2);
+
+        EligibilitySpy::$levelsAtReason  = [];
+        EligibilitySpy::$levelsAtPayable = [];
+        $this->app->instance(PayoutEligibility::class, new EligibilitySpy());
+
+        // RefreshDatabase already has one transaction open; the controller must
+        // add its own on top of it.
+        $baseline = DB::transactionLevel();
+
+        $this->actingAs($this->admin, 'admin-panel')
+            ->postJson('/admin/payouts/record', [
+                'partnerId'     => 'prt_'.$this->partner->id,
+                'bankReference' => 'FT-2026-T20',
+            ])->assertOk();
+
+        $this->assertNotEmpty(
+            EligibilitySpy::$levelsAtReason,
+            'eligibility was never consulted — the test is not exercising the path it claims to'
+        );
+
+        $this->assertGreaterThan(
+            $baseline,
+            EligibilitySpy::$levelsAtReason[0],
+            'the eligibility check ran outside the payout transaction: the balance it '
+            .'judged can be changed by a concurrent ledger write before the payout is '
+            ."inserted (baseline {$baseline}, observed ".EligibilitySpy::$levelsAtReason[0].')'
+        );
+
+        $this->assertGreaterThan(
+            $baseline,
+            EligibilitySpy::$levelsAtPayable[0],
+            'the payable amount was computed outside the payout transaction'
+        );
+    }
 }
+
+/**
+ * Records the transaction nesting level in force when eligibility is consulted.
+ * A level of 0 means no transaction was open — and therefore no row lock was
+ * held — at the moment the balance was judged.
+ */
+final class EligibilitySpy extends PayoutEligibility
+{
+    /** @var list<int> */
+    public static array $levelsAtReason = [];
+
+    /** @var list<int> */
+    public static array $levelsAtPayable = [];
+
+    public function reason(User $partner, ?PartnerWallet $wallet = null, ?BankDetail $bank = null, bool $adminView = false): ?string
+    {
+        self::$levelsAtReason[] = DB::transactionLevel();
+
+        return parent::reason($partner, $wallet, $bank, $adminView);
+    }
+
+    /** @return array{amount: float, count: int} */
+    public function payable(int $partnerUserId): array
+    {
+        self::$levelsAtPayable[] = DB::transactionLevel();
+
+        return parent::payable($partnerUserId);
+    }
+}
+
