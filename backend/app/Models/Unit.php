@@ -10,6 +10,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Unit extends Model
 {
     /**
+     * Assumed check-out time when a listing does not state one.
+     *
+     * 12:00 is what 27 of 32 units carry and what the documentation states. It
+     * matters beyond display: the complaint window closes 48 hours after
+     * check-out, so treating an unknown time as midnight would have cut the
+     * guest's deadline from 48 hours to 36 — on precisely the units the
+     * platform knows least about.
+     *
+     * The column is NOT NULL as of 2026-09-07, so this is the value written
+     * when a partner leaves the field empty, not a guess repeated at read time.
+     */
+    public const DEFAULT_CHECKOUT_TIME = '12:00';
+
+    /**
      * The only unit types the platform supports (backend gaps #3).
      * Every public endpoint is constrained to these, and partner
      * create/update validation enforces the same set.

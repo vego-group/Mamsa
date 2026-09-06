@@ -162,7 +162,10 @@ final class UnitWriter
             // dangerouslySetInnerHTML.
             'description'          => fn ($v) => ['description' => $v === null ? null : (string) $v],
             'checkIn'              => fn ($v) => ['checkin_time' => $v],
-            'checkOut'             => fn ($v) => ['checkout_time' => $v],
+            // Coerced, not passed through: the column is NOT NULL, so an empty
+            // field must become the default rather than a constraint violation
+            // the partner sees as a failed save.
+            'checkOut'             => fn ($v) => ['checkout_time' => $v ?: \App\Models\Unit::DEFAULT_CHECKOUT_TIME],
             'lat'                  => fn ($v) => ['lat' => $v],
             'lng'                  => fn ($v) => ['lng' => $v],
             // The field a guest navigates by, and the one most likely to carry a

@@ -56,6 +56,12 @@ class UnitController extends Controller
             'features.*'          => ['string', 'max:100'],
         ]);
 
+        // NOT NULL column: an omitted or blank value takes the documented
+        // default instead of failing the save.
+        if (empty($data['checkout_time'])) {
+            $data['checkout_time'] = \App\Models\Unit::DEFAULT_CHECKOUT_TIME;
+        }
+
         $unit = $request->user()->units()->create(array_merge(
             \Arr::except($data, ['features']),
             [
@@ -125,6 +131,10 @@ class UnitController extends Controller
         $resetToPending = $unit->approval_status === 'approved';
         if ($resetToPending) {
             $data['approval_status'] = 'pending';
+        }
+
+        if (array_key_exists('checkout_time', $data) && empty($data['checkout_time'])) {
+            $data['checkout_time'] = \App\Models\Unit::DEFAULT_CHECKOUT_TIME;
         }
 
         $unit->update(\Arr::except($data, ['features']));
