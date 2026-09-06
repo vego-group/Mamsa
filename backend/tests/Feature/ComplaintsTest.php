@@ -582,6 +582,99 @@ class ComplaintsTest extends TestCase
         $this->assertSame(Refund::STATUS_SUCCEEDED, $two->fresh()->status);
         $this->assertSame(Refund::STATUS_PENDING, $five->fresh()->status);
     }
+    /**
+     * A second execute with a NEW idempotency key, while the first is still in
+     * flight, is refused.
+     *
+     * This is the gap the idempotency key does not cover: that catches the same
+     * request twice, and this is a different request minutes later. It is easy
+     * to reach because a successful execute leaves the refund `pending` and the
+     * complaint `approved` — the complaint is only closed on settlement — so
+     * the screen still offers the button while money is on its way.
+     *
+     * Without the guard, the amount check would pass too: the ceiling used to
+     * count only `succeeded`, so the pending 500.00 was invisible to it.
+     */
+    public function test_a_second_execute_while_one_is_in_flight_is_refused(): void
+    {
+        config(['moyasar.secret_key' => 'sk_test_fake']);
+
+        $booking = $this->stay();
+        $booking->payment->update(['moyasar_id' => 'pay_inflight']);
+
+        $this->mock(\App\Services\MoyasarService::class, function ($m) {
+            // Accepted by the gateway, not settled — the refund stays pending.
+            $m->shouldReceive('refund')->once()->andReturn(['id' => 'pay_inflight', 'status' => 'paid']);
+        });
+
+        $complaint = $this->approved($booking, 50000);
+
+        $this->actingAs($this->finance, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/refund", [
+                'amountHalalas' => 50000, 'idempotencyKey' => (string) str()->uuid(),
+            ])->assertOk()->assertJsonPath('status', 'pending');
+
+        $this->assertSame(BookingComplaint::STATUS_APPROVED, $complaint->fresh()->status,
+            'the complaint stays approved until settlement — this is what exposes the button');
+
+        // A genuinely new attempt, new key.
+        $this->actingAs($this->finance, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/refund", [
+                'amountHalalas' => 50000, 'idempotencyKey' => (string) str()->uuid(),
+            ])->assertStatus(409)->assertJsonPath('code', 'REFUND_IN_FLIGHT');
+
+        $this->assertSame(1, Refund::count(), 'no second refund row may be created');
+        $this->assertSame(
+            0,
+            PartnerLedgerEntry::where('type', PartnerLedgerEntry::TYPE_REFUND_REVERSAL)->count(),
+            'and nothing may reach the ledger — the first has not settled either'
+        );
+    }
+
+    /** Money in flight lowers the ceiling, so it cannot be approved twice over. */
+    public function test_a_pending_refund_counts_against_what_can_be_approved(): void
+    {
+        $booking = $this->stay();
+
+        Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'type' => Refund::TYPE_REFUND, 'amount' => 600.00, 'refund_percent' => 60,
+            'status' => Refund::STATUS_PENDING, 'reason' => Refund::REASON_OTHER,
+        ]);
+
+        $complaint = $this->complaint($booking);
+
+        // 1000 gross − 600 pending = 400 left. 500 must be refused.
+        $this->actingAs($this->superadmin, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/approve", ['amountHalalas' => 50000])
+            ->assertStatus(422)->assertJsonPath('code', 'AMOUNT_EXCEEDS_REFUNDABLE');
+
+        $this->actingAs($this->superadmin, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/approve", ['amountHalalas' => 40000])
+            ->assertOk();
+    }
+
+    /** The detail payload separates settled money from money in flight. */
+    public function test_the_detail_reports_pending_and_settled_separately(): void
+    {
+        $booking = $this->stay();
+
+        Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'type' => Refund::TYPE_REFUND, 'amount' => 200.00, 'refund_percent' => 20,
+            'status' => Refund::STATUS_PENDING, 'reason' => Refund::REASON_OTHER,
+        ]);
+
+        $complaint = $this->complaint($booking);
+
+        $body = $this->actingAs($this->superadmin, 'admin-panel')
+            ->getJson("/admin/complaints/{$complaint->id}")->assertOk()->json('booking');
+
+        $this->assertSame(0, $body['alreadyRefundedHalalas']);
+        $this->assertSame(20000, $body['pendingRefundHalalas']);
+        $this->assertSame(80000, $body['maxRefundableHalalas']);
+    }
 }
+
 
 
