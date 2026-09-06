@@ -943,7 +943,61 @@ class ComplaintsTest extends TestCase
             'one refund, one debit — the ledger is append-only and cannot be corrected by editing'
         );
     }
+    /* ================= guest-surface error codes ================= */
+
+    /**
+     * Every refusal on the guest surface carries a stable `code`.
+     *
+     * Without one a client has to branch on Arabic prose to tell "outside the
+     * window" from "already complained" — and the first person to improve the
+     * wording breaks the app silently. The message is unchanged for anything
+     * already rendering it; the code is additive.
+     */
+    public function test_guest_refusals_carry_a_machine_readable_code(): void
+    {
+        $booking = $this->stay();
+        $body    = ['description' => str_repeat('م', 40), 'contacted_partner' => true];
+
+        // not the complainant
+        $this->actingAs(User::factory()->create(), 'sanctum')
+            ->postJson("/api/v1/bookings/{$booking->id}/complaint", $body)
+            ->assertStatus(403)->assertJsonPath('code', 'NOT_YOUR_BOOKING');
+
+        // before check-in
+        $early = $this->stay();
+        $early->update(['start_date' => now()->addDays(3), 'end_date' => now()->addDays(6)]);
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$early->id}/complaint", $body)
+            ->assertStatus(422)->assertJsonPath('code', 'WINDOW_NOT_OPEN');
+
+        // past the window
+        $late = $this->stay();
+        $late->update(['end_date' => now('Asia/Riyadh')->subHours(48)->subMinute()]);
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$late->id}/complaint", $body)
+            ->assertStatus(422)->assertJsonPath('code', 'WINDOW_CLOSED');
+
+        // not a completed stay
+        $open = $this->stay();
+        $open->update(['status' => Booking::STATUS_CONFIRMED]);
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$open->id}/complaint", $body)
+            ->assertStatus(422)->assertJsonPath('code', 'BOOKING_NOT_COMPLETED');
+
+        // duplicate
+        $this->complaint($booking);
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$booking->id}/complaint", $body)
+            ->assertStatus(409)->assertJsonPath('code', 'COMPLAINT_ALREADY_EXISTS');
+
+        // nothing filed yet
+        $none = $this->stay();
+        $this->actingAs($this->guest, 'sanctum')
+            ->getJson("/api/v1/bookings/{$none->id}/complaint")
+            ->assertStatus(404)->assertJsonPath('code', 'NO_COMPLAINT');
+    }
 }
+
 
 
 
