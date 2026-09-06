@@ -125,6 +125,7 @@ class ComplaintsController extends Controller
                 'approvedRefundHalalas' => $complaint->approved_refund_halalas,
                 'approvedAt'            => $complaint->approved_at?->toIso8601ZuluString(),
                 'canAmendApproval'      => $complaint->canAmendApproval(),
+                'canReject'             => $complaint->canReject(),
                 'createdAt'             => $complaint->created_at?->toIso8601ZuluString(),
             ],
             'attachments' => $complaint->attachments->map(fn (BookingComplaintAttachment $a) => [
@@ -367,13 +368,31 @@ class ComplaintsController extends Controller
         ]);
     }
 
-    /** POST /admin/complaints/{id}/reject — superadmin. */
+    /**
+     * POST /admin/complaints/{id}/reject — superadmin.
+     *
+     * Accepted from `approved` as well as `under_review`: an amount can be
+     * approved and then evidence arrive showing the complaint was unfounded.
+     * Without that path the case has no exit — it will not be executed, and the
+     * only other close was from an earlier state.
+     */
     public function reject(Request $request, string $id): JsonResponse
     {
         $complaint = $this->find($id);
 
         if (in_array($complaint->status, BookingComplaint::RESOLVED_STATUSES, true)) {
             $this->fail('CONFLICT', 'تم البت في هذه الشكوى بالفعل', 409);
+        }
+
+        // But not once money is moving. settle() would set `resolved_refunded`
+        // over the top of this, leaving a record that contradicts both the
+        // decision and the message already sent to the guest.
+        if ($complaint->hasRefundInFlight()) {
+            $this->fail(
+                'REFUND_IN_FLIGHT',
+                'لا يمكن رفض الشكوى بعد بدء تنفيذ الاسترداد',
+                409,
+            );
         }
 
         $data = $this->validate($request, [

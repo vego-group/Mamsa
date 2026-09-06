@@ -4,7 +4,7 @@
 **المستودع:** `vego-group/mamsa-admin-dashboard` (فرع `staging`)
 **الباك اند:** جاهز ومنشور على `feat/complaints-refunds-backend` — 513 اختبار، صفر فشل
 **البيئة:** `https://staging.mamsaa.com` (جذر، بدون `/api/v1`) — كوكي جلسة، حارس `admin-panel`
-**التحديث:** v2 — بعد اكتشافكم لمسار التنفيذ المزدوج. الجديد: `REFUND_IN_FLIGHT` (§2)، `pendingRefundHalalas` (§2 و§3.2)، والقسم **٤.٢** كله.
+**التحديث:** v3 — الجديد عن v2: `canReject` (§2)، والرفض من `approved` (§4.6). v2 كانت: `REFUND_IN_FLIGHT`، `pendingRefundHalalas`، والقسم ٤.٢.
 
 ---
 
@@ -91,6 +91,7 @@ type ComplaintDetail = {
     approvedRefundHalalas: number | null
     approvedAt: string | null
     canAmendApproval: boolean            // ← يتحكم في إظهار زر التعديل
+    canReject: boolean                   // ← يتحكم في إظهار زر الرفض
     createdAt: string | null
   }
   attachments: Array<{ url: string; mime: string }>   // روابط موقّعة تنتهي بعد 15 دقيقة
@@ -141,7 +142,7 @@ POST   /admin/complaints/{id}/reject     { guestMessage, internalNote? }
 |---|---|---|
 | `AMOUNT_NOT_APPROVED` | 422 — المبلغ لا يطابق المعتمد | اعرض `fields.amountHalalas` (فيها المبلغ المعتمد) |
 | `AMOUNT_EXCEEDS_REFUNDABLE` | 422 — أكبر من المتاح | اعرض `fields.amountHalalas` |
-| **`REFUND_IN_FLIGHT`** | **409 — يوجد استرداد ماشٍ بالفعل** | **مش خطأ. عطّل زر التنفيذ واعرض حالة الاسترداد في `fields.refundId`** |
+| **`REFUND_IN_FLIGHT`** | **409 — يوجد استرداد ماشٍ بالفعل** | **مش خطأ. عطّل زر التنفيذ (والرفض) واعرض حالة الاسترداد في `fields.refundId`** |
 | `CONFLICT` | 409 — انتقال حالة غير مسموح | أعد تحميل التفاصيل، الحالة اتغيرت من تحتك |
 | `INSUFFICIENT_PERMISSION` | 403 | الزر ما كانش المفروض يظهر أصلاً |
 
@@ -239,11 +240,12 @@ complaint.status  = 'approved'     ← لسه approved
 |---|---|---|
 | `submitted` | «بدء المراجعة» | لا شيء (قراءة) |
 | `under_review` | «اعتماد مبلغ» · «رفض» | لا شيء |
-| `approved` | «تعديل المبلغ»* · «تنفيذ»** | **«تنفيذ»**\*\* |
+| `approved` | «تعديل المبلغ»* · **«رفض»**† · «تنفيذ»** | **«تنفيذ»**\*\* |
 | `resolved_*` | قراءة | قراءة |
 
 \* حسب `canAmendApproval`
 \*\* **معطّل** لو فيه صف `pending` أو `succeeded` في `refunds[]` — شوف ٤.٢
+† الرفض مسموح من `approved` كمان، مش من `under_review` بس — حسب `canReject`. الحالة: اتعمد مبلغ، وبعدين وصل دليل من الشريك إن الشكوى غير صحيحة. من غير المسار ده الشكوى بتفضل عالقة: مش هتتنفذ ومش هتتقفل. بيتقفل أول ما يبقى فيه استرداد ماشي (`REFUND_IN_FLIGHT` / 409).
 
 `superadmin` يقدر ينفّذ (مخرج طوارئ)، بس المسار المفضّل شخصان. لو نفس الشخص اعتمد ونفّذ، السجل بيتوسم `single_actor` — مش لازم يظهر في الواجهة، بس مايتمنعش.
 

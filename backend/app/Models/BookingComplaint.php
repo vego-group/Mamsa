@@ -82,10 +82,41 @@ class BookingComplaint extends Model
      */
     public function canAmendApproval(): bool
     {
-        return $this->status === self::STATUS_APPROVED
-            && ! $this->refunds()
-                ->whereIn('status', [Refund::STATUS_PENDING, Refund::STATUS_SUCCEEDED])
-                ->exists();
+        return $this->status === self::STATUS_APPROVED && ! $this->hasRefundInFlight();
+    }
+
+    /**
+     * Whether this complaint may still be rejected.
+     *
+     * Rejection is allowed from `approved`, not only from `under_review`: an
+     * amount can be approved and then evidence arrive from the partner showing
+     * the complaint was unfounded. Without this path the case would be stuck —
+     * unexecutable because nobody wants to pay it, and unclosable because the
+     * only exit was from an earlier state.
+     *
+     * It stops the moment money is involved, on the same test as amendment.
+     * Rejecting a complaint whose refund is already settling would be
+     * overwritten anyway: settle() sets `resolved_refunded`, so the record would
+     * end up contradicting both the decision and the message sent to the guest.
+     */
+    public function canReject(): bool
+    {
+        return ! in_array($this->status, self::RESOLVED_STATUSES, true)
+            && ! $this->hasRefundInFlight();
+    }
+
+    /**
+     * A refund that has been accepted by the gateway, or has settled.
+     *
+     * `failed` is excluded — it returned nothing and must not freeze the
+     * complaint. This is the single definition of "money is involved", shared by
+     * every gate that needs it, so the gates cannot drift apart.
+     */
+    public function hasRefundInFlight(): bool
+    {
+        return $this->refunds()
+            ->whereIn('status', [Refund::STATUS_PENDING, Refund::STATUS_SUCCEEDED])
+            ->exists();
     }
 
     /**

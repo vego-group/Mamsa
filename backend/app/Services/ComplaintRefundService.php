@@ -89,6 +89,28 @@ class ComplaintRefundService
             // screen still offers an execute button while money is in flight,
             // and settlement can be an hour away if the webhook is late.
             // Without this, a second click refunds the guest twice.
+            //
+            // ── SCOPE, and what it rests on ──
+            // This guard is keyed on complaint_id; the ceiling below is keyed on
+            // booking_id. That division is only safe because the two refund
+            // paths can never meet on one booking:
+            //
+            //   cancellation refunds  → a `confirmed` booking
+            //                           (CancelBookingAction refuses `completed`;
+            //                            HostCancelBookingAction requires `confirmed`)
+            //   complaint refunds     → a `completed` booking
+            //                           (the complaint endpoint refuses anything else)
+            //
+            // So a booking cannot hold both kinds at once, and a per-complaint
+            // guard is sufficient to stop double execution.
+            //
+            // That booking-status constraint is therefore LOAD-BEARING, not
+            // incidental. If anyone later allows a cancellation refund on a
+            // `completed` booking, or a complaint on a cancelled one, the two
+            // paths can race for the same ceiling and neither guard will see the
+            // other. Widening either status set means revisiting this — a
+            // booking-level lock on refund creation, rather than a
+            // complaint-level one.
             $inFlight = Refund::where('complaint_id', $complaint->id)
                 ->whereIn('status', [Refund::STATUS_PENDING, Refund::STATUS_SUCCEEDED])
                 ->first();
