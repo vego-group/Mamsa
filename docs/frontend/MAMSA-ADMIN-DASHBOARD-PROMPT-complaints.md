@@ -4,7 +4,7 @@
 **المستودع:** `vego-group/mamsa-admin-dashboard` (فرع `staging`)
 **الباك اند:** جاهز ومنشور على `feat/complaints-refunds-backend` — 513 اختبار، صفر فشل
 **البيئة:** `https://staging.mamsaa.com` (جذر، بدون `/api/v1`) — كوكي جلسة، حارس `admin-panel`
-**التحديث:** v5 — أضفنا ترتيب الفحصين (§4.3). v4 — **رجّعنا الخمس بنود اللي فقدتها v3** (§0 و§5)، وأضفنا **مصفوفة الانتقالات** (§1.1). قبلها: v3 = `canReject` والرفض من `approved`؛ v2 = `REFUND_IN_FLIGHT` و`pendingRefundHalalas` والقسم ٤.٢.
+**التحديث:** v6 — **تصحيح مراجع تحذير العمولة** (§0)، و`approvedRefundHalalas` بعد الرفض (§4.6). v5 — أضفنا ترتيب الفحصين (§4.3). v4 — **رجّعنا الخمس بنود اللي فقدتها v3** (§0 و§5)، وأضفنا **مصفوفة الانتقالات** (§1.1). قبلها: v3 = `canReject` والرفض من `approved`؛ v2 = `REFUND_IN_FLIGHT` و`pendingRefundHalalas` والقسم ٤.٢.
 
 ---
 
@@ -30,7 +30,19 @@ export const PLATFORM_COMMISSION_RATE = 0.10;
 export const PARTNER_SHARE_RATE = 1 - PLATFORM_COMMISSION_RATE;
 ```
 
-وبيتستخدم في `CancellationDetailDrawer` و`BookingDetailDrawer` لحساب التقسيم **في الواجهة**.
+**تصحيح المراجع (v6):** الملفين اللي ذكرناهم في v4 — `CancellationDetailDrawer` و`BookingDetailDrawer` — بقوا **مش** بيستوردوا الثابت على `origin/staging`. نسختنا المحلية كانت **متأخرة ٣ كوميتات**، والفحص اتعمل عليها. مكانش على `main` زي ما توقعتم، بس كان قديم — وملاحظتكم صح.
+
+**لكن الخطر لسه قائم، وفي مكان أخطر.** على `origin/staging` النهاردة:
+
+```
+src/lib/utils/format.ts:103   const commission = round2(safeTotal * PLATFORM_COMMISSION_RATE);   ← splitCommission()
+src/lib/utils/format.ts:142   const commission = round2(netBase  * PLATFORM_COMMISSION_RATE);   ← splitPrice()
+src/lib/mock/seed.ts:593,691  commissionRate: unit.mamsaOwned ? 1 : PLATFORM_COMMISSION_RATE
+```
+
+`format.ts` بيصدّر `splitCommission(total)` و`splitPrice(gross)` — **دالتين بيعيدوا إنتاج تقسيم الباك اند بنسبة ثابتة 10%**. دول utilities مشتركة متاحة لكل الشاشات، فهم أخطر من الـ drawers: أي شاشة شكاوى بتنادي `splitPrice()` هتطلع رقم غلط على أي حجز مجمّد على نسبة تانية.
+
+(الفحص بتاعكم لقى ملف الثوابت والاختبارات بس — `format.ts` و`seed.ts` مكانوش في النتيجة.)
 
 **ده صحيح هناك وغلط هنا.** نسبة العمولة **مجمّدة على كل حجز** في `bookings.commission_rate` وقت إنشائه. حجز اتاخد أيام الـ 2% لسه عليه 2%، والثابت ده بيقول 10%. فحساب حصة الشريك في الواجهة لشكوى على حجز قديم بيطلع **رقم غلط بخمس أضعاف**، والشاشة هتعرض للأدمن مبلغ خصم مختلف عن اللي اتخصم فعلاً.
 
@@ -309,6 +321,8 @@ complaint.status  = 'approved'     ← لسه approved
 
 \* حسب `canAmendApproval`
 \*\* **معطّل** لو فيه صف `pending` أو `succeeded` في `refunds[]` — شوف ٤.٢
+‡ **`approvedRefundHalalas` بيفضل زي ما هو بعد الرفض** — ما بيتصفّرش. المبلغ اللي اتعتمد ثم اتلغى جزء من سجل القرار؛ مسحه بيخفي إن الشكوى وصلت لمرحلة اعتماد أصلاً. رأيكم كان ده، والباك اند بيعمله فعلاً، ودلوقتي فيه اختبار بيثبّته.
+
 † الرفض مسموح من `approved` كمان، مش من `under_review` بس — حسب `canReject`. الحالة: اتعمد مبلغ، وبعدين وصل دليل من الشريك إن الشكوى غير صحيحة. من غير المسار ده الشكوى بتفضل عالقة: مش هتتنفذ ومش هتتقفل. بيتقفل أول ما يبقى فيه استرداد ماشي (`REFUND_IN_FLIGHT` / 409).
 
 `superadmin` يقدر ينفّذ (مخرج طوارئ)، بس المسار المفضّل شخصان. لو نفس الشخص اعتمد ونفّذ، السجل بيتوسم `single_actor` — مش لازم يظهر في الواجهة، بس مايتمنعش.
