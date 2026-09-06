@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Exceptions\RefundInFlightException;
 use App\Models\Booking;
 use App\Models\BookingComplaint;
 use App\Models\PartnerLedgerEntry;
@@ -77,17 +78,38 @@ class ComplaintRefundService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // Only SETTLED refunds count against the ceiling (R10). A pending
-            // row may still fail, and a failed one returned nothing — treating
-            // either as spent would refuse a refund the guest is owed.
-            $alreadyHalalas = (int) round(
+            // One refund at a time per complaint. Checked INSIDE the booking's
+            // row lock, so two simultaneous requests serialise and the second
+            // sees the first.
+            //
+            // The idempotency key does not cover this: it catches the same
+            // request twice, and this is a different request with a fresh key.
+            // A successful execute leaves the refund `pending` and the complaint
+            // `approved` — the complaint is only closed on settlement — so the
+            // screen still offers an execute button while money is in flight,
+            // and settlement can be an hour away if the webhook is late.
+            // Without this, a second click refunds the guest twice.
+            $inFlight = Refund::where('complaint_id', $complaint->id)
+                ->whereIn('status', [Refund::STATUS_PENDING, Refund::STATUS_SUCCEEDED])
+                ->first();
+
+            if ($inFlight) {
+                throw new RefundInFlightException($inFlight->id);
+            }
+
+            // What is already spoken for. `succeeded` is money returned;
+            // `pending` is money the gateway has accepted and not yet settled.
+            // Both are committed — leaving pending out is what let a second
+            // execute pass this check while the first was still in flight.
+            // `failed` is excluded: it returned nothing.
+            $committedHalalas = (int) round(
                 (float) Refund::where('booking_id', $booking->id)
-                    ->where('status', Refund::STATUS_SUCCEEDED)
+                    ->whereIn('status', [Refund::STATUS_SUCCEEDED, Refund::STATUS_PENDING])
                     ->sum('amount') * 100
             );
 
             $grossHalalas = (int) round((float) $booking->total_amount * 100);
-            $refundable   = $grossHalalas - $alreadyHalalas;
+            $refundable   = $grossHalalas - $committedHalalas;
 
             if ($amountHalalas <= 0 || $amountHalalas > $refundable) {
                 throw new \RuntimeException('المبلغ المطلوب أكبر من المتاح للاسترداد على هذا الحجز');

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AdminPanel;
 
+use App\Exceptions\RefundInFlightException;
 use App\Models\AuditLog;
 use App\Models\BookingComplaint;
 use App\Models\BookingComplaintAttachment;
@@ -86,11 +87,21 @@ class ComplaintsController extends Controller
         $complaint = $this->find($id);
         $booking   = $complaint->booking?->loadMissing('unit.owner', 'user', 'payment');
 
-        // Only SETTLED refunds count against the ceiling — a pending row may
-        // still fail and a failed one returned nothing (R10).
+        // Two different facts, reported separately because they mean different
+        // things to whoever reads the screen: `already` is money returned,
+        // `pending` is money the gateway has accepted and not yet settled.
+        // The ceiling subtracts both — but a screen that folded them into one
+        // number could not explain why the maximum is lower than the refunded
+        // total suggests.
         $alreadyHalalas = (int) round(
             (float) Refund::where('booking_id', $complaint->booking_id)
                 ->where('status', Refund::STATUS_SUCCEEDED)
+                ->sum('amount') * 100
+        );
+
+        $pendingHalalas = (int) round(
+            (float) Refund::where('booking_id', $complaint->booking_id)
+                ->where('status', Refund::STATUS_PENDING)
                 ->sum('amount') * 100
         );
 
@@ -129,7 +140,8 @@ class ComplaintsController extends Controller
                 'commissionHalalas'     => (int) round(($split['commission_amount'] ?? 0) * 100),
                 'partnerShareHalalas'   => (int) round(($split['partner_share'] ?? 0) * 100),
                 'alreadyRefundedHalalas' => $alreadyHalalas,
-                'maxRefundableHalalas'  => max(0, $grossHalalas - $alreadyHalalas),
+                'pendingRefundHalalas'   => $pendingHalalas,
+                'maxRefundableHalalas'  => max(0, $grossHalalas - $alreadyHalalas - $pendingHalalas),
                 'mamsaOwned'            => (bool) $booking?->unit?->mamsa_owned,
             ],
             // Both phone numbers: the admin calls each side before deciding.
@@ -325,6 +337,13 @@ class ComplaintsController extends Controller
                 $request->user(),
                 $data['idempotencyKey'],
             );
+        } catch (RefundInFlightException $e) {
+            // Its own code, not REFUND_FAILED: nothing failed. A refund is
+            // already on its way and the screen should say so rather than
+            // invite a retry.
+            $this->fail('REFUND_IN_FLIGHT', $e->getMessage(), 409, [
+                'refundId' => (string) $e->refundId,
+            ]);
         } catch (\RuntimeException $e) {
             $this->fail('REFUND_FAILED', $e->getMessage(), 422);
         }
@@ -399,13 +418,16 @@ class ComplaintsController extends Controller
     {
         $booking = $complaint->booking;
 
-        $alreadyHalalas = (int) round(
+        // succeeded AND pending: approving more than what is left after money
+        // already in flight would only be discovered at execution, after the
+        // amount had been promised to the guest.
+        $committedHalalas = (int) round(
             (float) Refund::where('booking_id', $complaint->booking_id)
-                ->where('status', Refund::STATUS_SUCCEEDED)
+                ->whereIn('status', [Refund::STATUS_SUCCEEDED, Refund::STATUS_PENDING])
                 ->sum('amount') * 100
         );
 
-        $refundable = (int) round((float) ($booking?->total_amount ?? 0) * 100) - $alreadyHalalas;
+        $refundable = (int) round((float) ($booking?->total_amount ?? 0) * 100) - $committedHalalas;
 
         if ($amountHalalas > $refundable) {
             $this->fail(
