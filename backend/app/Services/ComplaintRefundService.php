@@ -70,19 +70,38 @@ class ComplaintRefundService
         // This must stay ABOVE the transaction: the in-flight guard inside it
         // would otherwise reject a legitimate retry of the very request that
         // created the pending row. Same key = same request; the guard is for
-        // different ones. Checked before the transaction because a retry
-        // must be cheap, and re-checked inside it against the unique index,
-        // which is what actually makes two simultaneous submissions safe.
+        // different ones. Checked here because a retry must be cheap, and AGAIN
+        // inside the lock below — which is what actually makes two simultaneous
+        // submissions safe. This check alone cannot: it runs unlocked.
         if ($existing = Refund::where('idempotency_key', $idempotencyKey)->first()) {
             return $existing;
         }
 
-        $refund = DB::transaction(function () use ($complaint, $amountHalalas, $actor, $idempotencyKey) {
+        // The window the check above leaves open is small but real: two
+        // requests carrying one key, arriving together. Both pass it (no row
+        // yet), both enter the transaction, and the row lock serialises them.
+        // Without a second check inside, the loser meets the in-flight guard
+        // and is told REFUND_IN_FLIGHT — financially safe, one row and one
+        // gateway call, but the same wrong answer the ordering rule exists to
+        // prevent, in a narrower window. A double-click that outruns the
+        // disabled button, or a proxy retry, is enough to land in it.
+        $replayed = false;
+
+        $refund = DB::transaction(function () use ($complaint, $amountHalalas, $actor, $idempotencyKey, &$replayed) {
             /** @var Booking $booking */
             $booking = Booking::query()
                 ->whereKey($complaint->booking_id)
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            // Serialised behind the booking lock now: if a twin request got
+            // here first, its row exists and this one is a replay rather than a
+            // second attempt.
+            if ($prior = Refund::where('idempotency_key', $idempotencyKey)->first()) {
+                $replayed = true;
+
+                return $prior;
+            }
 
             // One refund at a time per complaint. Checked INSIDE the booking's
             // row lock, so two simultaneous requests serialise and the second
@@ -182,6 +201,13 @@ class ComplaintRefundService
                 'initiated_by'      => $actor->id,
             ]);
         });
+
+        // A replay returns the original outcome untouched. Handing it to
+        // send() would call the gateway a second time for one refund — exactly
+        // what the `once()` assertion in the suite exists to catch.
+        if ($replayed) {
+            return $refund;
+        }
 
         return $this->send($refund);
     }
