@@ -7,13 +7,16 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\BookingComplaint;
 use App\Models\PartnerLedgerEntry;
+use App\Models\Payment;
 use App\Models\Refund;
 use App\Models\User;
 use App\Notifications\ComplaintPartnerDebited;
 use App\Notifications\ComplaintRefundFailed;
 use App\Notifications\ComplaintRefundSettled;
+use App\Notifications\RefundSettlementAmbiguous;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Notification;
 
 /**
@@ -179,6 +182,98 @@ class ComplaintRefundService
         ]);
 
         return $refund->fresh();
+    }
+
+    /**
+     * Decide which pending refunds a settlement event actually covers, and flip
+     * exactly those.
+     *
+     * Moyasar has no refund object. `POST /payments/{id}/refund` returns the
+     * updated PAYMENT — verified against three stored gateway responses whose
+     * `moyasar_refund_id` is byte-identical to the payment's own id — so the
+     * event carries no per-refund identifier and cannot say which refund it
+     * means. The only signal is the payment's cumulative `refunded` total.
+     *
+     * So: subtract what is already settled, then walk the pending rows oldest
+     * first, taking each one that fits inside the remainder. If the remainder
+     * does not land exactly on zero, the event cannot be attributed and NOTHING
+     * is settled.
+     *
+     * Refusing to guess is the whole point. Settling the wrong row credits a
+     * refund that never happened and debits a partner for money the guest never
+     * received — and in an append-only ledger that is corrected by a second
+     * entry, not by an edit. A missing entry can be added once a human looks;
+     * a wrong one is permanent.
+     *
+     * @return Collection<int, \App\Models\Refund> the rows this call flipped
+     */
+    public function settlePending(Payment $payment, int $gatewayRefundedHalalas): Collection
+    {
+        $outcome = DB::transaction(function () use ($payment, $gatewayRefundedHalalas) {
+            $pending = $payment->refunds()
+                ->where('status', Refund::STATUS_PENDING)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($pending->isEmpty()) {
+                // A replay, or the same event through the second registration.
+                return ['settled' => collect(), 'unexplained' => 0, 'pending' => $pending];
+            }
+
+            $alreadyHalalas = (int) round(
+                (float) $payment->refunds()->where('status', Refund::STATUS_SUCCEEDED)->sum('amount') * 100
+            );
+
+            $unaccounted = $gatewayRefundedHalalas - $alreadyHalalas;
+
+            if ($unaccounted <= 0) {
+                // The gateway reports nothing new. Not an error — an earlier
+                // delivery already accounted for everything.
+                return ['settled' => collect(), 'unexplained' => 0, 'pending' => $pending];
+            }
+
+            $settle = collect();
+
+            foreach ($pending as $refund) {
+                $amount = (int) round((float) $refund->amount * 100);
+
+                if ($amount > $unaccounted) {
+                    break; // this row is not covered by what the gateway reports
+                }
+
+                $settle->push($refund);
+                $unaccounted -= $amount;
+            }
+
+            if ($unaccounted !== 0) {
+                // The total does not decompose into whole pending rows. Settle
+                // nothing; the transaction returns without a write.
+                return ['settled' => collect(), 'unexplained' => $unaccounted, 'pending' => $pending];
+            }
+
+            Refund::whereIn('id', $settle->pluck('id'))
+                ->update(['status' => Refund::STATUS_SUCCEEDED]);
+
+            return ['settled' => $settle, 'unexplained' => 0, 'pending' => $pending];
+        });
+
+        if ($outcome['unexplained'] !== 0) {
+            Log::error('Moyasar settlement could not be attributed to pending refunds', [
+                'payment_id'  => $payment->id,
+                'gateway'     => $gatewayRefundedHalalas,
+                'unexplained' => $outcome['unexplained'],
+            ]);
+
+            $this->alert(new RefundSettlementAmbiguous(
+                $payment,
+                $gatewayRefundedHalalas,
+                $outcome['unexplained'],
+                $outcome['pending']->map(fn ($r) => ['id' => $r->id, 'amount' => (float) $r->amount])->all(),
+            ));
+        }
+
+        return $outcome['settled'];
     }
 
     /**

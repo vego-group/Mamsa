@@ -229,22 +229,39 @@ class ComplaintsTest extends TestCase
 
     /* ================= permissions (T12) ================= */
 
-    public function test_t12_finance_cannot_approve_and_superadmin_cannot_execute(): void
+    /**
+     * T12 (as amended by v1.4 §4) — finance cannot decide the amount.
+     *
+     * The half that asserted superadmin cannot execute is gone: superadmin now
+     * holds `complaints.execute_refund` too. That removes no security property
+     * — superadmin is already the highest authority and could grant itself the
+     * role — while removing a real deadlock, where one absent finance account
+     * halts every refund. The property that matters is the one still asserted
+     * here: finance cannot set a figure, only carry out an approved one.
+     */
+    public function test_t12_finance_cannot_approve_an_amount(): void
     {
         $complaint = $this->complaint($this->stay());
 
-        // finance may not fix the amount
         $this->actingAs($this->finance, 'admin-panel')
             ->postJson("/admin/complaints/{$complaint->id}/approve", ['amountHalalas' => 50000])
             ->assertStatus(403);
 
+        $this->actingAs($this->finance, 'admin-panel')
+            ->patchJson("/admin/complaints/{$complaint->id}/approval", ['amountHalalas' => 50000])
+            ->assertStatus(403);
+
+        // And superadmin executing is permitted, but leaves a mark: approver
+        // and executor being one person is the case an audit wants to find.
         $approved = $this->approved($this->stay());
 
-        // superadmin may not move the money
         $this->actingAs($this->superadmin, 'admin-panel')
             ->postJson("/admin/complaints/{$approved->id}/refund", [
                 'amountHalalas' => 50000, 'idempotencyKey' => (string) str()->uuid(),
-            ])->assertStatus(403);
+            ])->assertOk();
+
+        $log = AuditLog::where('action', 'complaint.refund_executed')->latest('id')->firstOrFail();
+        $this->assertTrue($log->after['single_actor'], 'a one-person approval+execution must be flagged');
     }
 
     /* ================= execution (T3, T4, T17, T19) ================= */
@@ -390,4 +407,108 @@ class ComplaintsTest extends TestCase
             ->getJson("/admin/complaints/{$complaint->id}")->assertOk();
         $this->assertStringContainsString('NOTE-FOR-ADMINS-ONLY', $admin->getContent());
     }
+    /* ================= settlement attribution (T21) ================= */
+
+    /**
+     * T21 — one settlement event settles only the refund it covers.
+     *
+     * Two refunds can be pending on one payment: a cancellation refund and a
+     * complaint refund. Moyasar has no refund object and its event carries no
+     * per-refund id, so "flip every pending row" would settle both from a
+     * single event — writing a ledger debit for money that never left, which is
+     * precisely the harm the webhook-driven design exists to prevent.
+     *
+     * Attribution comes from the payment's cumulative `refunded` total.
+     */
+    public function test_t21_one_event_settles_only_the_refund_it_covers(): void
+    {
+        config(['moyasar.secret_key' => 'sk_test_fake', 'moyasar.webhook_secret' => 'whsec_test']);
+
+        $booking = $this->stay();
+        $booking->payment->update(['moyasar_id' => 'pay_t21']);
+
+        // An older cancellation refund, still pending, worth 200.00.
+        $cancellation = Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'type' => Refund::TYPE_REFUND, 'amount' => 200.00, 'refund_percent' => 20,
+            'status' => Refund::STATUS_PENDING, 'reason' => Refund::REASON_OTHER,
+        ]);
+
+        // A complaint refund, also pending, worth 500.00.
+        $complaint = $this->approved($booking, 50000);
+        $complaintRefund = Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'complaint_id' => $complaint->id, 'reason' => Refund::REASON_COMPLAINT,
+            'type' => Refund::TYPE_REFUND, 'amount' => 500.00, 'refund_percent' => 50,
+            'status' => Refund::STATUS_PENDING,
+        ]);
+
+        // The gateway reports 200.00 refunded in total — the cancellation only.
+        $this->postJson('/webhooks/moyasar', [
+            'type' => 'payment_refunded', 'secret_token' => 'whsec_test',
+            'data' => [
+                'id' => 'pay_t21', 'refunded' => 20000,
+                // A payment taken after the stamp went live carries it, and the
+                // handler refuses one that does not.
+                'metadata' => ['env' => config('app.env')],
+            ],
+        ])->assertOk();
+
+        $this->assertSame(Refund::STATUS_SUCCEEDED, $cancellation->fresh()->status);
+        $this->assertSame(
+            Refund::STATUS_PENDING,
+            $complaintRefund->fresh()->status,
+            'the complaint refund was not covered by this event and must stay pending'
+        );
+
+        $this->assertSame(
+            0,
+            PartnerLedgerEntry::where('type', PartnerLedgerEntry::TYPE_REFUND_REVERSAL)->count(),
+            'no partner may be debited for a refund the gateway has not settled'
+        );
+
+        $this->assertSame(BookingComplaint::STATUS_APPROVED, $complaint->fresh()->status);
+    }
+
+    /**
+     * A total that does not decompose into whole pending rows settles nothing.
+     *
+     * The safe state under ambiguity is `pending`: a missing ledger entry is
+     * added once a human looks, a wrong one in an append-only table is
+     * corrected by a second entry and visible forever.
+     */
+    public function test_an_unattributable_total_settles_nothing(): void
+    {
+        config(['moyasar.secret_key' => 'sk_test_fake', 'moyasar.webhook_secret' => 'whsec_test']);
+
+        $booking = $this->stay();
+        $booking->payment->update(['moyasar_id' => 'pay_amb']);
+
+        $complaint = $this->approved($booking, 50000);
+
+        Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'complaint_id' => $complaint->id, 'reason' => Refund::REASON_COMPLAINT,
+            'type' => Refund::TYPE_REFUND, 'amount' => 500.00, 'refund_percent' => 50,
+            'status' => Refund::STATUS_PENDING,
+        ]);
+
+        // 300.00 matches no pending row and no combination of them.
+        $this->postJson('/webhooks/moyasar', [
+            'type' => 'payment_refunded', 'secret_token' => 'whsec_test',
+            'data' => [
+                'id' => 'pay_amb', 'refunded' => 30000,
+                'metadata' => ['env' => config('app.env')],
+            ],
+        ])->assertOk();
+
+        $this->assertSame(1, Refund::where('status', Refund::STATUS_PENDING)->count());
+        $this->assertSame(0, PartnerLedgerEntry::where('type', PartnerLedgerEntry::TYPE_REFUND_REVERSAL)->count());
+
+        // With no configured recipient list the alert falls back to every
+        // active SuperAdmin — degrading to today's behaviour rather than to
+        // silence, which is the whole point of the fallback.
+        Notification::assertSentTo($this->superadmin, \App\Notifications\RefundSettlementAmbiguous::class);
+    }
 }
+
