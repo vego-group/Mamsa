@@ -59,6 +59,20 @@
         <server name="APP_ENV" value="testing" force="true"/>
 
         <!--
+            OUTBOUND SERVICES. Not container-defined, but the app's own .env
+            supplies live values, and phpunit.xml declared none of them — so the
+            suite was calling https://cnc.fgc.sa/authenticate, the real SMS
+            gateway, on every OTP test. It usually failed fast; occasionally it
+            timed out differently and the suite "flaked".
+            Tests\TestCase now also calls Http::preventStrayRequests(), so a
+            missing entry here fails loudly at the call site instead.
+        -->
+        <server name="SMS_DRIVER" value="log" force="true"/>
+        <server name="MOYASAR_SECRET_KEY" value="" force="true"/>
+        <server name="MOYASAR_WEBHOOK_SECRET" value="" force="true"/>
+        <server name="RESEND_API_KEY" value="" force="true"/>
+
+        <!--
             INVENTORY — every key this container defines, and what tests get.
             A key the container sets can only be overridden from <server>, so a
             new one appearing here without a <server> line is a silent leak.
@@ -77,10 +91,12 @@
               SANCTUM_STATEFUL_DOMAINS -> container value, harmless
               PHPIZE_DEPS              -> not read by Laravel
 
-            NOT defined by the container, so the <env> block below is
-            sufficient for them: MAIL_MAILER, BROADCAST_CONNECTION,
-            MOYASAR_*, SMS_*, and every other service credential. Tests
-            therefore cannot send real mail or real SMS.
+            CORRECTION (later the same day): the note that used to sit here
+            claimed MOYASAR_* and SMS_* were "sufficient" because the container
+            does not define them. That was wrong — being undefined by the
+            container does not matter if phpunit.xml never declares them either.
+            The app's .env supplied SMS_DRIVER=fgc, and the suite called the
+            real SMS gateway. They are declared explicitly above now.
         -->
 
         <env name="APP_ENV" value="testing" force="true"/>

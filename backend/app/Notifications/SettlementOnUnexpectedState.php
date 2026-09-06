@@ -27,7 +27,7 @@ class SettlementOnUnexpectedState extends Notification
 
     public function __construct(
         public readonly Refund $refund,
-        public readonly string $complaintStatus,
+        public readonly string $anomaly,
     ) {}
 
     /** @return array<int, string> */
@@ -42,8 +42,9 @@ class SettlementOnUnexpectedState extends Notification
             ->subject('⚠ تسوية استرداد على شكوى في حالة غير متوقعة')
             ->line('وصلت تسوية لاسترداد بينما الشكوى ليست في حالة "معتمدة".')
             ->line('الاسترداد: #'.$this->refund->id.' — '.number_format((float) $this->refund->amount, 2).' ريال')
-            ->line('الشكوى: #'.$this->refund->complaint_id.' — حالتها: '.$this->complaintStatus)
-            ->line('تم تسجيل القيد المحاسبي لأن المبلغ تحرّك فعلاً.')
+            ->line('الشكوى: #'.$this->refund->complaint_id.' — نوع الشذوذ: '.$this->anomaly)
+            ->line('`duplicate-settlement` = سُوّي هذا الاسترداد مرة أخرى؛ لم يُكتب قيد ثانٍ.')
+            ->line('`status:*` = وصلت التسوية والشكوى ليست في حالة "معتمدة"؛ القيد كُتب والحالة لم تُغيَّر.')
             ->line('لم تُغيَّر حالة الشكوى، حتى لا يُكتب فوق قرار سبق تسجيله.')
             ->line('راجعوا كيف خرجت الشكوى من حالة "معتمدة" واسترداد قيد التنفيذ — الحُرّاس يمنعون ذلك.');
     }

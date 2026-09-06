@@ -698,6 +698,12 @@ class ComplaintsTest extends TestCase
 
         $this->assertSame(BookingComplaint::STATUS_RESOLVED_REJECTED, $complaint->fresh()->status);
         $this->assertSame(0, Refund::count());
+
+        // The approved figure SURVIVES the rejection. It is part of the record
+        // of what was decided: clearing it would hide that the complaint ever
+        // reached approval, and the audit trail would show a rejection with no
+        // sign of the amount that was once on the table.
+        $this->assertSame(50000, $complaint->fresh()->approved_refund_halalas);
     }
 
     /**
@@ -865,7 +871,80 @@ class ComplaintsTest extends TestCase
 
         $this->assertSame(1, Refund::count());
     }
+    /**
+     * T24 — a SECOND settlement on an already-refunded complaint alerts.
+     *
+     * The exemption this replaces was keyed on the complaint's status, which
+     * made `resolved_refunded` silent. But every caller settles a row it has
+     * just moved out of `pending`, and a settled row is never moved again — so
+     * arriving here with the complaint already closed means a second refund
+     * settled against it. That is a second ledger entry and a second partner
+     * debit, and it was the one case the exemption let through in silence.
+     */
+    public function test_t24_a_second_settlement_on_a_closed_complaint_alerts(): void
+    {
+        $booking   = $this->stay();
+        $complaint = $this->approved($booking, 50000);
+
+        // The first refund, already settled and closed.
+        Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'complaint_id' => $complaint->id, 'reason' => Refund::REASON_COMPLAINT,
+            'type' => Refund::TYPE_REFUND, 'amount' => 200.00, 'refund_percent' => 20,
+            'amount_vat' => 26.09, 'amount_commission' => 17.39, 'amount_partner' => 156.52,
+            'status' => Refund::STATUS_SUCCEEDED,
+        ]);
+        $complaint->forceFill(['status' => BookingComplaint::STATUS_RESOLVED_REFUNDED])->save();
+
+        // A second refund on the same complaint reaches settlement.
+        $second = Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'complaint_id' => $complaint->id, 'reason' => Refund::REASON_COMPLAINT,
+            'type' => Refund::TYPE_REFUND, 'amount' => 500.00, 'refund_percent' => 50,
+            'amount_vat' => 65.22, 'amount_commission' => 43.48, 'amount_partner' => 391.30,
+            'status' => Refund::STATUS_SUCCEEDED,
+        ]);
+
+        app(\App\Services\ComplaintRefundService::class)->settle($second->fresh());
+
+        // The money moved, so the entry is written for THIS refund.
+        $entry = PartnerLedgerEntry::where('ref_type', 'refund')->where('ref_id', (string) $second->id)->first();
+        $this->assertNotNull($entry);
+        $this->assertEqualsWithDelta(-391.30, (float) $entry->amount, 0.001);
+
+        // And a human is told, which the status-keyed exemption would not have done.
+        Notification::assertSentTo(
+            $this->superadmin,
+            \App\Notifications\SettlementOnUnexpectedState::class
+        );
+    }
+
+    /** settle() is safe to call twice for one refund: the webhook and the job can race. */
+    public function test_settling_the_same_refund_twice_posts_one_ledger_entry(): void
+    {
+        $booking   = $this->stay();
+        $complaint = $this->approved($booking, 50000);
+
+        $refund = Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'complaint_id' => $complaint->id, 'reason' => Refund::REASON_COMPLAINT,
+            'type' => Refund::TYPE_REFUND, 'amount' => 500.00, 'refund_percent' => 50,
+            'amount_vat' => 65.22, 'amount_commission' => 43.48, 'amount_partner' => 391.30,
+            'status' => Refund::STATUS_SUCCEEDED,
+        ]);
+
+        $service = app(\App\Services\ComplaintRefundService::class);
+        $service->settle($refund->fresh());
+        $service->settle($refund->fresh());   // the reconciliation job, racing a late webhook
+
+        $this->assertSame(
+            1,
+            PartnerLedgerEntry::where('ref_type', 'refund')->where('ref_id', (string) $refund->id)->count(),
+            'one refund, one debit — the ledger is append-only and cannot be corrected by editing'
+        );
+    }
 }
+
 
 
 
