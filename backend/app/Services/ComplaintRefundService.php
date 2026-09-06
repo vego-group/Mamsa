@@ -15,6 +15,7 @@ use App\Notifications\ComplaintPartnerDebited;
 use App\Notifications\ComplaintRefundFailed;
 use App\Notifications\ComplaintRefundSettled;
 use App\Notifications\RefundSettlementAmbiguous;
+use App\Notifications\SettlementOnUnexpectedState;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Collection;
@@ -368,7 +369,9 @@ class ComplaintRefundService
      */
     public function settle(Refund $refund): void
     {
-        DB::transaction(function () use ($refund) {
+        $unexpectedStatus = null;
+
+        DB::transaction(function () use ($refund, &$unexpectedStatus) {
             $booking = $refund->booking?->loadMissing('unit');
             $unit    = $booking?->unit;
 
@@ -400,9 +403,39 @@ class ComplaintRefundService
                 );
             }
 
-            $refund->complaint?->update([
-                'status' => BookingComplaint::STATUS_RESOLVED_REFUNDED,
-            ]);
+            // The status write is guarded; the ledger write above is not.
+            //
+            // They record different kinds of thing. A ledger entry describes
+            // what HAPPENED — money left, and the ledger has to say so whatever
+            // state the complaint is in. The status describes what was DECIDED,
+            // and writing `resolved_refunded` over a rejection would erase a
+            // decision whose financial effect had already been carried out.
+            //
+            // Suppressing both would be worse than either: money would move
+            // with nothing in the ledger to show it. So the fact is always
+            // recorded, the decision never overwritten, and a human is told.
+            //
+            // This is the SINK, and the guards on reject/amend/execute are the
+            // entrances. Guarding only the entrances leaves the next path
+            // somebody adds — an automated rejection, an admin tool, a cleanup
+            // job — free to reopen the hole, with settle() carrying it out in
+            // silence.
+            $complaint = $refund->complaint;
+
+            if ($complaint) {
+                $status = $complaint->status;
+
+                if ($status === BookingComplaint::STATUS_APPROVED) {
+                    $complaint->update(['status' => BookingComplaint::STATUS_RESOLVED_REFUNDED]);
+                } elseif ($status !== BookingComplaint::STATUS_RESOLVED_REFUNDED) {
+                    // Already-refunded is the benign case — a reconciliation
+                    // arriving after the webhook settled the same row. Writing
+                    // the status it already holds is a no-op, and alerting on it
+                    // would train people to ignore this mail. Anything else is
+                    // a real anomaly.
+                    $unexpectedStatus = $status;
+                }
+            }
 
             Log::info('Complaint refund settled', [
                 'refund_id'    => $refund->id,
@@ -410,6 +443,16 @@ class ComplaintRefundService
                 'partner_debit' => $mamsaOwned ? 'skipped (mamsa-owned)' : $share,
             ]);
         });
+
+        if ($unexpectedStatus !== null) {
+            Log::error('Refund settled against a complaint that was not awaiting settlement', [
+                'refund_id'        => $refund->id,
+                'complaint_id'     => $refund->complaint_id,
+                'complaint_status' => $unexpectedStatus,
+            ]);
+
+            $this->alert(new SettlementOnUnexpectedState($refund, $unexpectedStatus));
+        }
 
         // After the commit, never inside it: a mail or SMS failure must not roll
         // back a settled refund, and production sends synchronously.
