@@ -31,26 +31,45 @@ class ComplaintController extends Controller
     /** The disk complaint photos live on. Private: these are dispute evidence. */
     private const DISK = 'local';
 
+    /**
+     * An error the app can branch on.
+     *
+     * The shared ApiResponse::error() returns only `message`, in Arabic. A
+     * client that needs to tell "outside the window" from "already complained"
+     * would have to match on translated prose — which breaks the first time
+     * someone improves the wording. These endpoints add a stable `code`
+     * alongside it; the message stays exactly as before for anything already
+     * rendering it.
+     */
+    private function refuse(string $code, string $message, int $status): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'code'    => $code,
+            'message' => $message,
+        ], $status);
+    }
+
     /** POST /bookings/{booking}/complaint */
     public function store(Request $request, Booking $booking): JsonResponse
     {
         if ((int) $booking->user_id !== (int) $request->user()->id) {
-            return $this->error('غير مصرح', 403);
+            return $this->refuse('NOT_YOUR_BOOKING', 'غير مصرح', 403);
         }
 
         if ($booking->status !== Booking::STATUS_COMPLETED) {
-            return $this->error('لا يمكن تقديم شكوى إلا على حجز مكتمل', 422);
+            return $this->refuse('BOOKING_NOT_COMPLETED', 'لا يمكن تقديم شكوى إلا على حجز مكتمل', 422);
         }
 
-        if ($message = $this->outsideWindow($booking)) {
-            return $this->error($message, 422);
+        if ($window = $this->outsideWindow($booking)) {
+            return $this->refuse($window['code'], $window['message'], 422);
         }
 
         // The unique index is the real guard against two simultaneous
         // submissions; this exists to answer with 409 and an Arabic message
         // rather than a database error.
         if (BookingComplaint::where('booking_id', $booking->id)->exists()) {
-            return $this->error('تم تقديم شكوى على هذا الحجز من قبل', 409);
+            return $this->refuse('COMPLAINT_ALREADY_EXISTS', 'تم تقديم شكوى على هذا الحجز من قبل', 409);
         }
 
         $data = $request->validate([
@@ -108,7 +127,7 @@ class ComplaintController extends Controller
     public function show(Request $request, Booking $booking): JsonResponse
     {
         if ((int) $booking->user_id !== (int) $request->user()->id) {
-            return $this->error('غير مصرح', 403);
+            return $this->refuse('NOT_YOUR_BOOKING', 'غير مصرح', 403);
         }
 
         $complaint = BookingComplaint::with('attachments')
@@ -116,7 +135,7 @@ class ComplaintController extends Controller
             ->first();
 
         if (! $complaint) {
-            return $this->error('لا توجد شكوى على هذا الحجز', 404);
+            return $this->refuse('NO_COMPLAINT', 'لا توجد شكوى على هذا الحجز', 404);
         }
 
         return $this->success($this->guestPayload($complaint));
@@ -150,7 +169,8 @@ class ComplaintController extends Controller
      * boundary is a promise made to a guest standing in Saudi Arabia, and a
      * server timezone change must not quietly move it by three hours.
      */
-    private function outsideWindow(Booking $booking): ?string
+    /** @return array{code:string,message:string}|null */
+    private function outsideWindow(Booking $booking): ?array
     {
         $tz    = 'Asia/Riyadh';
         $now   = Carbon::now($tz);
@@ -160,11 +180,11 @@ class ComplaintController extends Controller
             ->addHours((int) config('complaints.window_hours_after_checkout'));
 
         if ($now->lt($opens)) {
-            return 'لا يمكن تقديم شكوى قبل بداية الإقامة';
+            return ['code' => 'WINDOW_NOT_OPEN', 'message' => 'لا يمكن تقديم شكوى قبل بداية الإقامة'];
         }
 
         if ($now->gt($shuts)) {
-            return 'انتهت مهلة تقديم الشكوى (48 ساعة بعد انتهاء الإقامة)';
+            return ['code' => 'WINDOW_CLOSED', 'message' => 'انتهت مهلة تقديم الشكوى (48 ساعة بعد انتهاء الإقامة)'];
         }
 
         return null;
