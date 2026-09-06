@@ -79,9 +79,10 @@ class ComplaintsTest extends TestCase
         parent::tearDown();
     }
 
-    private function makeUnit(User $owner, bool $mamsaOwned = false): Unit
+    private function makeUnit(User $owner, bool $mamsaOwned = false, ?string $checkoutTime = null): Unit
     {
         return $owner->units()->create([
+            'checkout_time' => $checkoutTime,
             'unit_name' => 'استوديو', 'unit_type' => 'apartment',
             'code' => 'MRN'.fake()->unique()->numerify('#####'),
             'price' => 350, 'capacity' => 4, 'bedrooms' => 2, 'beds' => 3, 'bathrooms' => 1,
@@ -203,9 +204,11 @@ class ComplaintsTest extends TestCase
 
     public function test_t7_a_complaint_past_the_window_is_refused(): void
     {
-        // 48h + a minute after checkout, in Riyadh time.
+        // A minute past the deadline: check-out is 12:00 (the default for a
+        // unit with none recorded), so the window shuts at 12:00 two days later.
         $booking = $this->stay();
-        $booking->update(['end_date' => now('Asia/Riyadh')->subHours(48)->subMinute()]);
+        $booking->update(['end_date' => Carbon::parse('2026-09-13', 'Asia/Riyadh')]);
+        Carbon::setTestNow(Carbon::parse('2026-09-15 12:01:00', 'Asia/Riyadh'));
 
         $this->actingAs($this->guest, 'sanctum')
             ->postJson("/api/v1/bookings/{$booking->id}/complaint", [
@@ -990,12 +993,15 @@ class ComplaintsTest extends TestCase
             ->postJson("/api/v1/bookings/{$early->id}/complaint", $body)
             ->assertStatus(422)->assertJsonPath('code', 'WINDOW_NOT_OPEN');
 
-        // past the window
+        // past the window — 12:00 check-out on the 13th shuts at 12:00 on the 15th
         $late = $this->stay();
-        $late->update(['end_date' => now('Asia/Riyadh')->subHours(48)->subMinute()]);
+        $late->update(['end_date' => Carbon::parse('2026-09-13', 'Asia/Riyadh')]);
+        $wasNow = Carbon::getTestNow();
+        Carbon::setTestNow(Carbon::parse('2026-09-15 12:01:00', 'Asia/Riyadh'));
         $this->actingAs($this->guest, 'sanctum')
             ->postJson("/api/v1/bookings/{$late->id}/complaint", $body)
             ->assertStatus(422)->assertJsonPath('code', 'WINDOW_CLOSED');
+        Carbon::setTestNow($wasNow);
 
         // not a completed stay
         $open = $this->stay();
@@ -1126,10 +1132,11 @@ class ComplaintsTest extends TestCase
      */
     public function test_the_window_closes_on_riyadh_time_not_utc(): void
     {
-        // 01:30 Riyadh on the 17th = 22:30 UTC on the 16th. A checkout on the
-        // 15th closes at 00:00 Riyadh on the 17th — so this is OUTSIDE by 90
-        // minutes in Riyadh, and inside by 90 minutes if computed in UTC.
-        Carbon::setTestNow(Carbon::parse('2026-09-17 01:30:00', 'Asia/Riyadh'));
+        // Check-out 12:00 on the 15th → the window shuts 12:00 Riyadh on the
+        // 17th. Computed in UTC instead, it would shut at 12:00 UTC — three
+        // hours later, i.e. 15:00 Riyadh. 13:30 Riyadh sits between the two:
+        // outside under the correct rule, inside under the broken one.
+        Carbon::setTestNow(Carbon::parse('2026-09-17 13:30:00', 'Asia/Riyadh'));
 
         $booking = $this->stay();
         $booking->update([
@@ -1144,8 +1151,8 @@ class ComplaintsTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('code', 'WINDOW_CLOSED');
 
-        // And 90 minutes earlier — 22:30 Riyadh on the 16th — it is still open.
-        Carbon::setTestNow(Carbon::parse('2026-09-16 22:30:00', 'Asia/Riyadh'));
+        // And 90 minutes earlier — 11:00 Riyadh on the 17th — it is still open.
+        Carbon::setTestNow(Carbon::parse('2026-09-17 11:00:00', 'Asia/Riyadh'));
 
         $this->actingAs($this->guest, 'sanctum')
             ->postJson("/api/v1/bookings/{$booking->id}/complaint", [
@@ -1153,7 +1160,99 @@ class ComplaintsTest extends TestCase
             ])
             ->assertStatus(201);
     }
+    /* ================= the window measures from check-out, not midnight ================= */
+
+    /**
+     * The 48 hours run from the unit's check-out time.
+     *
+     * Measuring from midnight of the check-out day gave a 12:00 check-out only
+     * 36 hours, and the shortfall grew with every later time — R4 promises 48.
+     * The platform records check-out per unit; the window now uses it.
+     */
+    public function test_the_window_runs_from_the_units_checkout_time(): void
+    {
+        $unit    = $this->makeUnit($this->partner, checkoutTime: '12:00');
+        $booking = $this->stay($unit);
+        $booking->update([
+            'start_date' => Carbon::parse('2026-09-12', 'Asia/Riyadh'),
+            'end_date'   => Carbon::parse('2026-09-15', 'Asia/Riyadh'),
+        ]);
+
+        $body = ['description' => str_repeat('م', 40), 'contacted_partner' => true];
+
+        // 47h59 after a 12:00 check-out — still inside. Under the old rule this
+        // was 11:59 PAST the deadline.
+        Carbon::setTestNow(Carbon::parse('2026-09-17 11:59:00', 'Asia/Riyadh'));
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$booking->id}/complaint", $body)
+            ->assertStatus(201);
+
+        BookingComplaint::query()->delete();
+
+        // 48h01 — outside.
+        Carbon::setTestNow(Carbon::parse('2026-09-17 12:01:00', 'Asia/Riyadh'));
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$booking->id}/complaint", $body)
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'WINDOW_CLOSED');
+    }
+
+    /**
+     * A unit with NO recorded check-out time gets the 12:00 default, not
+     * midnight.
+     *
+     * Five of the thirty-two units carry NULL. Treating that as 00:00 would
+     * charge the guest twelve hours of their deadline for a gap in OUR data —
+     * so a guest on such a unit gets exactly what a guest on a 12:00 unit gets.
+     */
+    public function test_a_unit_with_no_checkout_time_falls_back_to_noon(): void
+    {
+        $unit = $this->makeUnit($this->partner);          // checkout_time = null
+        $this->assertNull($unit->checkout_time, 'the fixture must actually have none');
+
+        $booking = $this->stay($unit);
+        $booking->update([
+            'start_date' => Carbon::parse('2026-09-12', 'Asia/Riyadh'),
+            'end_date'   => Carbon::parse('2026-09-15', 'Asia/Riyadh'),
+        ]);
+
+        $body = ['description' => str_repeat('م', 40), 'contacted_partner' => true];
+
+        // Identical boundaries to the 12:00 unit above.
+        Carbon::setTestNow(Carbon::parse('2026-09-17 11:59:00', 'Asia/Riyadh'));
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$booking->id}/complaint", $body)
+            ->assertStatus(201);
+
+        BookingComplaint::query()->delete();
+
+        Carbon::setTestNow(Carbon::parse('2026-09-17 12:01:00', 'Asia/Riyadh'));
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$booking->id}/complaint", $body)
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'WINDOW_CLOSED');
+    }
+
+    /** A later check-out moves the deadline with it. */
+    public function test_a_later_checkout_extends_the_deadline(): void
+    {
+        $unit    = $this->makeUnit($this->partner, checkoutTime: '13:00');
+        $booking = $this->stay($unit);
+        $booking->update([
+            'start_date' => Carbon::parse('2026-09-12', 'Asia/Riyadh'),
+            'end_date'   => Carbon::parse('2026-09-15', 'Asia/Riyadh'),
+        ]);
+
+        // 12:30 on day+2: past a 12:00 unit's deadline, inside a 13:00 one's.
+        Carbon::setTestNow(Carbon::parse('2026-09-17 12:30:00', 'Asia/Riyadh'));
+
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$booking->id}/complaint", [
+                'description' => str_repeat('م', 40), 'contacted_partner' => true,
+            ])->assertStatus(201);
+    }
 }
+
 
 
 

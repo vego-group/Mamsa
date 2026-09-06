@@ -51,4 +51,14 @@ return [
      * time. Stored as hours so a product change is a value, not a code edit.
      */
     'window_hours_after_checkout' => (int) env('COMPLAINTS_WINDOW_HOURS', 48),
+
+    /*
+     * Assumed check-out time when a unit has none recorded.
+     *
+     * 12:00 because that is what 26 of 32 units actually carry, and what the
+     * documentation states. The alternative — treating a missing time as
+     * midnight — silently shortens the guest's window to 36 hours on exactly
+     * the units where the platform is missing data. Our gap, their deadline.
+     */
+    'default_checkout_time' => env('COMPLAINTS_DEFAULT_CHECKOUT_TIME', '12:00'),
 ];
