@@ -144,7 +144,7 @@ class ComplaintController extends Controller
     /** GET /me/complaints */
     public function index(Request $request): JsonResponse
     {
-        $rows = BookingComplaint::with('booking:id,code')
+        $rows = BookingComplaint::with('booking:id')
             ->where('user_id', $request->user()->id)
             ->latest('id')
             ->get()
@@ -152,7 +152,7 @@ class ComplaintController extends Controller
                 'id'           => $c->id,
                 'status'       => $c->status,
                 'booking_id'   => $c->booking_id,
-                'booking_code' => $c->booking?->code,
+                'booking_code' => $c->booking?->code ?: (string) $c->booking?->id,
                 'created_at'   => $c->created_at?->toIso8601String(),
             ]);
 
@@ -172,10 +172,22 @@ class ComplaintController extends Controller
     /** @return array{code:string,message:string}|null */
     private function outsideWindow(Booking $booking): ?array
     {
-        $tz    = 'Asia/Riyadh';
-        $now   = Carbon::now($tz);
-        $opens = Carbon::parse($booking->start_date, $tz)->startOfDay();
-        $shuts = Carbon::parse($booking->end_date, $tz)
+        $tz  = 'Asia/Riyadh';
+        $now = Carbon::now($tz);
+
+        // ->format('Y-m-d') is not decoration. `start_date` and `end_date` are
+        // cast to `date`, so they arrive as Carbon instances in the app
+        // timezone (UTC) — and Carbon::parse() IGNORES its timezone argument
+        // when handed a Carbon rather than a string. Passing them directly
+        // computed the whole window in UTC, shifting it three hours: a guest
+        // could file three hours past the deadline, and not at all during the
+        // first three hours of their check-in day.
+        //
+        // Reducing to a date string first makes the timezone argument apply,
+        // which is what R4 asks for — the boundary is a promise made to
+        // someone standing in Saudi Arabia.
+        $opens = Carbon::parse(Carbon::parse($booking->start_date)->format('Y-m-d'), $tz)->startOfDay();
+        $shuts = Carbon::parse(Carbon::parse($booking->end_date)->format('Y-m-d'), $tz)
             ->startOfDay()
             ->addHours((int) config('complaints.window_hours_after_checkout'));
 

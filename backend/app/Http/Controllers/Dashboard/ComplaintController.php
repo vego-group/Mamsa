@@ -26,13 +26,13 @@ class ComplaintController extends Controller
     public function index(Request $request): JsonResponse
     {
         $rows = $this->scope($request)
-            ->with(['booking:id,code,unit_id', 'booking.unit:id,unit_name'])
+            ->with(['booking:id,unit_id', 'booking.unit:id,unit_name'])
             ->latest('id')
             ->get()
             ->map(fn (BookingComplaint $c) => [
                 'id'          => $c->id,
                 'status'      => $c->status,
-                'bookingCode' => $c->booking?->code,
+                'bookingCode' => $this->bookingCode($c->booking),
                 'unitName'    => $c->booking?->unit?->unit_name,
                 'createdAt'   => $c->created_at?->toIso8601ZuluString(),
             ]);
@@ -44,7 +44,7 @@ class ComplaintController extends Controller
     public function show(Request $request, string $id): JsonResponse
     {
         $complaint = $this->scope($request)
-            ->with(['attachments', 'booking:id,code,unit_id', 'booking.unit:id,unit_name'])
+            ->with(['attachments', 'booking:id,unit_id', 'booking.unit:id,unit_name'])
             ->find($id);
 
         if (! $complaint) {
@@ -65,7 +65,7 @@ class ComplaintController extends Controller
             'id'          => $complaint->id,
             'status'      => $complaint->status,
             'description' => $complaint->description,
-            'bookingCode' => $complaint->booking?->code,
+            'bookingCode' => $this->bookingCode($complaint->booking),
             'unitName'    => $complaint->booking?->unit?->unit_name,
             'createdAt'   => $complaint->created_at?->toIso8601ZuluString(),
             'images'      => $complaint->attachments->map(fn (BookingComplaintAttachment $a) => [
@@ -79,6 +79,29 @@ class ComplaintController extends Controller
                 ? (int) round((float) ($refund->amount_partner ?? 0) * 100)
                 : null,
         ]);
+    }
+
+    /**
+     * The booking's human identifier.
+     *
+     * `bookings` has NO `code` column — it never existed, in any environment.
+     * The value is derived, and PartnerWalletService writes the ledger's
+     * `ref_code` with this same expression. The partner dashboard links a
+     * ledger row to a complaint by matching those two strings, so if they ever
+     * diverge the link silently stops working.
+     *
+     * Naming the column in a `with('booking:id,code')` select is what caused a
+     * 500 on staging: MySQL rejects the unknown column, while SQLite — which
+     * the whole suite runs on — quietly treats the double-quoted name as a
+     * string literal and returns no error at all.
+     */
+    private function bookingCode(?\App\Models\Booking $booking): ?string
+    {
+        if (! $booking) {
+            return null;
+        }
+
+        return $booking->code ?: (string) $booking->id;
     }
 
     /** Complaints on units this partner owns — never any other partner's. */

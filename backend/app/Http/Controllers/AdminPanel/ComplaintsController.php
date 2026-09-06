@@ -42,7 +42,7 @@ class ComplaintsController extends Controller
         $args = $this->listArgs($request);
 
         $query = BookingComplaint::query()
-            ->with(['booking:id,code,unit_id,user_id', 'booking.unit:id,unit_name,user_id', 'booking.unit.owner:id,name', 'user:id,name,phone'])
+            ->with(['booking:id,unit_id,user_id', 'booking.unit:id,unit_name,user_id', 'booking.unit.owner:id,name', 'user:id,name,phone'])
             ->withCount('attachments');
 
         if ($status = $this->cleanParam($request->query('status'))) {
@@ -72,7 +72,7 @@ class ComplaintsController extends Controller
         return $this->items($paginator, fn (BookingComplaint $c) => [
             'id'             => $c->id,
             'status'         => $c->status,
-            'bookingCode'    => $c->booking?->code,
+            'bookingCode'    => $c->booking?->code ?: (string) $c->booking?->id,
             'unitName'       => $c->booking?->unit?->unit_name,
             'guestName'      => $c->user?->name,
             'partnerName'    => $c->booking?->unit?->owner?->name,
@@ -133,7 +133,7 @@ class ComplaintsController extends Controller
                 'mime' => $a->mime,
             ])->values(),
             'booking' => [
-                'code'                  => $booking?->code,
+                'code'                  => $booking?->code ?: (string) $booking?->id,
                 'checkIn'               => $booking?->start_date,
                 'checkOut'              => $booking?->end_date,
                 'grossHalalas'          => $grossHalalas,
