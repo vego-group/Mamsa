@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Models\Refund;
 use App\Notifications\ComplaintRefundStuck;
+use App\Notifications\ProductionMarkerMissing;
 use App\Services\ComplaintRefundService;
 use App\Services\MoyasarService;
 use Illuminate\Console\Command;
@@ -33,6 +34,11 @@ class ReconcileStuckRefunds extends Command
 
     public function handle(MoyasarService $moyasar, ComplaintRefundService $complaints): int
     {
+        // Rides along on this command's hourly cadence and its alert routing
+        // rather than adding a second scheduler entry. Unrelated to refunds,
+        // and deliberately first: it is the check most likely to matter.
+        $this->checkProductionMarker($complaints);
+
         $reconcileAfter = (int) config('complaints.reconcile_after_hours');
         $alertAfter     = (int) config('complaints.alert_after_hours');
 
@@ -70,6 +76,34 @@ class ReconcileStuckRefunds extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Warn if the production marker has gone missing.
+     *
+     * The marker is what makes AppServiceProvider refuse to boot with debug
+     * enabled. Its absence has no visible effect — the site runs normally, the
+     * guard simply never fires — so a deleted marker is a protection that
+     * silently stopped existing. Nothing else would ever report it.
+     *
+     * Checked only where it should be present: an environment calling itself
+     * production must carry one.
+     */
+    private function checkProductionMarker(ComplaintRefundService $complaints): void
+    {
+        if (config('app.env') !== 'production') {
+            return;
+        }
+
+        $marker = dirname(base_path()).'/.mamsa-production';
+
+        if (is_file($marker)) {
+            return;
+        }
+
+        $this->error('⚠ production marker missing: '.$marker);
+
+        $complaints->raise(new ProductionMarkerMissing($marker));
     }
 
     /**
