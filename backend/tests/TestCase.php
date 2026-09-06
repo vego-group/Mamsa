@@ -3,6 +3,7 @@
 namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 abstract class TestCase extends BaseTestCase
@@ -57,6 +58,17 @@ abstract class TestCase extends BaseTestCase
         }
 
         parent::setUp();
+
+        // No test may reach the network. An un-faked request is a shared
+        // dependency by another name: it makes the suite depend on DNS, on a
+        // third party being up, and on how long they take — which is how a
+        // suite acquires failures that pass on the next run and teach everyone
+        // to re-run instead of read.
+        //
+        // preventStrayRequests() turns that into an immediate, named failure at
+        // the call site. Same reasoning as the database and cache guards above:
+        // fail closed on shared state rather than intermittently.
+        Http::preventStrayRequests();
     }
 
     /** Read an env value the way Laravel's repository would, before it exists. */

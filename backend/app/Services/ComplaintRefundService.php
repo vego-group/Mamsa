@@ -374,9 +374,9 @@ class ComplaintRefundService
      */
     public function settle(Refund $refund): void
     {
-        $unexpectedStatus = null;
+        $anomaly = null;
 
-        DB::transaction(function () use ($refund, &$unexpectedStatus) {
+        DB::transaction(function () use ($refund, &$anomaly) {
             $booking = $refund->booking?->loadMissing('unit');
             $unit    = $booking?->unit;
 
@@ -393,7 +393,25 @@ class ComplaintRefundService
             $partnerId  = $unit?->user_id;
             $share      = round((float) ($refund->amount_partner ?? 0), 2);
 
-            if (! $mamsaOwned && $partnerId && $share > 0) {
+            // settle() must be safe to call twice for one refund. It is
+            // reachable from the webhook AND from the reconciliation job, and
+            // the job flips the row without a lock — so a late webhook and a
+            // scheduled run can both decide they settled it. A second post
+            // would debit the partner twice for one refund.
+            //
+            // The ledger is append-only, so this cannot be corrected by an
+            // edit: a wrong entry is answered by a second entry and both stay
+            // visible forever. Checking first is the only cheap moment.
+            $alreadyPosted = PartnerLedgerEntry::query()
+                ->where('ref_type', 'refund')
+                ->where('ref_id', (string) $refund->id)
+                ->exists();
+
+            if ($alreadyPosted) {
+                $anomaly = 'duplicate-settlement';
+            }
+
+            if (! $mamsaOwned && $partnerId && $share > 0 && ! $alreadyPosted) {
                 $this->wallet->post(
                     partnerUserId: $partnerId,
                     // The type built for this in August and never written until
@@ -432,13 +450,22 @@ class ComplaintRefundService
 
                 if ($status === BookingComplaint::STATUS_APPROVED) {
                     $complaint->update(['status' => BookingComplaint::STATUS_RESOLVED_REFUNDED]);
-                } elseif ($status !== BookingComplaint::STATUS_RESOLVED_REFUNDED) {
-                    // Already-refunded is the benign case — a reconciliation
-                    // arriving after the webhook settled the same row. Writing
-                    // the status it already holds is a no-op, and alerting on it
-                    // would train people to ignore this mail. Anything else is
-                    // a real anomaly.
-                    $unexpectedStatus = $status;
+                } else {
+                    // No exemption for `resolved_refunded`.
+                    //
+                    // It looked benign — a reconciliation arriving after the
+                    // webhook had already closed the complaint — but that case
+                    // never reaches here: every caller settles a row it has just
+                    // transitioned out of `pending`, and a row already settled is
+                    // not transitioned again. So arriving with the complaint
+                    // already closed means a SECOND settlement on it, which is a
+                    // second ledger entry and a second partner debit.
+                    //
+                    // Keying the exemption on the status rather than on what
+                    // actually happened would have let exactly that pass in
+                    // silence — the same single-door reasoning this guard exists
+                    // to replace.
+                    $anomaly = $anomaly ?? 'status:'.$status;
                 }
             }
 
@@ -449,14 +476,14 @@ class ComplaintRefundService
             ]);
         });
 
-        if ($unexpectedStatus !== null) {
-            Log::error('Refund settled against a complaint that was not awaiting settlement', [
-                'refund_id'        => $refund->id,
-                'complaint_id'     => $refund->complaint_id,
-                'complaint_status' => $unexpectedStatus,
+        if ($anomaly !== null) {
+            Log::error('Refund settlement anomaly', [
+                'refund_id'    => $refund->id,
+                'complaint_id' => $refund->complaint_id,
+                'anomaly'      => $anomaly,
             ]);
 
-            $this->alert(new SettlementOnUnexpectedState($refund, $unexpectedStatus));
+            $this->alert(new SettlementOnUnexpectedState($refund, $anomaly));
         }
 
         // After the commit, never inside it: a mail or SMS failure must not roll
