@@ -38,6 +38,13 @@ use Illuminate\Support\Facades\Notification;
  */
 class ComplaintRefundService
 {
+    /**
+     * Above this many pending refunds on one payment, subset enumeration is
+     * abandoned and the event is treated as unattributable. Real payments carry
+     * one or two; this is a guard against 2^n, not a business rule.
+     */
+    private const MAX_SUBSET_ROWS = 16;
+
     public function __construct(
         private readonly MoyasarService $moyasar,
         private readonly PartnerWalletService $wallet,
@@ -233,24 +240,55 @@ class ComplaintRefundService
                 return ['settled' => collect(), 'unexplained' => 0, 'pending' => $pending];
             }
 
-            $settle = collect();
+            // Which rows the event covers must be the ONLY answer, not merely
+            // an answer. Walking oldest-first and stopping at zero finds *a*
+            // subset — with rows of 100, 200 and 300 and a remainder of 300 it
+            // takes {100,200} and settles two refunds, when {300} sums to the
+            // same and may be the one that actually cleared. Two wrong ledger
+            // debits, and the right row left pending: exactly the failure this
+            // whole mechanism exists to prevent.
+            //
+            // So enumerate every subset and settle only when exactly one sums
+            // to the remainder. Pending rows on a single payment number a
+            // handful, so the cost is nothing; the cap exists so a pathological
+            // case degrades to an alert rather than to 2^n work.
+            $amounts = $pending->map(fn ($r) => (int) round((float) $r->amount * 100))->values()->all();
+            $count   = count($amounts);
 
-            foreach ($pending as $refund) {
-                $amount = (int) round((float) $refund->amount * 100);
-
-                if ($amount > $unaccounted) {
-                    break; // this row is not covered by what the gateway reports
-                }
-
-                $settle->push($refund);
-                $unaccounted -= $amount;
-            }
-
-            if ($unaccounted !== 0) {
-                // The total does not decompose into whole pending rows. Settle
-                // nothing; the transaction returns without a write.
+            if ($count > self::MAX_SUBSET_ROWS) {
                 return ['settled' => collect(), 'unexplained' => $unaccounted, 'pending' => $pending];
             }
+
+            $match = null;
+
+            for ($mask = 1; $mask < (1 << $count); $mask++) {
+                $sum = 0;
+
+                for ($i = 0; $i < $count; $i++) {
+                    if ($mask & (1 << $i)) {
+                        $sum += $amounts[$i];
+                    }
+                }
+
+                if ($sum !== $unaccounted) {
+                    continue;
+                }
+
+                if ($match !== null) {
+                    // A second subset sums to the same total. Which one settled
+                    // is unknowable from what the gateway tells us.
+                    $match = null;
+                    break;
+                }
+
+                $match = $mask;
+            }
+
+            if ($match === null) {
+                return ['settled' => collect(), 'unexplained' => $unaccounted, 'pending' => $pending];
+            }
+
+            $settle = $pending->values()->filter(fn ($r, $i) => (bool) ($match & (1 << $i)))->values();
 
             Refund::whereIn('id', $settle->pluck('id'))
                 ->update(['status' => Refund::STATUS_SUCCEEDED]);

@@ -510,5 +510,78 @@ class ComplaintsTest extends TestCase
         // silence, which is the whole point of the fallback.
         Notification::assertSentTo($this->superadmin, \App\Notifications\RefundSettlementAmbiguous::class);
     }
+    /**
+     * T22 — a total that more than one subset explains settles nothing.
+     *
+     * Rows of 100, 200 and 300 with a remainder of 300: {300} and {100,200}
+     * both sum to it. Walking oldest-first would take {100,200} and settle two
+     * refunds, when the one that actually cleared may have been the 300. The
+     * rule is therefore uniqueness, not merely a match — finding *an* answer is
+     * not the same as knowing it is *the* answer.
+     */
+    public function test_t22_an_ambiguous_subset_settles_nothing(): void
+    {
+        config(['moyasar.secret_key' => 'sk_test_fake', 'moyasar.webhook_secret' => 'whsec_test']);
+
+        $booking = $this->stay();
+        $booking->payment->update(['moyasar_id' => 'pay_t22']);
+
+        foreach ([100.00, 200.00, 300.00] as $amount) {
+            Refund::create([
+                'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+                'type' => Refund::TYPE_REFUND, 'amount' => $amount,
+                'refund_percent' => $amount / 10, 'status' => Refund::STATUS_PENDING,
+                'reason' => Refund::REASON_OTHER,
+            ]);
+        }
+
+        // 300.00 is explained by {300} and by {100,200}.
+        $this->postJson('/webhooks/moyasar', [
+            'type' => 'payment_refunded', 'secret_token' => 'whsec_test',
+            'data' => [
+                'id' => 'pay_t22', 'refunded' => 30000,
+                'metadata' => ['env' => config('app.env')],
+            ],
+        ])->assertOk();
+
+        $this->assertSame(3, Refund::where('status', Refund::STATUS_PENDING)->count(),
+            'every row must stay pending while the event cannot be attributed');
+        $this->assertSame(0, PartnerLedgerEntry::where('type', PartnerLedgerEntry::TYPE_REFUND_REVERSAL)->count());
+
+        Notification::assertSentTo($this->superadmin, \App\Notifications\RefundSettlementAmbiguous::class);
+    }
+
+    /** The unambiguous case still settles — uniqueness must not mean paralysis. */
+    public function test_a_single_matching_subset_still_settles(): void
+    {
+        config(['moyasar.secret_key' => 'sk_test_fake', 'moyasar.webhook_secret' => 'whsec_test']);
+
+        $booking = $this->stay();
+        $booking->payment->update(['moyasar_id' => 'pay_uniq']);
+
+        $two = Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'type' => Refund::TYPE_REFUND, 'amount' => 200.00, 'refund_percent' => 20,
+            'status' => Refund::STATUS_PENDING, 'reason' => Refund::REASON_OTHER,
+        ]);
+        $five = Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'type' => Refund::TYPE_REFUND, 'amount' => 500.00, 'refund_percent' => 50,
+            'status' => Refund::STATUS_PENDING, 'reason' => Refund::REASON_OTHER,
+        ]);
+
+        // {200}=200 ✓  {500}=500 ✗  {200,500}=700 ✗  → exactly one subset.
+        $this->postJson('/webhooks/moyasar', [
+            'type' => 'payment_refunded', 'secret_token' => 'whsec_test',
+            'data' => [
+                'id' => 'pay_uniq', 'refunded' => 20000,
+                'metadata' => ['env' => config('app.env')],
+            ],
+        ])->assertOk();
+
+        $this->assertSame(Refund::STATUS_SUCCEEDED, $two->fresh()->status);
+        $this->assertSame(Refund::STATUS_PENDING, $five->fresh()->status);
+    }
 }
+
 
