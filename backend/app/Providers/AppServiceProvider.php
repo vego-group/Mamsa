@@ -21,8 +21,47 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
+    /**
+     * A host marked as production must never run with debug enabled.
+     *
+     * The marker is a file OUTSIDE the application directory and outside git,
+     * so nothing in `.env`, no deploy, and no environment switch can clear it.
+     * That placement is the whole design: on 2026-06-30 an env-switching script
+     * put the production box into a `local` profile with APP_DEBUG=true, and it
+     * stayed that way for nearly five days. Every guard that lives inside the
+     * environment system is turned off by the same act that creates the danger.
+     *
+     * Debug mode on a production host is not a degraded service — Laravel's
+     * exception page renders the loaded environment, so one unhandled error
+     * shows the database password, the app key and every service secret to
+     * whoever triggered it. Refusing to boot is the correct response: a site
+     * that is down is recoverable in a minute, a leaked credential set is not.
+     */
+    private function refuseDebugOnAProductionHost(): void
+    {
+        // Deliberately not configurable. A path read from config or env could
+        // be pointed at a file that does not exist, which would disable the
+        // guard by the same mechanism it exists to survive.
+        $marker = dirname(base_path()).'/.mamsa-production';
+
+        if (! is_file($marker) || ! config('app.debug')) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'Refusing to boot: this host is marked production ('.$marker.') but APP_DEBUG is true. '
+            .'Laravel would render the loaded environment — database password, app key, service '
+            .'secrets — on the first unhandled exception. Set APP_DEBUG=false and rebuild the '
+            .'config cache, or remove the marker if this host is genuinely not production.'
+        );
+    }
+
     public function boot(): void
     {
+        // Runs first: nothing below it should get the chance to serve traffic
+        // from a production host with debug on.
+        $this->refuseDebugOnAProductionHost();
+
         // Sanctum access tokens expire after the configured access-token lifetime;
         // longer-lived sessions are maintained via custom refresh tokens.
         config(['sanctum.expiration' => (int) config('tokens.access_minutes', 60)]);
