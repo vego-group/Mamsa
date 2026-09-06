@@ -674,7 +674,73 @@ class ComplaintsTest extends TestCase
         $this->assertSame(20000, $body['pendingRefundHalalas']);
         $this->assertSame(80000, $body['maxRefundableHalalas']);
     }
+    /* ================= rejection from approved ================= */
+
+    /**
+     * A complaint can be rejected after an amount was approved, as long as no
+     * money has moved.
+     *
+     * The case is real: an amount is approved, then the partner produces
+     * evidence the complaint was unfounded. Without this path the record has no
+     * exit — nobody will execute it, and the only other close was from an
+     * earlier state.
+     */
+    public function test_a_complaint_can_be_rejected_after_approval(): void
+    {
+        $complaint = $this->approved($this->stay(), 50000);
+
+        $this->assertTrue($complaint->canReject());
+
+        $this->actingAs($this->superadmin, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/reject", [
+                'guestMessage' => 'تبيّن أن الشكوى غير صحيحة بعد مراجعة أدلة الشريك.',
+            ])->assertOk();
+
+        $this->assertSame(BookingComplaint::STATUS_RESOLVED_REJECTED, $complaint->fresh()->status);
+        $this->assertSame(0, Refund::count());
+    }
+
+    /**
+     * But not once a refund is in flight.
+     *
+     * settle() would set `resolved_refunded` over the top, leaving a record that
+     * contradicts both the decision and the message already sent to the guest.
+     */
+    public function test_a_complaint_cannot_be_rejected_once_a_refund_is_in_flight(): void
+    {
+        $complaint = $this->approved($this->stay(), 50000);
+
+        Refund::create([
+            'booking_id' => $complaint->booking_id,
+            'payment_id' => Payment::where('booking_id', $complaint->booking_id)->value('id'),
+            'complaint_id' => $complaint->id, 'reason' => Refund::REASON_COMPLAINT,
+            'type' => Refund::TYPE_REFUND, 'amount' => 500.00, 'refund_percent' => 50,
+            'status' => Refund::STATUS_PENDING,
+        ]);
+
+        $this->assertFalse($complaint->fresh()->canReject());
+
+        $this->actingAs($this->superadmin, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/reject", [
+                'guestMessage' => 'محاولة رفض بعد بدء التنفيذ',
+            ])->assertStatus(409)->assertJsonPath('code', 'REFUND_IN_FLIGHT');
+
+        $this->assertSame(BookingComplaint::STATUS_APPROVED, $complaint->fresh()->status);
+    }
+
+    /** The detail payload tells the screen whether rejection is still open. */
+    public function test_the_detail_exposes_whether_rejection_is_still_possible(): void
+    {
+        $complaint = $this->approved($this->stay(), 50000);
+
+        $body = $this->actingAs($this->superadmin, 'admin-panel')
+            ->getJson("/admin/complaints/{$complaint->id}")->assertOk()->json('complaint');
+
+        $this->assertTrue($body['canReject']);
+        $this->assertTrue($body['canAmendApproval']);
+    }
 }
+
 
 
 
