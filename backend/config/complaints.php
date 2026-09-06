@@ -29,6 +29,19 @@ return [
     'reconcile_after_hours' => (int) env('COMPLAINTS_RECONCILE_AFTER_HOURS', 6),
     'alert_after_hours'     => (int) env('COMPLAINTS_ALERT_AFTER_HOURS', 24),
 
+    /*
+     * When the metadata.env stamp went live.
+     *
+     * A payment created BEFORE this has no stamp, and a missing stamp on one of
+     * those is not a mismatch — refusing them would strand refunds on live
+     * bookings. A payment created AFTER it must carry one, and a missing stamp
+     * there is a real anomaly.
+     *
+     * Without this constant, "stamp absent" stays acceptable forever and the
+     * guard quietly decays into nothing as the old payments age out.
+     */
+    'env_stamp_live_from' => env('COMPLAINTS_ENV_STAMP_FROM', '2026-09-06T00:00:00+00:00'),
+
     /* Guest-facing limits (spec §4.2 / §5.1). */
     'description_min' => 20,
     'description_max' => 2000,

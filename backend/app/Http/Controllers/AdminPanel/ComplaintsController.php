@@ -329,6 +329,16 @@ class ComplaintsController extends Controller
             $this->fail('REFUND_FAILED', $e->getMessage(), 422);
         }
 
+        // Stamped when the same person approved and executed. Legitimate —
+        // superadmin holds both permissions as an emergency exit — but it is
+        // the case an audit wants to find, and finding it should not require
+        // joining two columns by eye.
+        AuditLog::record($complaint, 'complaint.refund_executed', null, [
+            'refund_id'     => $refund->id,
+            'amountHalalas' => (int) $data['amountHalalas'],
+            'single_actor'  => (int) $complaint->approved_by === (int) $request->user()?->id,
+        ], $request->user()?->id);
+
         return response()->json([
             'ok'       => true,
             'refundId' => $refund->id,

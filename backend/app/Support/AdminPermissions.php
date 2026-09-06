@@ -15,14 +15,21 @@ namespace App\Support;
 final class AdminPermissions
 {
     /**
-     * The superadmin set.
+     * The superadmin set — every permission literal in the matrix.
      *
-     * NOT "every literal in the matrix" any more, which is what it used to be.
-     * `complaints.execute_refund` is deliberately absent: the complaints
-     * contract splits deciding what is owed from moving the money, and a role
-     * that can do both is the thing that split exists to prevent (T12). It is
-     * the first permission superadmin does not hold, so read the omission as
-     * intentional rather than as an oversight to be tidied up.
+     * `complaints.execute_refund` is here as well as in FINANCE, and that is
+     * deliberate (v1.4 §4). The security property the split exists for is that
+     * FINANCE cannot set an arbitrary amount, and it is untouched: finance does
+     * not hold `complaints.approve` and executes a figure checked for exact
+     * equality. Withholding execution from superadmin would add no property —
+     * superadmin is already the highest authority — while creating a real
+     * operational deadlock, where one absent finance account halts every refund
+     * on a platform holding guests' money.
+     *
+     * Two people on two accounts remains the intended path. This is the visible
+     * emergency exit, and an execution where approver and executor are the same
+     * person is stamped `single_actor` in the audit trail so a later review can
+     * find those cases without comparing columns by hand.
      */
     public const ALL = [
         'dashboard.view',
@@ -36,6 +43,7 @@ final class AdminPermissions
         'payouts.view', 'payouts.execute', 'payouts.reverse', 'payouts.manage',
         'reports.financial', 'reports.operational',
         'complaints.view', 'complaints.review', 'complaints.approve',
+        'complaints.execute_refund',
         'notifications.view', 'profile.view',
     ];
 

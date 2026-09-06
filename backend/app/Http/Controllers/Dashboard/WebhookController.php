@@ -10,7 +10,6 @@ use App\Models\Refund;
 use App\Services\ComplaintRefundService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -98,35 +97,50 @@ class WebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        $settledIds = DB::transaction(function () use ($payment) {
-            $pending = $payment->refunds()
-                ->where('status', Refund::STATUS_PENDING)
-                ->lockForUpdate()
-                ->get();
+        // A payment created after the stamp went live must carry one. Before
+        // that date none exists, and refusing those would strand refunds on
+        // live bookings — but leaving "absent" acceptable forever would let the
+        // guard decay to nothing as old payments age out.
+        if ($eventEnv === null && $this->stampWasLiveFor($payment)) {
+            Log::error('Moyasar webhook ignored: payment postdates the env stamp but carries none', [
+                'payment_id' => $payment->id,
+                'moyasar_id' => $moyasarId,
+            ]);
 
-            if ($pending->isEmpty()) {
-                return collect();
-            }
+            return response()->json(['ok' => true]);
+        }
 
-            Refund::whereIn('id', $pending->pluck('id'))
-                ->update(['status' => Refund::STATUS_SUCCEEDED]);
+        // Which refunds this event covers is decided from the payment's
+        // cumulative `refunded` total, because Moyasar has no refund object and
+        // the event carries no per-refund id. Taking every pending row instead
+        // would settle a second, unrelated refund on the same payment — a
+        // partner debited for money that never left.
+        $refundedHalalas = $this->gatewayRefundedHalalas($data, $payment);
 
-            return $pending->pluck('id');
-        });
+        if ($refundedHalalas === null) {
+            Log::error('Moyasar refund webhook: no refunded total available, settling nothing', [
+                'payment_id' => $payment->id,
+            ]);
 
-        if ($settledIds->isEmpty()) {
-            // A replay, or the same event delivered through the second
-            // registration. Nothing to do, and saying so is not an error.
+            return response()->json(['ok' => true]);
+        }
+
+        $settled = $this->complaints->settlePending($payment, $refundedHalalas);
+
+        if ($settled->isEmpty()) {
+            // A replay, the same event through the second registration, or a
+            // total that could not be attributed — the service has alerted in
+            // that last case. None of them is an error to Moyasar.
             return response()->json(['ok' => true]);
         }
 
         Log::info('Moyasar refund webhook settled', [
             'payment_id' => $payment->id,
             'type'       => $type,
-            'refund_ids' => $settledIds->all(),
+            'refund_ids' => $settled->pluck('id')->all(),
         ]);
 
-        foreach (Refund::whereIn('id', $settledIds)->get() as $refund) {
+        foreach ($settled as $refund) {
             if ($refund->complaint_id) {
                 // Ledger debit + close the complaint + notify both sides.
                 $this->complaints->settle($refund);
@@ -141,6 +155,43 @@ class WebhookController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    /** Whether this payment was created after the env stamp went live. */
+    private function stampWasLiveFor(Payment $payment): bool
+    {
+        $from = config('complaints.env_stamp_live_from');
+
+        if (blank($from) || ! $payment->created_at) {
+            return false;
+        }
+
+        return $payment->created_at->greaterThanOrEqualTo(\Illuminate\Support\Carbon::parse($from));
+    }
+
+    /**
+     * The payment's cumulative refunded total, in halalas.
+     *
+     * Preferred from the event body, which carries the payment object. If the
+     * field is absent the payment is re-read from the API rather than assumed —
+     * and if that fails too, the caller settles nothing. There is no safe
+     * default here: any guess is a ledger entry.
+     */
+    private function gatewayRefundedHalalas(array $data, Payment $payment): ?int
+    {
+        if (isset($data['refunded']) && is_numeric($data['refunded'])) {
+            return (int) $data['refunded'];
+        }
+
+        try {
+            $fresh = app(\App\Services\MoyasarService::class)->fetchPayment((string) $payment->moyasar_id);
+
+            return isset($fresh['refunded']) ? (int) $fresh['refunded'] : null;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
     }
 
     private function notifyCancellationRefund(Refund $refund): void

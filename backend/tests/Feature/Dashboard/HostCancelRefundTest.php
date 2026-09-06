@@ -332,10 +332,22 @@ class HostCancelRefundTest extends TestCase
         // on a blank secret, so the test configures one.
         config(['moyasar.webhook_secret' => 'whsec_test']);
 
+        // `data` is the PAYMENT object — Moyasar has no refund object, and its
+        // refund endpoint returns the updated payment (confirmed against three
+        // stored gateway responses). `refunded` is the cumulative refunded
+        // total in halalas, and it is how settlement decides WHICH pending rows
+        // an event covers. The earlier version of this payload omitted it,
+        // which was a guess at the shape rather than the shape.
+        $pending = $booking->refresh()->refunds->first();
+
         $this->postJson('/webhooks/moyasar', [
             'type'         => 'refund.updated',
             'secret_token' => 'whsec_test',
-            'data'         => ['id' => 'pay_xyz'],
+            'data'         => [
+                'id'       => 'pay_xyz',
+                'refunded' => (int) round((float) $pending->amount * 100),
+                'metadata' => ['env' => config('app.env')],
+            ],
         ])->assertOk();
 
         $this->assertSame('succeeded', $booking->refresh()->refunds->first()->status,
