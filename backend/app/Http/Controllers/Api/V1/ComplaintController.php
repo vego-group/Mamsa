@@ -186,10 +186,32 @@ class ComplaintController extends Controller
         // Reducing to a date string first makes the timezone argument apply,
         // which is what R4 asks for — the boundary is a promise made to
         // someone standing in Saudi Arabia.
+        // The window closes N hours after the guest ACTUALLY leaves, which is
+        // the unit's check-out time — not midnight of the check-out day.
+        //
+        // Measuring from midnight quietly shortened R4's 48 hours to 36 for a
+        // 12:00 check-out, and the shortfall grew with every later time. The
+        // platform already records this per unit; not using it was the bug.
+        //
+        // A unit with no recorded time falls back to 12:00 rather than 00:00.
+        // 26 of 32 units carry exactly that, and it is what the documentation
+        // states — but the reason is narrower than the average: midnight would
+        // make OUR missing data cost the GUEST twelve hours of their deadline.
+        $checkOut = $booking->loadMissing('unit')->unit?->checkout_time;
+
+        $checkOut = $checkOut
+            ? Carbon::parse($checkOut)->format('H:i')
+            : (string) config('complaints.default_checkout_time');
+
+        // Opening stays at the start of the check-in day. A guest whose stay
+        // has begun can complain from that morning; tying it to check-in time
+        // would only ever narrow the window, and nothing asks for that.
         $opens = Carbon::parse(Carbon::parse($booking->start_date)->format('Y-m-d'), $tz)->startOfDay();
-        $shuts = Carbon::parse(Carbon::parse($booking->end_date)->format('Y-m-d'), $tz)
-            ->startOfDay()
-            ->addHours((int) config('complaints.window_hours_after_checkout'));
+
+        $shuts = Carbon::parse(
+            Carbon::parse($booking->end_date)->format('Y-m-d').' '.$checkOut,
+            $tz
+        )->addHours((int) config('complaints.window_hours_after_checkout'));
 
         if ($now->lt($opens)) {
             return ['code' => 'WINDOW_NOT_OPEN', 'message' => 'لا يمكن تقديم شكوى قبل بداية الإقامة'];
