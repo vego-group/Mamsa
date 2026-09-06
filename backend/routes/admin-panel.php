@@ -110,6 +110,20 @@ Route::prefix('admin')->group(function () {
         Route::get('payouts/ineligible', [AdminPanel\PayoutsController::class, 'ineligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.ineligible');
         Route::post('payouts/record', [AdminPanel\PayoutsController::class, 'record'])->middleware('admin.can:payouts.execute')->name('ap.payouts.record');
 
+        /* Complaints — spec §5.2 as amended by v1.2 §D5.
+         *
+         * Four verbs, two roles. `approve` fixes the amount and is superadmin
+         * only; `refund` executes exactly that amount and is finance only.
+         * Neither role holds both permissions — that separation is the control,
+         * so read the two different middleware strings as deliberate. */
+        Route::get('complaints', [AdminPanel\ComplaintsController::class, 'index'])->middleware('admin.can:complaints.view')->name('ap.complaints.index');
+        Route::get('complaints/{id}', [AdminPanel\ComplaintsController::class, 'show'])->middleware('admin.can:complaints.view')->name('ap.complaints.show');
+        Route::patch('complaints/{id}/status', [AdminPanel\ComplaintsController::class, 'status'])->middleware('admin.can:complaints.review')->name('ap.complaints.status');
+        Route::post('complaints/{id}/approve', [AdminPanel\ComplaintsController::class, 'approve'])->middleware('admin.can:complaints.approve')->name('ap.complaints.approve');
+        Route::patch('complaints/{id}/approval', [AdminPanel\ComplaintsController::class, 'amendApproval'])->middleware('admin.can:complaints.approve')->name('ap.complaints.approval');
+        Route::post('complaints/{id}/refund', [AdminPanel\ComplaintsController::class, 'refund'])->middleware('admin.can:complaints.execute_refund')->name('ap.complaints.refund');
+        Route::post('complaints/{id}/reject', [AdminPanel\ComplaintsController::class, 'reject'])->middleware('admin.can:complaints.approve')->name('ap.complaints.reject');
+
         // Approving a payout DESTINATION is wallets.adjust, not wallets.view:
         // finance records transfers, so it must not also approve where they go.
         Route::post('wallets/{partnerId}/bank/verify', [AdminPanel\WalletsController::class, 'verifyBank'])->middleware('admin.can:wallets.adjust')->name('ap.wallets.bank.verify');

@@ -42,4 +42,10 @@ Schedule::command('bookings:check-consistency --alert')
 
 // Release dates held by abandoned checkouts: unpaid pending bookings expire
 // after 60 min (the frontend reuses a pending booking within that window).
+/* G1: a refund the gateway accepted but never confirmed is invisible — nothing
+ * failed, so nothing is logged. Ask Moyasar hourly about anything past the
+ * reconcile threshold, and alert once it passes the alert threshold. */
+Schedule::command('complaints:reconcile-refunds --alert')
+    ->hourly()->withoutOverlapping()->appendOutputTo($scheduleLog);
+
 Schedule::command('bookings:expire-pending')->everyFifteenMinutes()->withoutOverlapping()->appendOutputTo($scheduleLog);
