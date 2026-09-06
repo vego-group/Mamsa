@@ -810,7 +810,63 @@ class ComplaintsTest extends TestCase
             \App\Notifications\SettlementOnUnexpectedState::class
         );
     }
+    /**
+     * A retry with the SAME key, while the first attempt is still pending,
+     * returns the original outcome — not REFUND_IN_FLIGHT.
+     *
+     * This pins an ORDERING, which is why it exists as its own test: the key
+     * check must run before the in-flight guard. Both orders are financially
+     * safe — neither creates a second refund — so nothing would fail loudly if
+     * they were swapped. What would change is what the admin is told: a retry
+     * after a dropped response would read "someone has already started a
+     * refund", which is their own first attempt, and sends them to support
+     * instead of onward.
+     *
+     * T4 covers the same key twice on the settled path. This covers it while a
+     * refund is genuinely in flight, which is the case the two checks contest.
+     */
+    public function test_a_retry_with_the_same_key_beats_the_in_flight_guard(): void
+    {
+        config(['moyasar.secret_key' => 'sk_test_fake']);
+
+        $booking = $this->stay();
+        $booking->payment->update(['moyasar_id' => 'pay_retry']);
+
+        $this->mock(\App\Services\MoyasarService::class, function ($m) {
+            // Once only: the retry must never reach the gateway again.
+            $m->shouldReceive('refund')->once()->andReturn(['id' => 'pay_retry', 'status' => 'paid']);
+        });
+
+        $complaint = $this->approved($booking, 50000);
+        $key       = (string) str()->uuid();
+
+        $first = $this->actingAs($this->finance, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/refund", [
+                'amountHalalas' => 50000, 'idempotencyKey' => $key,
+            ])->assertOk()->json();
+
+        $this->assertSame('pending', $first['status']);
+
+        // The response was lost; the client resends with the SAME key.
+        $retry = $this->actingAs($this->finance, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/refund", [
+                'amountHalalas' => 50000, 'idempotencyKey' => $key,
+            ])->assertOk()->json();
+
+        $this->assertTrue($retry['replayed'], 'the retry must be reported as a replay');
+        $this->assertSame($first['refundId'], $retry['refundId'], 'and must name the original refund');
+        $this->assertSame(1, Refund::count());
+
+        // And a genuinely different request is still refused.
+        $this->actingAs($this->finance, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/refund", [
+                'amountHalalas' => 50000, 'idempotencyKey' => (string) str()->uuid(),
+            ])->assertStatus(409)->assertJsonPath('code', 'REFUND_IN_FLIGHT');
+
+        $this->assertSame(1, Refund::count());
+    }
 }
+
 
 
 

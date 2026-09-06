@@ -303,8 +303,18 @@ class ComplaintsController extends Controller
             'idempotencyKey.required' => 'مفتاح الحماية من التكرار مطلوب',
         ]);
 
-        // The idempotency check comes FIRST, before the status and amount
-        // gates. A successful execution moves the complaint to
+        // ── ORDER IS LOAD-BEARING: the key check must stay ABOVE the
+        //    REFUND_IN_FLIGHT guard inside execute(). ──
+        //
+        // A retried request carrying the SAME key is the same request, and the
+        // in-flight guard exists to catch DIFFERENT ones. Reversed, the retry
+        // after a dropped response would be told "someone has already started a
+        // refund" — true of the caller's own first attempt, and read by the
+        // admin as somebody else acting. Both orders are financially safe; only
+        // one tells the truth about whose request succeeded.
+        //
+        // The idempotency check also comes first for its original reason: the
+        // status and amount gates below. A successful execution moves the complaint to
         // `resolved_refunded`, so a retried request — the double-submitted
         // form, the client that timed out and resent — would otherwise be
         // refused with 409 for the crime of having already worked. Spec §5.2

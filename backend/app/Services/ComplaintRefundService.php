@@ -65,7 +65,12 @@ class ComplaintRefundService
         string $idempotencyKey,
     ): Refund {
         // Replaying a key returns the original outcome untouched — the caller
-        // answers 200 with it. Checked before the transaction because a retry
+        // answers 200 with it.
+        //
+        // This must stay ABOVE the transaction: the in-flight guard inside it
+        // would otherwise reject a legitimate retry of the very request that
+        // created the pending row. Same key = same request; the guard is for
+        // different ones. Checked before the transaction because a retry
         // must be cheap, and re-checked inside it against the unique index,
         // which is what actually makes two simultaneous submissions safe.
         if ($existing = Refund::where('idempotency_key', $idempotencyKey)->first()) {
