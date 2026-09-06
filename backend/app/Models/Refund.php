@@ -78,6 +78,22 @@ class Refund extends Model
             === round((float) $this->amount, 2);
     }
 
+    /**
+     * What `moyasar_refund_id` actually holds: the PAYMENT id.
+     *
+     * Moyasar has no refund object. `POST /payments/{id}/refund` returns the
+     * updated payment, and the column has stored that payment's id since the
+     * cancellation engine shipped. Read it through this accessor so the name at
+     * the call site says what the value is.
+     *
+     * It is NOT unique: every refund against the same payment carries the same
+     * value. Never match a single refund on it.
+     */
+    public function gatewayPaymentId(): ?string
+    {
+        return $this->moyasar_refund_id;
+    }
+
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
