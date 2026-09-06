@@ -14,7 +14,9 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Support\Pricing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -39,6 +41,17 @@ class ComplaintsTest extends TestCase
         // against a shared key and whichever one runs sixth gets a 429.
         cache()->flush();
 
+        // Freeze the clock at midday Riyadh.
+        //
+        // The complaint window is computed from calendar days in Riyadh, so a
+        // test that builds dates from the real `now()` passes or fails
+        // depending on the hour it runs. That is how a genuine three-hour
+        // timezone bug hid here for a day: the tests only entered the affected
+        // band shortly after Riyadh midnight, and the suite happened not to run
+        // then. A fixed clock makes the boundary the subject of the test rather
+        // than the weather.
+        Carbon::setTestNow(Carbon::parse('2026-09-15 12:00:00', 'Asia/Riyadh'));
+
         foreach (['Individual', 'User', 'SuperAdmin', 'finance'] as $r) {
             Role::findOrCreate($r, 'web');
         }
@@ -57,6 +70,13 @@ class ComplaintsTest extends TestCase
         $this->finance->assignRole('finance');
 
         $this->unit = $this->makeUnit($this->partner);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     private function makeUnit(User $owner, bool $mamsaOwned = false): Unit
@@ -1030,7 +1050,112 @@ class ComplaintsTest extends TestCase
             );
         }
     }
+    /**
+     * Every column named in an eager-load select must actually exist.
+     *
+     * This test exists because the suite CANNOT catch such a mistake by running
+     * the query. Laravel quotes identifiers as "code", and SQLite has a
+     * documented compatibility quirk: a double-quoted name that matches no
+     * column is treated as a string LITERAL rather than rejected. So
+     * `with('booking:id,code')` runs green on SQLite forever and returns a 500
+     * on MySQL the moment a real session touches it — which is exactly what
+     * happened to /me/complaints on staging.
+     *
+     * `bookings` has never had a `code` column, in any environment. Asking the
+     * schema is engine-independent, so this catches the class the query never
+     * could.
+     */
+    public function test_eager_load_selects_name_only_real_columns(): void
+    {
+        $files = [
+            app_path('Http/Controllers/Dashboard/ComplaintController.php'),
+            app_path('Http/Controllers/AdminPanel/ComplaintsController.php'),
+            app_path('Http/Controllers/Api/V1/ComplaintController.php'),
+        ];
+
+        // 'booking:id,unit_id' → table `bookings`; 'booking.unit:id,name' → `units`
+        $tableFor = [
+            'booking'      => 'bookings',
+            'booking.unit' => 'units',
+            'user'         => 'users',
+            'attachments'  => 'booking_complaint_attachments',
+        ];
+
+        $checked = 0;
+
+        foreach ($files as $file) {
+            // Comments are stripped first: this file's own docblocks quote the
+            // very pattern being searched for, and a guard that trips on prose
+            // about itself is a guard nobody keeps.
+            $source = (string) file_get_contents($file);
+            $source = preg_replace('#/\*.*?\*/#s', '', $source);
+            $source = preg_replace('#//.*$#m', '', (string) $source);
+
+            preg_match_all("/'([a-z.]+):([a-z_,]+)'/i", (string) $source, $m, PREG_SET_ORDER);
+
+            foreach ($m as [$whole, $relation, $columns]) {
+                if (! isset($tableFor[$relation])) {
+                    continue;   // a relation this map does not cover
+                }
+
+                foreach (explode(',', $columns) as $column) {
+                    $this->assertTrue(
+                        Schema::hasColumn($tableFor[$relation], $column),
+                        "{$whole} in ".basename($file)." selects `{$column}`, which does not exist on `{$tableFor[$relation]}`. "
+                        .'SQLite will not fail on this — MySQL will, with a 500.'
+                    );
+                    $checked++;
+                }
+            }
+        }
+
+        $this->assertGreaterThan(0, $checked, 'the scan matched nothing — the pattern has drifted');
+    }
+    /**
+     * The window boundary is in RIYADH time, not the app timezone.
+     *
+     * The app runs in UTC and the dates are cast to `date`, so they arrive as
+     * UTC Carbons — and Carbon::parse() silently ignores its timezone argument
+     * when given a Carbon instead of a string. That computed the whole window
+     * three hours off: a guest could file three hours late, and could not file
+     * during the first three hours of their check-in day.
+     *
+     * The clock is pinned inside the three-hour band where the two
+     * interpretations disagree, so a regression cannot hide by running at a
+     * convenient hour — which is exactly how the original bug survived.
+     */
+    public function test_the_window_closes_on_riyadh_time_not_utc(): void
+    {
+        // 01:30 Riyadh on the 17th = 22:30 UTC on the 16th. A checkout on the
+        // 15th closes at 00:00 Riyadh on the 17th — so this is OUTSIDE by 90
+        // minutes in Riyadh, and inside by 90 minutes if computed in UTC.
+        Carbon::setTestNow(Carbon::parse('2026-09-17 01:30:00', 'Asia/Riyadh'));
+
+        $booking = $this->stay();
+        $booking->update([
+            'start_date' => Carbon::parse('2026-09-12', 'Asia/Riyadh'),
+            'end_date'   => Carbon::parse('2026-09-15', 'Asia/Riyadh'),
+        ]);
+
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$booking->id}/complaint", [
+                'description' => str_repeat('م', 40), 'contacted_partner' => true,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'WINDOW_CLOSED');
+
+        // And 90 minutes earlier — 22:30 Riyadh on the 16th — it is still open.
+        Carbon::setTestNow(Carbon::parse('2026-09-16 22:30:00', 'Asia/Riyadh'));
+
+        $this->actingAs($this->guest, 'sanctum')
+            ->postJson("/api/v1/bookings/{$booking->id}/complaint", [
+                'description' => str_repeat('م', 40), 'contacted_partner' => true,
+            ])
+            ->assertStatus(201);
+    }
 }
+
+
 
 
 
