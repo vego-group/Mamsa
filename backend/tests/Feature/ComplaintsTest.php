@@ -996,7 +996,42 @@ class ComplaintsTest extends TestCase
             ->getJson("/api/v1/bookings/{$none->id}/complaint")
             ->assertStatus(404)->assertJsonPath('code', 'NO_COMPLAINT');
     }
+    /**
+     * `/me/complaints` returns every complaint, unpaginated.
+     *
+     * The partner dashboard depends on this. It links a ledger row to a
+     * complaint by matching the row's `ref_code` (a booking code) against the
+     * complaint list it already holds — no extra request, no guessing. That
+     * only works while the list is complete.
+     *
+     * Adding pagination would break the link SILENTLY: rows past the first page
+     * would simply stop being clickable, with no error anywhere. This test is
+     * here so that change fails loudly instead, and so whoever makes it knows to
+     * tell the frontend — at which point the answer is to add `complaintId` to
+     * the ledger payload, which was deliberately not added now.
+     */
+    public function test_partner_complaints_are_returned_unpaginated(): void
+    {
+        for ($i = 0; $i < 3; $i++) {
+            $this->complaint($this->stay());
+        }
+
+        $body = $this->actingAs($this->partner, 'dashboard')
+            ->getJson('/me/complaints')->assertOk()->json();
+
+        $this->assertArrayHasKey('items', $body);
+        $this->assertCount(3, $body['items'], 'every complaint must be present');
+
+        foreach (['total', 'page', 'pageSize', 'links', 'meta', 'next_cursor'] as $paginationKey) {
+            $this->assertArrayNotHasKey(
+                $paginationKey,
+                $body,
+                "the partner list must stay unpaginated — the dashboard's ledger→complaint link depends on it"
+            );
+        }
+    }
 }
+
 
 
 
