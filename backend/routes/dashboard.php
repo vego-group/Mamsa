@@ -26,11 +26,23 @@ Route::post('auth/logout', [Dashboard\AuthController::class, 'logout'])->name('p
 Route::put('uploads/{upload}', [Dashboard\UploadController::class, 'receive'])
     ->middleware('signed')->name('pd.uploads.receive');
 
+/* ---- Complaint photos ----
+ * Signed, not session-authenticated: the same link is rendered in the guest
+ * app (Bearer), the admin console and the partner dashboard — three guards on
+ * two hosts. A short-lived signature is the one credential all three can hold,
+ * and unlike a session it expires on its own if the link is forwarded. */
+Route::get('complaints/attachments/{attachment}', \App\Http\Controllers\ComplaintAttachmentController::class)
+    ->middleware('signed')->name('complaints.attachment');
+
 /* ---- Moyasar webhook (secret-token verified in controller) ---- */
 Route::post('webhooks/moyasar', [Dashboard\WebhookController::class, 'moyasar'])->name('pd.webhook.moyasar');
 
 /* ---- Authenticated partner session ---- */
 Route::middleware(['auth:dashboard', 'throttle:120,1'])->group(function () {
+
+    /* Complaints against this partner's units — read-only (spec §5.3) */
+    Route::get('me/complaints', [Dashboard\ComplaintController::class, 'index'])->name('pd.complaints.index');
+    Route::get('me/complaints/{id}', [Dashboard\ComplaintController::class, 'show'])->name('pd.complaints.show');
 
     /* Profile */
     Route::get('me', [Dashboard\ProfileController::class, 'show'])->name('pd.me');

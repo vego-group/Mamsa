@@ -55,6 +55,55 @@ final class Pricing
     }
 
     /**
+     * Split ANY gross, VAT-inclusive amount at a GIVEN commission rate.
+     *
+     * The one place the arithmetic above is implemented. Both callers go
+     * through it, which is what makes "the refund uses the same logic as the
+     * booking" a property of the code rather than a promise in a document:
+     *
+     *   - {@see breakdown()} splits a booking at the rate live *right now*
+     *   - {@see \App\Models\Booking::splitRefund()} splits a refund at the
+     *     rate frozen on that booking
+     *
+     * The rate is a PARAMETER, never read from config here. A refund on a
+     * booking taken at 2% must return 2% commission even though the live rate
+     * is 10%; reading config would restate history and debit the partner the
+     * wrong amount. See Booking::LEGACY_COMMISSION_RATE.
+     *
+     * @param  float  $gross  GROSS, VAT-inclusive amount
+     * @param  float  $commissionRate  fraction, e.g. 0.10 — or 1.0 for a
+     *                                 Mamsa-owned unit, where there is no
+     *                                 partner and the platform keeps the net
+     * @return array{gross:float, net_base:float, vat:float, vat_rate:float,
+     *   commission_rate:float, commission_amount:float, partner_share:float}
+     */
+    public static function split(float $gross, float $commissionRate): array
+    {
+        $vatRate = self::vatRate();
+
+        $gross   = round($gross, 2);
+        $netBase = round($gross / (1 + $vatRate), 2);
+        $vat     = round($gross - $netBase, 2);          // subtraction keeps the invariant
+
+        // At a rate of 1.0 the platform keeps the whole net base. Taking it
+        // as-is rather than round($netBase * 1.0, 2) keeps partnerShare exactly
+        // 0.00 instead of a rounding crumb that would post a ledger entry for
+        // fractions of a halala.
+        $commission   = $commissionRate >= 1.0 ? $netBase : round($netBase * $commissionRate, 2);
+        $partnerShare = round($netBase - $commission, 2); // subtraction again
+
+        return [
+            'gross'             => $gross,
+            'net_base'          => $netBase,
+            'vat'               => $vat,
+            'vat_rate'          => $vatRate,
+            'commission_rate'   => $commissionRate,
+            'commission_amount' => $commission,
+            'partner_share'     => $partnerShare,
+        ];
+    }
+
+    /**
      * @param  float  $nightlyGross  GROSS (VAT-inclusive) price per night
      * @param  bool  $mamsaOwned  the unit belongs to the platform, not a partner
      * @return array{nights:int, nightly_rate:float, gross:float, net_base:float,
@@ -63,12 +112,6 @@ final class Pricing
      */
     public static function breakdown(float $nightlyGross, int $nights, bool $mamsaOwned = false): array
     {
-        $vatRate = self::vatRate();
-
-        $gross   = round($nightlyGross * $nights, 2);
-        $netBase = round($gross / (1 + $vatRate), 2);
-        $vat     = round($gross - $netBase, 2);          // subtraction keeps the invariant
-
         // Mamsa's cut of the partner's NET rental income — deducted from the
         // partner's payout, so it is NOT part of the guest-facing total.
         //
@@ -79,8 +122,13 @@ final class Pricing
         // platform keeps the whole net base instead, and the invariant
         // commission + partnerShare + vat === gross still holds exactly.
         $commissionRate = $mamsaOwned ? 1.0 : (float) config('booking.commission_rate');
-        $commission     = $mamsaOwned ? $netBase : round($netBase * $commissionRate, 2);
-        $partnerShare   = round($netBase - $commission, 2); // subtraction again
+
+        $split = self::split(round($nightlyGross * $nights, 2), $commissionRate);
+
+        $gross   = $split['gross'];
+        $netBase = $split['net_base'];
+        $vat     = $split['vat'];
+        $vatRate = $split['vat_rate'];
 
         return [
             'nights'            => $nights,
@@ -100,9 +148,9 @@ final class Pricing
             'total'             => $gross,
 
             // Internal settlement — never exposed on a guest surface (§1.7, §7).
-            'commission_rate'   => $commissionRate,
-            'commission_amount' => $commission,
-            'partner_share'     => $partnerShare,
+            'commission_rate'   => $split['commission_rate'],
+            'commission_amount' => $split['commission_amount'],
+            'partner_share'     => $split['partner_share'],
         ];
     }
 }

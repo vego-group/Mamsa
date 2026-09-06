@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\Auth\AdminAuthController;
 use App\Http\Controllers\Api\V1\CalendarController;
+use App\Http\Controllers\Api\V1\ComplaintController;
 use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
 use App\Http\Controllers\Api\V1\Auth\PartnerAuthController;
@@ -108,6 +109,7 @@ Route::prefix('v1')->group(function () {
             Route::get('profile', [UserController::class, 'profile'])->name('profile');
             Route::put('profile', [UserController::class, 'updateProfile'])->name('profile.update');
             Route::get('bookings', [UserController::class, 'bookings'])->name('bookings');
+            Route::get('complaints', [ComplaintController::class, 'index'])->name('complaints');
 
             // §7.2 / §7.3 — account management
             Route::post('change-phone', [UserController::class, 'changePhone'])
@@ -165,6 +167,12 @@ Route::prefix('v1')->group(function () {
             // Tax invoice — §7.1. Issued in Mamsa's name (supplier of record).
             Route::get('{booking}/invoice', [InvoiceController::class, 'show'])->name('invoice');
             Route::post('{booking}/cancel', [BookingController::class, 'cancel'])->name('cancel');
+
+            /* Complaints — spec §5.1. Throttled: filing is a one-per-booking
+             * act, so a burst is either a double-tap or abuse. */
+            Route::post('{booking}/complaint', [ComplaintController::class, 'store'])
+                ->middleware('throttle:6,1')->name('complaint.store');
+            Route::get('{booking}/complaint', [ComplaintController::class, 'show'])->name('complaint.show');
         });
 
         /* Payments — throttled to blunt card-testing / abuse of the charge path */

@@ -140,7 +140,21 @@ class PaymentController extends Controller
             'description' => 'حجز وحدة #'.$payment->booking_id,
             // pid lets the frontend callback page verify after the 3-DS redirect.
             'callback_url' => $this->frontendCallbackUrl().'?pid='.$payment->id,
-            'metadata' => ['payment_id' => $payment->id, 'booking_id' => $payment->booking_id],
+            'metadata' => [
+                'payment_id' => $payment->id,
+                'booking_id' => $payment->booking_id,
+                // Which environment created this payment.
+                //
+                // Moyasar's webhook registry is account-level and its payment
+                // object carries no livemode/mode field, so a staging event and
+                // a production event are indistinguishable on arrival. Today
+                // they are told apart only by the id being absent from the
+                // other database — which stops being true the moment staging is
+                // seeded from a production dump. Stamping the environment into
+                // metadata, which IS echoed back on the webhook, gives the
+                // handler something to check that does not depend on that.
+                'env' => (string) config('app.env'),
+            ],
         ];
 
         if (! empty($data['apple_pay_token'])) {

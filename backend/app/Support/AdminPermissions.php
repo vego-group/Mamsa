@@ -14,7 +14,16 @@ namespace App\Support;
  */
 final class AdminPermissions
 {
-    /** Every permission literal in the matrix (the superadmin set). */
+    /**
+     * The superadmin set.
+     *
+     * NOT "every literal in the matrix" any more, which is what it used to be.
+     * `complaints.execute_refund` is deliberately absent: the complaints
+     * contract splits deciding what is owed from moving the money, and a role
+     * that can do both is the thing that split exists to prevent (T12). It is
+     * the first permission superadmin does not hold, so read the omission as
+     * intentional rather than as an oversight to be tidied up.
+     */
     public const ALL = [
         'dashboard.view',
         'users.view', 'users.manage',
@@ -26,6 +35,7 @@ final class AdminPermissions
         'wallets.view', 'wallets.adjust',
         'payouts.view', 'payouts.execute', 'payouts.reverse', 'payouts.manage',
         'reports.financial', 'reports.operational',
+        'complaints.view', 'complaints.review', 'complaints.approve',
         'notifications.view', 'profile.view',
     ];
 
@@ -37,6 +47,15 @@ final class AdminPermissions
         'wallets.view',
         'payouts.view', 'payouts.execute',
         'reports.financial',
+
+        // Finance executes a refund but cannot decide its size: the amount is
+        // fixed beforehand by a superadmin and checked for exact equality at
+        // execution. That is what keeps this from amounting to `wallets.adjust`,
+        // which finance deliberately does not hold — a complaint refund debits
+        // a partner wallet, so an unbounded version of this would be that
+        // permission by another name.
+        'complaints.view', 'complaints.execute_refund',
+
         'notifications.view', 'profile.view',
     ];
 
