@@ -55,6 +55,33 @@
         <server name="MAIL_MAILER" value="array" force="true"/>
         <server name="BROADCAST_CONNECTION" value="null" force="true"/>
         <server name="REDIS_HOST" value="127.0.0.1" force="true"/>
+        <server name="REDIS_PORT" value="6379" force="true"/>
+        <server name="APP_ENV" value="testing" force="true"/>
+
+        <!--
+            INVENTORY — every key this container defines, and what tests get.
+            A key the container sets can only be overridden from <server>, so a
+            new one appearing here without a <server> line is a silent leak.
+            Regenerate with:  docker compose exec -T backend printenv
+
+              APP_ENV                  -> testing   (container says `local`)
+              APP_KEY                  -> container value, harmless
+              APP_URL                  -> container value, harmless
+              CACHE_STORE              -> array     (container says `redis`)
+              SESSION_DRIVER           -> array     (container says `redis`)
+              QUEUE_CONNECTION         -> sync      (container says `redis`)
+              REDIS_HOST / REDIS_PORT  -> loopback, so nothing reaches the
+                                          shared Redis even if something asks
+              DB_CONNECTION/DATABASE   -> sqlite / :memory:
+              DB_HOST/PORT/USERNAME/PASSWORD -> unused once sqlite is forced
+              SANCTUM_STATEFUL_DOMAINS -> container value, harmless
+              PHPIZE_DEPS              -> not read by Laravel
+
+            NOT defined by the container, so the <env> block below is
+            sufficient for them: MAIL_MAILER, BROADCAST_CONNECTION,
+            MOYASAR_*, SMS_*, and every other service credential. Tests
+            therefore cannot send real mail or real SMS.
+        -->
 
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
