@@ -1,0 +1,35 @@
+name: backend tree shape
+
+# The real control. A pre-push hook protects one clone and only after someone
+# runs `git config core.hooksPath .githooks`; this runs on every PR regardless
+# of who opened it or from where.
+#
+# It exists because pushing a monorepo-shaped branch to the backend-only repo
+# SUCCEEDS. Git raises nothing — the two layouts are unrelated histories, not
+# conflicting ones — so the mistake is invisible until someone opens the PR and
+# finds it unmergeable. That happened on 2026-09-06.
+
+on:
+  pull_request:
+
+jobs:
+  shape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The backend must sit at the repository root
+        run: |
+          if [ -d backend ]; then
+            echo "::error::This branch is monorepo-shaped — it contains backend/."
+            echo "::error::This repository holds the backend at its ROOT."
+            echo "::error::Push with: scripts/push-backend.sh <branch>"
+            exit 1
+          fi
+          for required in artisan composer.json app config routes; do
+            if [ ! -e "$required" ]; then
+              echo "::error::Missing $required at the repository root — wrong tree shape."
+              exit 1
+            fi
+          done
+          echo "✓ backend is at the root (artisan, app/, config/, routes/ present)"
