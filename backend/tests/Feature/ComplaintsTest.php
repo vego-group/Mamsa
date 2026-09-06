@@ -81,8 +81,11 @@ class ComplaintsTest extends TestCase
 
     private function makeUnit(User $owner, bool $mamsaOwned = false, ?string $checkoutTime = null): Unit
     {
-        return $owner->units()->create([
+        // Omitted rather than null when unset: checkout_time is NOT NULL, and
+        // writing an explicit null is a constraint violation, not a default.
+        return $owner->units()->create(array_filter([
             'checkout_time' => $checkoutTime,
+        ]) + [
             'unit_name' => 'استوديو', 'unit_type' => 'apartment',
             'code' => 'MRN'.fake()->unique()->numerify('#####'),
             'price' => 350, 'capacity' => 4, 'bedrooms' => 2, 'beds' => 3, 'bathrooms' => 1,
@@ -1205,10 +1208,14 @@ class ComplaintsTest extends TestCase
      * charge the guest twelve hours of their deadline for a gap in OUR data —
      * so a guest on such a unit gets exactly what a guest on a 12:00 unit gets.
      */
-    public function test_a_unit_with_no_checkout_time_falls_back_to_noon(): void
+    public function test_a_unit_created_without_a_checkout_time_gets_noon(): void
     {
-        $unit = $this->makeUnit($this->partner);          // checkout_time = null
-        $this->assertNull($unit->checkout_time, 'the fixture must actually have none');
+        // A NULL checkout_time is no longer representable — the column is NOT
+        // NULL as of the 2026_09_07 migration. What this pins is the guarantee
+        // that replaced it: a listing created without one is stored at 12:00,
+        // so the guest's window is never silently shortened by our missing data.
+        $unit = $this->makeUnit($this->partner);
+        $this->assertSame('12:00', substr((string) $unit->fresh()->checkout_time, 0, 5));
 
         $booking = $this->stay($unit);
         $booking->update([

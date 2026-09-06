@@ -60,5 +60,5 @@ return [
      * midnight — silently shortens the guest's window to 36 hours on exactly
      * the units where the platform is missing data. Our gap, their deadline.
      */
-    'default_checkout_time' => env('COMPLAINTS_DEFAULT_CHECKOUT_TIME', '12:00'),
+    'default_checkout_time' => env('COMPLAINTS_DEFAULT_CHECKOUT_TIME', \App\Models\Unit::DEFAULT_CHECKOUT_TIME),
 ];
