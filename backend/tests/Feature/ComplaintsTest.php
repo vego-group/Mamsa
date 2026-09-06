@@ -739,7 +739,79 @@ class ComplaintsTest extends TestCase
         $this->assertTrue($body['canReject']);
         $this->assertTrue($body['canAmendApproval']);
     }
+    /* ================= T23: settlement is the sink, and it is guarded ================= */
+
+    /**
+     * T23 — a settlement arriving on a rejected complaint writes the ledger but
+     * not the status, and raises an alert.
+     *
+     * The guards on reject, amend and execute are entrances; this is the sink.
+     * Guarding only the entrances leaves the next path anyone adds — an
+     * automated rejection, an admin tool, a cleanup job — free to reopen the
+     * hole with settle() carrying it out silently.
+     *
+     * The split is deliberate. The ledger records what HAPPENED and must reflect
+     * money that moved; the status records what was DECIDED and must not be
+     * overwritten. Suppressing both would be worse than either: money gone, and
+     * nothing in the ledger saying so.
+     *
+     * The state is forced directly here, because every ordinary route into it is
+     * now blocked — which is the point of the guards.
+     */
+    public function test_t23_settlement_on_a_rejected_complaint_writes_the_ledger_not_the_status(): void
+    {
+        $booking   = $this->stay();
+        $complaint = $this->approved($booking, 50000);
+
+        $refund = Refund::create([
+            'booking_id' => $booking->id, 'payment_id' => $booking->payment->id,
+            'complaint_id' => $complaint->id, 'reason' => Refund::REASON_COMPLAINT,
+            'type' => Refund::TYPE_REFUND, 'amount' => 500.00, 'refund_percent' => 50,
+            'amount_vat' => 65.22, 'amount_commission' => 43.48, 'amount_partner' => 391.30,
+            'status' => Refund::STATUS_SUCCEEDED,
+        ]);
+
+        // Force the state the guards exist to prevent.
+        $complaint->forceFill(['status' => BookingComplaint::STATUS_RESOLVED_REJECTED])->save();
+
+        app(\App\Services\ComplaintRefundService::class)->settle($refund->fresh());
+
+        // The money moved, so the ledger says so.
+        $entry = PartnerLedgerEntry::where('type', PartnerLedgerEntry::TYPE_REFUND_REVERSAL)->first();
+        $this->assertNotNull($entry, 'the ledger must record money that actually moved');
+        $this->assertEqualsWithDelta(-391.30, (float) $entry->amount, 0.001);
+
+        // The decision stands.
+        $this->assertSame(
+            BookingComplaint::STATUS_RESOLVED_REJECTED,
+            $complaint->fresh()->status,
+            'a recorded decision must not be overwritten by settlement'
+        );
+
+        Notification::assertSentTo(
+            $this->superadmin,
+            \App\Notifications\SettlementOnUnexpectedState::class
+        );
+    }
+
+    /** The normal path is untouched: approved settles to resolved_refunded, silently. */
+    public function test_settlement_from_approved_still_closes_the_complaint(): void
+    {
+        $complaint = $this->approved($this->stay(), 50000);
+
+        $this->actingAs($this->finance, 'admin-panel')
+            ->postJson("/admin/complaints/{$complaint->id}/refund", [
+                'amountHalalas' => 50000, 'idempotencyKey' => (string) str()->uuid(),
+            ])->assertOk();
+
+        $this->assertSame(BookingComplaint::STATUS_RESOLVED_REFUNDED, $complaint->fresh()->status);
+        Notification::assertNotSentTo(
+            $this->superadmin,
+            \App\Notifications\SettlementOnUnexpectedState::class
+        );
+    }
 }
+
 
 
 
