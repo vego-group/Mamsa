@@ -199,7 +199,11 @@ interface WalletTransaction {
   type: 'earning' | 'payout' | 'refund_reversal' | 'adjustment';
   amount: number;          // signed: + credit, − debit
   balanceAfter: number;
-  refType: 'booking' | 'payout' | 'manual';
+  // 'refund' added 2026-09-07 with the complaints feature. A refund_reversal
+  // row points at the REFUND (ref_id = refunds.id), not at the booking —
+  // ref_code carries the booking code for display. 'seed' also appears on
+  // staging, written by the ledger seeder; it never occurs in production.
+  refType: 'booking' | 'payout' | 'manual' | 'refund';
   refId: string;
   refCode: string;         // human-readable, show this
   description: string;     // Arabic, show verbatim
