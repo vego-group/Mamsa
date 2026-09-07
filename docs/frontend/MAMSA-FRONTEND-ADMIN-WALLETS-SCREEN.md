@@ -153,7 +153,7 @@ Last **10** entries, newest first. **Not paginated** — the paginated feed is �
   "type": "payout",                        // earning | payout | refund_reversal | adjustment
   "amount": -87800,                        // SIGNED: + credit, − debit
   "balanceAfter": 0,                       // running balance AFTER this row
-  "refType": "payout",                     // booking | payout | manual
+  "refType": "payout",                     // booking | payout | manual | refund
   "refId": "po_1",                         // deep-link target
   "refCode": "PO-2026-08-0001",
   "description": "تحويل بنكي PO-2026-08-0001",   // Arabic, render as-is
@@ -228,7 +228,7 @@ Cursor-paginated, newest first:
 |---|---|---|
 | `earning` | `+` | the guest **checks out** — the partner's share of a finished stay |
 | `payout` | `−` | finance records the monthly transfer |
-| `refund_reversal` | `−` | a guest refund clawed back after the earning landed |
+| `refund_reversal` | `−` | a guest refund clawed back after the earning landed. **`refType` is `refund`** and `refId` is the refund's id — not the booking's. `refCode` carries the booking code, which is what the row displays and what links it back to a complaint. |
 | `adjustment` | `±` | manual correction, **including crediting back a reversed payout** |
 
 A **reversed payout produces two rows**: the original `payout` (−) and an `adjustment` (+) of the same
