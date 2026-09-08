@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Models\AuditLog;
 use App\Models\Booking;
 use App\Models\BookingComplaint;
+use App\Models\BookingComplaintAttachment;
 use App\Models\PartnerLedgerEntry;
 use App\Models\Payment;
 use App\Models\Refund;
@@ -1258,7 +1259,95 @@ class ComplaintsTest extends TestCase
                 'description' => str_repeat('م', 40), 'contacted_partner' => true,
             ])->assertStatus(201);
     }
+    /* ================= the signed attachment route ================= */
+
+    /**
+     * A signed attachment link serves the file, and a missing one 404s.
+     *
+     * The route lives in routes/dashboard.php, whose middleware group has NO
+     * SubstituteBindings. A model type-hint there does not 404 on a miss —
+     * Laravel's container builds an EMPTY model, and the request dies with a
+     * TypeError from Flysystem when `path` turns out to be null. That is a 500
+     * on a perfectly valid signed link, which is what happened on staging.
+     *
+     * Every other route in that file takes a string id and resolves it by hand,
+     * for exactly this reason.
+     */
+    public function test_a_signed_attachment_link_serves_the_file(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+
+        $complaint = $this->complaint($this->stay());
+        $path      = 'complaints/'.$complaint->id.'/photo.jpg';
+        \Illuminate\Support\Facades\Storage::disk('local')->put($path, 'binary-content');
+
+        $attachment = $complaint->attachments()->create([
+            'path' => $path, 'mime' => 'image/jpeg', 'size_bytes' => 14,
+        ]);
+
+        $this->get(BookingComplaintAttachment::signedUrl($attachment))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/jpeg')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+    }
+
+    /** An unsigned or tampered link is refused before anything is read. */
+    public function test_an_unsigned_attachment_link_is_refused(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+
+        $complaint  = $this->complaint($this->stay());
+        $attachment = $complaint->attachments()->create([
+            'path' => 'complaints/x/p.jpg', 'mime' => 'image/jpeg', 'size_bytes' => 1,
+        ]);
+
+        $this->get("/complaints/attachments/{$attachment->id}")->assertStatus(403);
+    }
+
+    /** A signed link to an id that does not exist is a 404, never a 500. */
+    public function test_a_signed_link_to_a_missing_attachment_is_a_404(): void
+    {
+        $url = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+            'complaints.attachment',
+            now()->addMinutes(15),
+            ['attachment' => 999999],
+        );
+
+        $this->get($url)->assertStatus(404);
+    }
+    /**
+     * Route model binding works in the dashboard group.
+     *
+     * It did not until 2026-09-08, and the failure mode is why this test exists:
+     * a Model type-hint was neither resolved nor rejected. The container built
+     * an EMPTY model, every property read null, and the request died far from
+     * the cause — a Flysystem TypeError about a null path, on a perfectly valid
+     * signed link.
+     *
+     * The existing routes all take `string $id`, so nothing here depended on the
+     * fix. What it buys is that the next person who reaches for a type-hint gets
+     * a 404 on a miss instead of a 500 with an unrelated message.
+     */
+    public function test_model_binding_resolves_in_the_dashboard_group(): void
+    {
+        $bound = app(\Illuminate\Contracts\Http\Kernel::class);
+
+        $this->assertContains(
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            app('router')->getMiddlewareGroups()['dashboard-api'],
+            'the dashboard group must substitute bindings — without it a Model '
+            .'type-hint yields an empty model rather than a 404'
+        );
+
+        $this->assertContains(
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            app('router')->getMiddlewareGroups()['admin-panel'],
+            'the admin group has the same exposure'
+        );
+    }
 }
+
+
 
 
 
