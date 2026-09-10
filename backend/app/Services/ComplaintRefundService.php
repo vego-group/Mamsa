@@ -16,10 +16,10 @@ use App\Notifications\ComplaintRefundFailed;
 use App\Notifications\ComplaintRefundSettled;
 use App\Notifications\RefundSettlementAmbiguous;
 use App\Notifications\SettlementOnUnexpectedState;
+use App\Support\OpsAlert;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Notification;
 
 /**
  * Executing and settling a complaint refund — complaints/refunds spec v1.2.
@@ -534,27 +534,15 @@ class ComplaintRefundService
         }
     }
 
-    /** Route an operational alert to the configured recipients (G1). */
+    /**
+     * Route an operational alert to the configured recipients (G1).
+     *
+     * The routing itself moved to OpsAlert when the late-payment path needed
+     * the same recipients; this stays as the name the rest of the service uses.
+     */
     private function alert(object $notification): void
     {
-        try {
-            $recipients = config('complaints.alert_recipients');
-
-            if (! empty($recipients)) {
-                Notification::route('mail', $recipients)->notify($notification);
-
-                return;
-            }
-
-            // Empty config degrades to today's behaviour rather than to silence.
-            $admins = User::role('SuperAdmin')->where('is_active', true)->get();
-
-            if ($admins->isNotEmpty()) {
-                Notification::send($admins, $notification);
-            }
-        } catch (\Throwable $e) {
-            report($e);
-        }
+        OpsAlert::raise($notification);
     }
 
     /** Public so the reconciliation command can raise the same alert. */
