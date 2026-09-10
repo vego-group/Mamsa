@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support\Dashboard;
 
+use App\Models\CancellationPolicy;
 use App\Models\Unit;
+use App\Support\Units\UnitLicense;
 
 /**
  * Maps a Unit model to the partner-dashboard contract shape (§4). Kept separate
@@ -22,55 +24,65 @@ class UnitPresenter
         // Prefer eager-loaded aggregates (withCount/withAvg) to avoid N+1 on
         // list endpoints; fall back to the model accessors for single fetches.
         $reviewsCount = $unit->reviews_count ?? $unit->reviews()->count();
-        $avgRating    = $unit->reviews_avg_rating ?? $unit->avg_rating;
+        $avgRating = $unit->reviews_avg_rating ?? $unit->avg_rating;
 
         return [
-            'id'                   => 'u_'.$unit->id,
-            'code'                 => $unit->code,
-            'name'                 => $unit->unit_name,
-            'type'                 => $unit->unit_type,
-            'status'               => $unit->approval_status,
+            'id' => 'u_'.$unit->id,
+            'code' => $unit->code,
+            'name' => $unit->unit_name,
+            'type' => $unit->unit_type,
+            'status' => $unit->approval_status,
             // Draft fields can be null (partial body) — don't coerce to 0.
-            'pricePerNight'        => $unit->price !== null ? (float) $unit->price : null,
+            'pricePerNight' => $unit->price !== null ? (float) $unit->price : null,
             // Preset slug; units that never chose one inherit the platform
             // default (moderate) — echo what the engine would actually apply.
-            'cancellationPolicy'   => $unit->cancellationPolicy?->key ?? self::defaultPolicyKey(),
-            'bedrooms'             => $unit->bedrooms !== null ? (int) $unit->bedrooms : null,
+            'cancellationPolicy' => $unit->cancellationPolicy?->key ?? self::defaultPolicyKey(),
+            'bedrooms' => $unit->bedrooms !== null ? (int) $unit->bedrooms : null,
             // Number of beds (عدد الأسرّة) — distinct from bedrooms.
-            'beds'                 => $unit->beds !== null ? (int) $unit->beds : null,
-            'capacity'             => $unit->capacity !== null ? (int) $unit->capacity : null,
-            'bathrooms'            => $unit->bathrooms !== null ? (int) $unit->bathrooms : null,
-            'rating'               => $reviewsCount > 0 ? round((float) $avgRating, 1) : null,
-            'reviewsCount'         => (int) $reviewsCount,
-            'city'                 => Maps::cityToSlug($unit->city),
-            'district'             => $unit->district,
-            'description'          => $unit->description,
-            'amenities'            => Maps::amenitiesToKeys($unit->features->pluck('name')),
-            'checkIn'              => self::hm($unit->checkin_time),
-            'checkOut'             => self::hm($unit->checkout_time),
-            'lat'                  => $unit->lat !== null ? (float) $unit->lat : null,
-            'lng'                  => $unit->lng !== null ? (float) $unit->lng : null,
-            'address'              => $unit->address,
+            'beds' => $unit->beds !== null ? (int) $unit->beds : null,
+            'capacity' => $unit->capacity !== null ? (int) $unit->capacity : null,
+            'bathrooms' => $unit->bathrooms !== null ? (int) $unit->bathrooms : null,
+            'rating' => $reviewsCount > 0 ? round((float) $avgRating, 1) : null,
+            'reviewsCount' => (int) $reviewsCount,
+            'city' => Maps::cityToSlug($unit->city),
+            'district' => $unit->district,
+            'description' => $unit->description,
+            'amenities' => Maps::amenitiesToKeys($unit->features->pluck('name')),
+            'checkIn' => self::hm($unit->checkin_time),
+            'checkOut' => self::hm($unit->checkout_time),
+            'lat' => $unit->lat !== null ? (float) $unit->lat : null,
+            'lng' => $unit->lng !== null ? (float) $unit->lng : null,
+            'address' => $unit->address,
             'tourismLicenseNumber' => $unit->tourism_permit_no,
             'tourismLicenseFileId' => $unit->tourism_permit_file,
-            'ownershipDocFileId'   => $unit->ownership_doc_file,
-            'photos'               => $unit->images
+            // The reviewer's job on a building is to check the number the
+            // partner TYPED against the number written on the permit they
+            // uploaded. The system already refuses a group larger than the
+            // declared count, so the human check is on the declaration itself —
+            // which is only possible if the screen shows both, and the size of
+            // the group the claim is being made for.
+            'licenseType' => $unit->license_type,
+            'licensedUnitsCount' => $unit->licensed_units_count !== null
+                ? (int) $unit->licensed_units_count : null,
+            'groupSize' => UnitLicense::groupSize($unit),
+            'ownershipDocFileId' => $unit->ownership_doc_file,
+            'photos' => $unit->images
                 ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
                 ->map(fn ($img) => [
                     // The source fileId (stable, re-sendable in photoFileIds on edit)
                     // when the photo came via the presign flow; else the row id.
-                    'id'       => $img->file_id ?: 'ph'.$img->id,
-                    'url'      => $img->url,
-                    'isCover'  => $cover && $img->id === $cover->id,
-                    'width'    => $img->width !== null ? (int) $img->width : null,
-                    'height'   => $img->height !== null ? (int) $img->height : null,
+                    'id' => $img->file_id ?: 'ph'.$img->id,
+                    'url' => $img->url,
+                    'isCover' => $cover && $img->id === $cover->id,
+                    'width' => $img->width !== null ? (int) $img->width : null,
+                    'height' => $img->height !== null ? (int) $img->height : null,
                     'variants' => $img->variant_urls,
                 ])->values(),
-            'rejectionReason'      => $unit->approval_status === 'rejected' ? $unit->rejection_reason : null,
-            'publicUrl'            => $unit->approval_status === 'approved'
+            'rejectionReason' => $unit->approval_status === 'rejected' ? $unit->rejection_reason : null,
+            'publicUrl' => $unit->approval_status === 'approved'
                 ? rtrim((string) config('dashboard.public_site_url'), '/').'/units/'.$unit->code
                 : null,
-            'updatedAt'            => $unit->updated_at?->toIso8601ZuluString(),
+            'updatedAt' => $unit->updated_at?->toIso8601ZuluString(),
         ];
     }
 
@@ -79,7 +91,7 @@ class UnitPresenter
 
     private static function defaultPolicyKey(): ?string
     {
-        return self::$defaultPolicyKey ??= \App\Models\CancellationPolicy::query()
+        return self::$defaultPolicyKey ??= CancellationPolicy::query()
             ->orderByDesc('is_default')->value('key');
     }
 

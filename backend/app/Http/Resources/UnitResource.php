@@ -2,6 +2,12 @@
 
 namespace App\Http\Resources;
 
+use App\Models\CancellationPolicy;
+use App\Models\DashboardUpload;
+use App\Models\PartnerDetail;
+use App\Support\Dashboard\Maps;
+use App\Support\Media;
+use App\Support\Pricing;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -10,10 +16,10 @@ class UnitResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'                  => $this->id,
-            'name'                => $this->unit_name,
-            'type'                => $this->unit_type,
-            'code'                => $this->code,
+            'id' => $this->id,
+            'name' => $this->unit_name,
+            'type' => $this->unit_type,
+            'code' => $this->code,
             // The STABLE identity of a listing, for favourites, links and any
             // client-side cache.
             //
@@ -22,25 +28,25 @@ class UnitResource extends JsonResource
             // id once one is booked — and a favourited building then reads as
             // unfavourited. Always present, so a client never has to branch:
             // the group's ULID for a building, `u<id>` for a standalone unit.
-            'listing_id'          => $this->unit_group_id ?: 'u'.$this->id,
+            'listing_id' => $this->unit_group_id ?: 'u'.$this->id,
             // How many apartments in this building are bookable. 1 for a
             // standalone listing, so a client can read it unconditionally.
             // Present only where the controller computed it -- a resource that
             // guessed would be guessing about availability.
-            'available_count'     => $this->whenNotNull($this->available_count),
-            'price'               => $this->price,
-            'capacity'            => $this->capacity,
-            'bedrooms'            => $this->bedrooms,
-            'beds'                => $this->beds,
-            'bathrooms'           => $this->bathrooms,
-            'area'                => $this->area,
-            'city'                => $this->city,
-            'district'            => $this->district,
-            'lat'                 => $this->lat,
-            'lng'                 => $this->lng,
-            'description'         => $this->description,
-            'checkin_time'        => $this->checkin_time,
-            'checkout_time'       => $this->checkout_time,
+            'available_count' => $this->whenNotNull($this->available_count),
+            'price' => $this->price,
+            'capacity' => $this->capacity,
+            'bedrooms' => $this->bedrooms,
+            'beds' => $this->beds,
+            'bathrooms' => $this->bathrooms,
+            'area' => $this->area,
+            'city' => $this->city,
+            'district' => $this->district,
+            'lat' => $this->lat,
+            'lng' => $this->lng,
+            'description' => $this->description,
+            'checkin_time' => $this->checkin_time,
+            'checkout_time' => $this->checkout_time,
             // The EFFECTIVE preset key, not the dead `cancellation_policy` enum
             // column it used to echo. That column only ever held `no_cancel` /
             // `48_hours` — neither of which is a policy the refund engine knows
@@ -62,16 +68,16 @@ class UnitResource extends JsonResource
                 $this->relationLoaded('cancellationPolicy'),
                 fn () => $this->policyDetails(),
             ),
-            'status'              => $this->status,
-            'is_featured'         => (bool) $this->is_featured,
+            'status' => $this->status,
+            'is_featured' => (bool) $this->is_featured,
             // Uniform KSA VAT rate applied to every unit (15%). Exposed so the
             // storefront never hardcodes it.
-            'tax_percent'         => \App\Support\Pricing::taxPercent(),
+            'tax_percent' => Pricing::taxPercent(),
             // Needed for a `newest` sort to mean anything client-side, and so a
             // "new listing" badge is read from the record rather than invented.
-            'created_at'          => $this->created_at?->toIso8601ZuluString(),
-            'approval_status'     => $this->approval_status,
-            'rejection_reason'    => $this->when(
+            'created_at' => $this->created_at?->toIso8601ZuluString(),
+            'approval_status' => $this->approval_status,
+            'rejection_reason' => $this->when(
                 in_array($this->approval_status, ['rejected']),
                 $this->rejection_reason
             ),
@@ -99,31 +105,37 @@ class UnitResource extends JsonResource
                     // before booking, and the public payload stays byte-identical.
                     // The edit form needs it, so the owner must get it back —
                     // without this a saved address reloads blank and looks lost.
-                    'address'             => $this->address,
+                    'address' => $this->address,
                     // Multi-unit building membership. Gated with the rest, not
                     // because a door number is a secret, but because the PUBLIC
                     // payload is a contract the frontend has signed off at
                     // exactly 30 keys — and the guest card shows the building,
                     // not the door. The partner's own list needs both to tell a
                     // hundred otherwise identical listings apart.
-                    'unit_group_id'       => $this->unit_group_id,
-                    'apartment_no'        => $this->apartment_no,
-                    'tourism_permit_no'   => $this->tourism_permit_no,
-                    'company_license_no'  => $this->company_license_no,
-                    'tourism_permit_url'  => \App\Models\DashboardUpload::resolveUrl($this->tourism_permit_file),
-                    'ownership_doc_url'   => \App\Models\DashboardUpload::resolveUrl($this->ownership_doc_file),
+                    'unit_group_id' => $this->unit_group_id,
+                    'apartment_no' => $this->apartment_no,
+                    // Owner-only, like the rest of this block: which permit the
+                    // listing trades under is the partner's business and the
+                    // reviewer's, not a guest's.
+                    'license_type' => $this->license_type,
+                    'licensed_units_count' => $this->licensed_units_count !== null
+                        ? (int) $this->licensed_units_count : null,
+                    'tourism_permit_no' => $this->tourism_permit_no,
+                    'company_license_no' => $this->company_license_no,
+                    'tourism_permit_url' => DashboardUpload::resolveUrl($this->tourism_permit_file),
+                    'ownership_doc_url' => DashboardUpload::resolveUrl($this->ownership_doc_file),
                     // Partner-scoped, surfaced here so the unit form can show
                     // whether it is already on file without a second request.
-                    'bank_certificate_url' => \App\Models\DashboardUpload::resolveUrl(
+                    'bank_certificate_url' => DashboardUpload::resolveUrl(
                         $this->owner?->partnerDetail?->bank_certificate_file,
                     ),
                 ],
             ),
 
-            'images'              => $this->whenLoaded('images', function () {
+            'images' => $this->whenLoaded('images', function () {
                 // Real photos only — ignore the generic default placeholder rows.
                 $real = $this->images->filter(
-                    fn ($img) => filled($img->path) && $img->path !== \App\Support\Media::defaultImagePath()
+                    fn ($img) => filled($img->path) && $img->path !== Media::defaultImagePath()
                 );
 
                 if ($real->isNotEmpty()) {
@@ -134,35 +146,33 @@ class UnitResource extends JsonResource
                         ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
                         ->values()
                         ->map(fn ($img) => [
-                            'id'      => $img->id,
-                            'url'     => $img->url,
+                            'id' => $img->id,
+                            'url' => $img->url,
                             'is_main' => (bool) $img->is_main,
                             // Null until the derivative set exists (legacy rows,
                             // or a file the processor could not read). Clients
                             // fall back to `url`.
-                            'width'    => $img->width !== null ? (int) $img->width : null,
-                            'height'   => $img->height !== null ? (int) $img->height : null,
+                            'width' => $img->width !== null ? (int) $img->width : null,
+                            'height' => $img->height !== null ? (int) $img->height : null,
                             'variants' => $img->variant_urls,
                         ]);
                 }
 
                 // No real photo yet → the single bundled default image.
                 return [[
-                    'id'       => 0,
-                    'url'      => \App\Support\Media::defaultImageUrl(),
-                    'is_main'  => true,
-                    'width'    => null,
-                    'height'   => null,
+                    'id' => 0,
+                    'url' => Media::defaultImageUrl(),
+                    'is_main' => true,
+                    'width' => null,
+                    'height' => null,
                     'variants' => null,
                 ]];
             }),
             // Legacy Arabic-string list (kept for existing consumers)…
-            'features'            => $this->whenLoaded('features', fn () =>
-                $this->features->pluck('name')
+            'features' => $this->whenLoaded('features', fn () => $this->features->pluck('name')
             ),
             // …and the structured form: stable `key` (null → generic icon) + label.
-            'amenities'           => $this->whenLoaded('features', fn () =>
-                \App\Support\Dashboard\Maps::amenityPairs($this->features->pluck('name'))
+            'amenities' => $this->whenLoaded('features', fn () => Maps::amenityPairs($this->features->pluck('name'))
             ),
             // Prefer the eager-loaded aggregates. Computing these per row cost
             // TWO queries per unit, so a 50-item page ran 100 extra queries to
@@ -171,16 +181,16 @@ class UnitResource extends JsonResource
             // `avg_rating` is 0 (never null) when there are no reviews, and
             // `reviews_count` is the real count — so a client can tell "unrated"
             // from "rated zero" by reading the count, not the average.
-            'avg_rating'          => round((float) ($this->reviews_avg_rating ?? $this->reviews()->avg('rating')), 1),
-            'reviews_count'       => (int) ($this->reviews_count ?? $this->reviews()->count()),
-            'owner'               => $this->whenLoaded('owner', fn () => [
-                'id'          => $this->owner->id,
-                'name'        => $this->owner->name,
+            'avg_rating' => round((float) ($this->reviews_avg_rating ?? $this->reviews()->avg('rating')), 1),
+            'reviews_count' => (int) ($this->reviews_count ?? $this->reviews()->count()),
+            'owner' => $this->whenLoaded('owner', fn () => [
+                'id' => $this->owner->id,
+                'name' => $this->owner->name,
                 // individual | company — companies were showing as "مالك فردي".
-                'type'        => $this->owner->partnerDetail?->type ?? 'individual',
-                'is_verified' => $this->owner->partnerDetail?->status === \App\Models\PartnerDetail::STATUS_APPROVED,
+                'type' => $this->owner->partnerDetail?->type ?? 'individual',
+                'is_verified' => $this->owner->partnerDetail?->status === PartnerDetail::STATUS_APPROVED,
                 // No avatar storage yet — null so the UI keeps its initials fallback.
-                'avatar_url'  => null,
+                'avatar_url' => null,
             ]),
         ];
     }
@@ -213,21 +223,21 @@ class UnitResource extends JsonResource
 
         return [
             'template' => $policy->key,
-            'name'     => $policy->name_ar,
-            'tiers'    => $policy->tiers->map(fn ($t) => [
+            'name' => $policy->name_ar,
+            'tiers' => $policy->tiers->map(fn ($t) => [
                 'min_hours_before_checkin' => (int) $t->min_hours_before_checkin,
-                'refund_percent'           => (int) $t->refund_percent,
-                'label'                    => $t->label_ar,
+                'refund_percent' => (int) $t->refund_percent,
+                'label' => $t->label_ar,
             ])->values()->all(),
         ];
     }
 
     /** Per-request memo so unit lists don't re-query the default policy N times. */
-    private static ?\App\Models\CancellationPolicy $defaultPolicy = null;
+    private static ?CancellationPolicy $defaultPolicy = null;
 
-    private static function defaultPolicy(): ?\App\Models\CancellationPolicy
+    private static function defaultPolicy(): ?CancellationPolicy
     {
-        return self::$defaultPolicy ??= \App\Models\CancellationPolicy::with('tiers')
+        return self::$defaultPolicy ??= CancellationPolicy::with('tiers')
             ->orderByDesc('is_default')
             ->first();
     }
