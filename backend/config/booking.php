@@ -43,4 +43,18 @@ return [
     // frontend ships the verification screen — flipping it earlier would
     // block every existing phone-only guest from booking.
     'require_verified_email' => (bool) env('BOOKING_REQUIRE_VERIFIED_EMAIL', false),
+
+    /*
+     * How long an unpaid booking holds its nights.
+     *
+     * Read by the availability predicate, so the release is immediate when the
+     * clock passes — `bookings:expire-pending` only tidies the status afterwards.
+     *
+     * 60 is deliberately today's behaviour rather than the 15 the inventory
+     * contract proposed. A guest waiting on a bank OTP over a slow connection
+     * loses their booking at 15, and a shorter hold makes the payment-lands-
+     * after-cancellation case MORE frequent, not less. It is a value to lower on
+     * measured checkout durations, not to guess at.
+     */
+    'hold_minutes' => (int) env('BOOKING_HOLD_MINUTES', 60),
 ];

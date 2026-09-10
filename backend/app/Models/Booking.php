@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\Pricing;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,9 +12,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class Booking extends Model
 {
     /** Unpaid booking awaiting payment (renamed from 'pending' 2026-08-13). */
-    public const STATUS_PENDING   = 'pending_payment';
+    public const STATUS_PENDING = 'pending_payment';
+
     public const STATUS_CONFIRMED = 'confirmed';
+
     public const STATUS_COMPLETED = 'completed';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     /**
@@ -43,7 +48,7 @@ class Booking extends Model
      */
     public const LEGACY_COMMISSION_RATE = 0.02;
 
-    /** @param \Illuminate\Database\Eloquent\Builder $q */
+    /** @param Builder $q */
     public function scopeRevenue($q)
     {
         // Qualify the column — this scope is used in queries joined to `units`,
@@ -100,11 +105,14 @@ class Booking extends Model
      */
     public function splitRefund(float $refundGross): array
     {
-        return \App\Support\Pricing::split($refundGross, (float) $this->commission_rate);
+        return Pricing::split($refundGross, (float) $this->commission_rate);
     }
 
     protected $fillable = [
         'unit_id',
+        'units_count',
+        'hold_expires_at',
+        'idempotency_key',
         'user_id',
         'start_date',
         'end_date',
@@ -131,21 +139,22 @@ class Booking extends Model
     ];
 
     protected $casts = [
-        'start_date'            => 'date',
-        'end_date'              => 'date',
-        'nightly_rate'          => 'float',
-        'subtotal'              => 'float',
-        'service_fee'           => 'float',
-        'service_fee_percent'   => 'float',
-        'tax_percent'           => 'float',
-        'cleaning_fee'          => 'float',
-        'taxes'                 => 'float',
-        'commission_rate'       => 'float',
-        'commission_amount'     => 'float',
-        'partner_share'         => 'float',
-        'total_amount'          => 'float',
+        'hold_expires_at' => 'datetime',
+        'start_date' => 'date',
+        'end_date' => 'date',
+        'nightly_rate' => 'float',
+        'subtotal' => 'float',
+        'service_fee' => 'float',
+        'service_fee_percent' => 'float',
+        'tax_percent' => 'float',
+        'cleaning_fee' => 'float',
+        'taxes' => 'float',
+        'commission_rate' => 'float',
+        'commission_amount' => 'float',
+        'partner_share' => 'float',
+        'total_amount' => 'float',
         'cancellation_snapshot' => 'array',
-        'cancelled_at'          => 'datetime',
+        'cancelled_at' => 'datetime',
     ];
 
     public function unit(): BelongsTo

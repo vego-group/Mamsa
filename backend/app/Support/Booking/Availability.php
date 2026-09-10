@@ -6,7 +6,10 @@ namespace App\Support\Booking;
 
 use App\Models\Booking;
 use App\Models\Unit;
+use App\Models\UnitBlockedDate;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * One definition of "these dates are taken".
@@ -24,9 +27,15 @@ use Illuminate\Database\Eloquent\Builder;
 final class Availability
 {
     /**
-     * Statuses that hold dates. `pending_payment` is included deliberately: a
-     * guest partway through checkout has a claim on the nights, or two people
+     * Statuses that can hold dates. `pending_payment` is included deliberately:
+     * a guest partway through checkout has a claim on the nights, or two people
      * would pay for the same room.
+     *
+     * Membership is necessary but no longer sufficient — an unpaid booking also
+     * has to be within its hold. Read stillHolding(), not this list: a query
+     * built on the list alone counts abandoned checkouts as occupying nights.
+     * Kept because it still names the two statuses correctly, and callers that
+     * want the pair (rather than the predicate) are asking a different question.
      */
     public const BLOCKING_STATUSES = [Booking::STATUS_PENDING, Booking::STATUS_CONFIRMED];
 
@@ -52,9 +61,36 @@ final class Availability
     {
         return Booking::query()
             ->where('unit_id', $unitId)
-            ->whereIn('status', self::BLOCKING_STATUSES)
+            ->where(self::stillHolding(...))
             ->whereDate('start_date', '<', $end)
             ->whereDate('end_date', '>', $start);
+    }
+
+    /**
+     * Which bookings are still holding their nights.
+     *
+     * A confirmed stay always is. An unpaid one holds only until its expiry
+     * passes — and that expiry is read HERE, in the predicate, rather than
+     * waited for. Before this, an abandoned checkout kept its nights until
+     * `bookings:expire-pending` got to it: a 60-minute age on a job that runs
+     * every 15, so up to 75 minutes of a unit being unbookable because someone
+     * closed a tab. Now the clock releases it and the job only tidies up, which
+     * also means a job that fails to run costs nothing but untidy rows.
+     *
+     * A NULL expiry keeps holding. Every booking made before the column existed
+     * has one, and treating "no expiry" as "expired" would have released live
+     * checkouts the moment it deployed.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Builder|Builder  $query
+     */
+    private static function stillHolding($query): void
+    {
+        $query->where('status', Booking::STATUS_CONFIRMED)
+            ->orWhere(fn ($q) => $q
+                ->where('status', Booking::STATUS_PENDING)
+                ->where(fn ($q) => $q
+                    ->whereNull('hold_expires_at')
+                    ->orWhere('hold_expires_at', '>', now())));
     }
 
     /**
@@ -65,12 +101,12 @@ final class Availability
      * create enforce — a listing that advertised availability on its own rules
      * would be the same lie in a wider place.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Unit>  $units
+     * @param  Builder<Unit>  $units
      */
     public static function onlyFree(Builder $units, string $start, string $end): void
     {
         $units->whereDoesntHave('bookings', fn (Builder $q) => $q
-            ->whereIn('status', self::BLOCKING_STATUSES)
+            ->where(self::stillHolding(...))
             ->whereDate('start_date', '<', $end)
             ->whereDate('end_date', '>', $start));
 
@@ -116,7 +152,7 @@ final class Availability
      * identical number, and two implementations of "how many are free" is how
      * two screens end up disagreeing.
      *
-     * @param  \Illuminate\Support\Collection<int, Unit>  $units
+     * @param  Collection<int, Unit>  $units
      */
     public static function attachCounts($units, ?string $start = null, ?string $end = null): void
     {
@@ -134,18 +170,53 @@ final class Availability
             }
 
             $counts = $siblings
-                ->select('unit_group_id', \Illuminate\Support\Facades\DB::raw('COUNT(*) as aggregate'))
+                ->select('unit_group_id', DB::raw('COUNT(*) as aggregate'))
                 ->groupBy('unit_group_id')
                 ->pluck('aggregate', 'unit_group_id');
         }
 
+        // A standalone unit is a building of one — but "one" only if it is
+        // actually free. Reporting a flat 1 was correct on the SEARCH listing,
+        // where onlyFree() has already removed anything taken, and wrong
+        // everywhere else: GET /units/{id} applies no such filter, so a unit
+        // with a confirmed booking over the requested dates answered
+        // `available_count: 1` while POST /units/{id}/availability answered 0
+        // for the same dates. That is the disagreement this class exists to
+        // prevent, in the direction that matters most — the detail page
+        // offering a stay the booking endpoint then refuses.
+        //
+        // Two queries for the whole page rather than a probe per unit.
+        $taken = [];
+        $solo = $units->filter(fn (Unit $u) => ! $u->unit_group_id);
+
+        if ($start && $end && $solo->isNotEmpty()) {
+            $soloIds = $solo->pluck('id')->all();
+
+            $taken = array_flip(array_merge(
+                Booking::query()
+                    ->whereIn('unit_id', $soloIds)
+                    ->where(self::stillHolding(...))
+                    ->whereDate('start_date', '<', $end)
+                    ->whereDate('end_date', '>', $start)
+                    ->distinct()->pluck('unit_id')->all(),
+                UnitBlockedDate::query()
+                    ->whereIn('unit_id', $soloIds)
+                    ->overlapping($start, $end)
+                    ->distinct()->pluck('unit_id')->all(),
+            ));
+        }
+
         foreach ($units as $unit) {
-            // A standalone unit is a building of one. Reporting null would make
-            // every existing listing look like it had no availability.
-            $unit->setAttribute(
-                'available_count',
-                $unit->unit_group_id ? (int) ($counts[$unit->unit_group_id] ?? 0) : 1,
-            );
+            if ($unit->unit_group_id) {
+                $unit->setAttribute('available_count', (int) ($counts[$unit->unit_group_id] ?? 0));
+
+                continue;
+            }
+
+            // Without a window there is nothing to be taken FOR, so a listed
+            // standalone unit counts as one. Reporting null would make every
+            // existing listing look like it had no availability.
+            $unit->setAttribute('available_count', isset($taken[$unit->id]) ? 0 : 1);
         }
     }
 
@@ -265,7 +336,7 @@ final class Availability
     private static function nights(mixed $start, mixed $end): ?array
     {
         $first = self::day($start);
-        $last  = date('Y-m-d', strtotime(self::day($end).' -1 day'));
+        $last = date('Y-m-d', strtotime(self::day($end).' -1 day'));
 
         return $last < $first ? null : ['start' => $first, 'end' => $last];
     }
@@ -287,7 +358,7 @@ final class Availability
 
         foreach ($spans as $span) {
             $start = max($span['start'], $from);
-            $end   = min($span['end'], $to);
+            $end = min($span['end'], $to);
 
             if ($start <= $end) {
                 $clipped[] = ['start' => $start, 'end' => $end];
