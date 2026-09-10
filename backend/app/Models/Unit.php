@@ -50,6 +50,8 @@ class Unit extends Model
         'lng',
         'description',
         'tourism_permit_no',
+        'license_type',
+        'licensed_units_count',
         'tourism_permit_file',
         'ownership_doc_file',
         'company_license_no',
@@ -69,12 +71,12 @@ class Unit extends Model
 
     protected $casts = [
         'submitted_at' => 'datetime',
-        'price'        => 'float',
-        'lat'          => 'float',
-        'lng'      => 'float',
+        'price' => 'float',
+        'lat' => 'float',
+        'lng' => 'float',
         'capacity' => 'integer',
         'bedrooms' => 'integer',
-        'beds'     => 'integer',
+        'beds' => 'integer',
         'bathrooms' => 'integer',
         'is_featured' => 'boolean',
         'mamsa_owned' => 'boolean',
@@ -125,7 +127,7 @@ class Unit extends Model
         return $this->hasMany(Review::class);
     }
 
-    public function getAvgRatingAttribute(): float|null
+    public function getAvgRatingAttribute(): ?float
     {
         return $this->reviews()->avg('rating');
     }

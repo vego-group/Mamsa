@@ -7,8 +7,11 @@ namespace App\Http\Controllers\AdminPanel;
 use App\Models\Unit;
 use App\Notifications\UnitReviewResult;
 use App\Support\AdminPanel\UnitPresenter;
+use App\Support\Units\LicenseViolation;
+use App\Support\Units\UnitLicense;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 /**
  * Approvals (unit review queue) — BACKEND_SPEC §5.7. A request is a unit in
@@ -27,15 +30,15 @@ class ApprovalsController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $args  = $this->listArgs($request);
+        $args = $this->listArgs($request);
         $query = Unit::query()->with(['owner.partnerDetail', 'images'])->where('approval_status', 'pending');
 
         if ($rt = $this->cleanParam($request->query('requestType'))) {
             match ($rt) {
-                'new'                   => $query->whereNull('rejection_reason'),
-                'resubmission'          => $query->whereNotNull('rejection_reason'),
+                'new' => $query->whereNull('rejection_reason'),
+                'resubmission' => $query->whereNotNull('rejection_reason'),
                 'reapproval_after_edit' => $query->whereRaw('1 = 0'), // not tracked yet
-                default                 => null,
+                default => null,
             };
         }
         if ($pt = $this->cleanParam($request->query('partnerType'))) {
@@ -45,7 +48,7 @@ class ApprovalsController extends Controller
             $s = $args['search'];
             $query->where(function ($q) use ($s) {
                 $q->where('unit_name', 'like', "%{$s}%")->orWhere('code', 'like', "%{$s}%")->orWhere('city', 'like', "%{$s}%")
-                  ->orWhereHas('owner', fn ($o) => $o->where('name', 'like', "%{$s}%"));
+                    ->orWhereHas('owner', fn ($o) => $o->where('name', 'like', "%{$s}%"));
             });
         }
 
@@ -88,24 +91,24 @@ class ApprovalsController extends Controller
         // 3 of 7". Stays useful after the backfill window, whenever a decision
         // is missing a timestamp for any reason.
         $sample = (clone $measurable)->count();
-        $avg    = $measurable->selectRaw($this->avgHoursSql('submitted_at', 'updated_at').' as h')->value('h');
+        $avg = $measurable->selectRaw($this->avgHoursSql('submitted_at', 'updated_at').' as h')->value('h');
 
         $approved = $decided('approved');
         $rejected = $decided('rejected');
 
         return response()->json([
-            'pendingReview'  => Unit::where('approval_status', 'pending')->count(),
-            'approved'       => $approved,
-            'rejected'       => $rejected,
+            'pendingReview' => Unit::where('approval_status', 'pending')->count(),
+            'approved' => $approved,
+            'rejected' => $rejected,
             'avgReviewHours' => $avg === null ? null : round((float) $avg, 1),
             'avgReviewSample' => $sample,
-            'range'          => $range,
+            'range' => $range,
 
             // Legacy keys — kept so a client that predates `range` keeps working.
             // They mirror the requested window rather than always "today", which
             // is only a difference when range !== 'today'.
-            'approvedToday'  => $approved,
-            'rejectedToday'  => $rejected,
+            'approvedToday' => $approved,
+            'rejectedToday' => $rejected,
         ]);
     }
 
@@ -119,14 +122,14 @@ class ApprovalsController extends Controller
      * `today` is the calendar day in Asia/Riyadh — not a rolling 24 hours, and
      * not the UTC day the app otherwise runs in. `7d`/`30d` roll back from now.
      *
-     * @return array{0:\Illuminate\Support\Carbon, 1:\Illuminate\Support\Carbon}
+     * @return array{0:Carbon, 1:Carbon}
      */
     private function rangeWindow(string $range): array
     {
         $tz = 'Asia/Riyadh';
 
         return match ($range) {
-            '7d'  => [now()->subDays(7), now()],
+            '7d' => [now()->subDays(7), now()],
             '30d' => [now()->subDays(30), now()],
             // Convert the Riyadh day boundaries into the UTC instants the
             // timestamps are actually stored in.
@@ -145,19 +148,31 @@ class ApprovalsController extends Controller
             $this->fail('NOT_FOUND', 'الطلب غير موجود', 404);
         }
 
-        $owner  = $u->owner;
+        $owner = $u->owner;
         $rating = $owner ? $owner->unitReviews()->avg('rating') : null;
 
         return response()->json(array_merge($this->units->approvalRow($u), [
-            'unit'            => $this->units->detail($u),
+            'unit' => $this->units->detail($u),
             'partnerVerified' => $owner?->partnerDetail?->verified_at !== null,
-            'partnerRating'   => $rating !== null ? round((float) $rating, 1) : 0.0,
+            'partnerRating' => $rating !== null ? round((float) $rating, 1) : 0.0,
         ]));
     }
 
     public function approve(string $id): JsonResponse
     {
         $unit = $this->pendingUnit($id);
+
+        // The licence rule is not a form hint the console may wave through.
+        // An apartment in a building of ten, approved under a permit that
+        // covers one, is a unit trading illegally — and the reviewer clicking
+        // approve is exactly the person who might do it by mistake, because
+        // the offending fact is on a sibling row rather than this one.
+        try {
+            UnitLicense::guardGroupSize($unit, UnitLicense::groupSize($unit));
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422);
+        }
+
         $unit->update(['approval_status' => 'approved', 'rejection_reason' => null]);
         $this->notifyOwner($unit, true);
 
@@ -168,7 +183,7 @@ class ApprovalsController extends Controller
     {
         $data = $this->validate($request, [
             'reason' => ['required', 'string', 'max:500'],
-            'notes'  => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
         ], ['reason.required' => 'يجب إدخال سبب الرفض']);
 
         $unit = $this->pendingUnit($id);

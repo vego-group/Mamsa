@@ -2,16 +2,20 @@
 
 namespace App\Http\Controllers\Api\V1\Partner;
 
-use App\Support\Units\UnitCloner;
-use App\Support\Units\UnitWriter;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
+use App\Models\Feature;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
+use App\Support\Units\LicenseViolation;
+use App\Support\Units\UnitCloner;
+use App\Support\Units\UnitLicense;
+use App\Support\Units\UnitWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
@@ -27,53 +31,67 @@ class UnitController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'unit_name'           => ['required', 'string', 'max:150'],
-            'unit_type'           => ['required', 'in:apartment,studio,villa'],
-            'price'               => ['required', 'numeric', 'min:1'],
-            'capacity'            => ['required', 'integer', 'min:1'],
-            'bedrooms'            => ['required', 'integer', 'min:0'],
-            'beds'                => ['nullable', 'integer', 'min:1', 'max:20'],
-            'bathrooms'           => ['nullable', 'integer', 'min:1', 'max:10'],
-            'city'                => ['required', 'string', 'max:100'],
-            'district'            => ['nullable', 'string', 'max:150'],
+            'unit_name' => ['required', 'string', 'max:150'],
+            'unit_type' => ['required', 'in:apartment,studio,villa'],
+            'price' => ['required', 'numeric', 'min:1'],
+            'capacity' => ['required', 'integer', 'min:1'],
+            'bedrooms' => ['required', 'integer', 'min:0'],
+            'beds' => ['nullable', 'integer', 'min:1', 'max:20'],
+            'bathrooms' => ['nullable', 'integer', 'min:1', 'max:10'],
+            'city' => ['required', 'string', 'max:100'],
+            'district' => ['nullable', 'string', 'max:150'],
             // Required to submit for review (UnitWriter::submitErrors), and this
             // surface had no way to set it — a partner could never satisfy a
             // gate they could not reach.
-            'address'             => ['nullable', 'string', 'max:255'],
-            'lat'                 => ['nullable', 'numeric'],
-            'lng'                 => ['nullable', 'numeric'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'lat' => ['nullable', 'numeric'],
+            'lng' => ['nullable', 'numeric'],
             // Bounded to match the shared writer. Left unbounded, this surface
             // could store a description the partner dashboard and admin console
             // then refuse to save back, stranding the unit on whichever screen
             // wrote it.
-            'description'         => ['nullable', 'string', 'max:'.\App\Support\Units\UnitWriter::MAX_DESCRIPTION],
-            'tourism_permit_no'   => ['nullable', 'string', 'max:50'],
-            'company_license_no'  => ['nullable', 'string', 'max:50'],
+            'description' => ['nullable', 'string', 'max:'.UnitWriter::MAX_DESCRIPTION],
+            'tourism_permit_no' => ['nullable', 'string', 'max:50'],
+            'license_type' => ['nullable', 'in:'.implode(',', UnitLicense::TYPES)],
+            'licensed_units_count' => ['nullable', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
+            'company_license_no' => ['nullable', 'string', 'max:50'],
             'cancellation_policy' => ['nullable', 'in:no_cancel,48_hours'],
-            'checkin_time'        => ['nullable', 'date_format:H:i'],
-            'checkout_time'       => ['nullable', 'date_format:H:i'],
-            'features'            => ['nullable', 'array'],
-            'features.*'          => ['string', 'max:100'],
+            'checkin_time' => ['nullable', 'date_format:H:i'],
+            'checkout_time' => ['nullable', 'date_format:H:i'],
+            'features' => ['nullable', 'array'],
+            'features.*' => ['string', 'max:100'],
         ]);
+
+        // The pair has to be coherent before the row exists — a listing saved
+        // with a facility permit and no unit count would fail the CHECK on
+        // MySQL and pass on sqlite, which is the worst of both.
+        try {
+            UnitLicense::guardFields(
+                $data['license_type'] ?? null,
+                isset($data['licensed_units_count']) ? (int) $data['licensed_units_count'] : null,
+            );
+        } catch (LicenseViolation $e) {
+            return $this->licenseRefusal($e);
+        }
 
         // NOT NULL column: an omitted or blank value takes the documented
         // default instead of failing the save.
         if (empty($data['checkout_time'])) {
-            $data['checkout_time'] = \App\Models\Unit::DEFAULT_CHECKOUT_TIME;
+            $data['checkout_time'] = Unit::DEFAULT_CHECKOUT_TIME;
         }
 
         $unit = $request->user()->units()->create(array_merge(
             \Arr::except($data, ['features']),
             [
                 'approval_status' => 'draft',
-                'code'            => strtoupper(Str::random(8)),
-                'calendar_token'  => Str::random(60),
+                'code' => strtoupper(Str::random(8)),
+                'calendar_token' => Str::random(60),
             ]
         ));
 
         if (! empty($data['features'])) {
             $featureIds = collect($data['features'])->map(function ($name) {
-                return \App\Models\Feature::firstOrCreate(['name' => $name])->id;
+                return Feature::firstOrCreate(['name' => $name])->id;
             });
             $unit->features()->sync($featureIds);
         }
@@ -97,34 +115,36 @@ class UnitController extends Controller
         }
 
         $data = $request->validate([
-            'unit_name'           => ['sometimes', 'string', 'max:150'],
-            'unit_type'           => ['sometimes', 'in:apartment,studio,villa'],
-            'price'               => ['sometimes', 'numeric', 'min:1'],
-            'capacity'            => ['sometimes', 'integer', 'min:1'],
-            'bedrooms'            => ['sometimes', 'integer', 'min:0'],
-            'beds'                => ['sometimes', 'nullable', 'integer', 'min:1', 'max:20'],
-            'bathrooms'           => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10'],
-            'city'                => ['sometimes', 'string', 'max:100'],
-            'district'            => ['nullable', 'string', 'max:150'],
+            'unit_name' => ['sometimes', 'string', 'max:150'],
+            'unit_type' => ['sometimes', 'in:apartment,studio,villa'],
+            'price' => ['sometimes', 'numeric', 'min:1'],
+            'capacity' => ['sometimes', 'integer', 'min:1'],
+            'bedrooms' => ['sometimes', 'integer', 'min:0'],
+            'beds' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:20'],
+            'bathrooms' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10'],
+            'city' => ['sometimes', 'string', 'max:100'],
+            'district' => ['nullable', 'string', 'max:150'],
             // Required to submit for review (UnitWriter::submitErrors), and this
             // surface had no way to set it — a partner could never satisfy a
             // gate they could not reach.
-            'address'             => ['nullable', 'string', 'max:255'],
-            'lat'                 => ['nullable', 'numeric'],
-            'lng'                 => ['nullable', 'numeric'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'lat' => ['nullable', 'numeric'],
+            'lng' => ['nullable', 'numeric'],
             // Bounded to match the shared writer. Left unbounded, this surface
             // could store a description the partner dashboard and admin console
             // then refuse to save back, stranding the unit on whichever screen
             // wrote it.
-            'description'         => ['nullable', 'string', 'max:'.\App\Support\Units\UnitWriter::MAX_DESCRIPTION],
-            'tourism_permit_no'   => ['nullable', 'string', 'max:50'],
-            'company_license_no'  => ['nullable', 'string', 'max:50'],
+            'description' => ['nullable', 'string', 'max:'.UnitWriter::MAX_DESCRIPTION],
+            'tourism_permit_no' => ['nullable', 'string', 'max:50'],
+            'license_type' => ['nullable', 'in:'.implode(',', UnitLicense::TYPES)],
+            'licensed_units_count' => ['nullable', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
+            'company_license_no' => ['nullable', 'string', 'max:50'],
             'cancellation_policy' => ['nullable', 'in:no_cancel,48_hours'],
-            'checkin_time'        => ['nullable', 'date_format:H:i'],
-            'checkout_time'       => ['nullable', 'date_format:H:i'],
-            'status'              => ['nullable', 'in:available,unavailable'],
-            'features'            => ['nullable', 'array'],
-            'features.*'          => ['string', 'max:100'],
+            'checkin_time' => ['nullable', 'date_format:H:i'],
+            'checkout_time' => ['nullable', 'date_format:H:i'],
+            'status' => ['nullable', 'in:available,unavailable'],
+            'features' => ['nullable', 'array'],
+            'features.*' => ['string', 'max:100'],
         ]);
 
         // FR-066: editing an approved unit resets it to pending
@@ -134,14 +154,27 @@ class UnitController extends Controller
         }
 
         if (array_key_exists('checkout_time', $data) && empty($data['checkout_time'])) {
-            $data['checkout_time'] = \App\Models\Unit::DEFAULT_CHECKOUT_TIME;
+            $data['checkout_time'] = Unit::DEFAULT_CHECKOUT_TIME;
         }
 
-        $unit->update(\Arr::except($data, ['features']));
+        // Licence columns are group-wide and have exactly one writer. Pulled
+        // out of the ordinary update so no path can set them on a single
+        // apartment and leave its siblings claiming a different permit.
+        $licenseFields = \Arr::only($data, ['license_type', 'licensed_units_count']);
+
+        if ($licenseFields !== []) {
+            try {
+                UnitLicense::applyToGroup($unit, $licenseFields);
+            } catch (LicenseViolation $e) {
+                return $this->licenseRefusal($e);
+            }
+        }
+
+        $unit->update(\Arr::except($data, ['features', 'license_type', 'licensed_units_count']));
 
         if (array_key_exists('features', $data)) {
             $featureIds = collect($data['features'])->map(function ($name) {
-                return \App\Models\Feature::firstOrCreate(['name' => $name])->id;
+                return Feature::firstOrCreate(['name' => $name])->id;
             });
             $unit->features()->sync($featureIds);
         }
@@ -170,16 +203,16 @@ class UnitController extends Controller
 
     /** UnitWriter field names → the names this surface accepts. */
     private const SUBMIT_FIELD_MAP = [
-        'name'                 => 'unit_name',
-        'type'                 => 'unit_type',
-        'pricePerNight'        => 'price',
+        'name' => 'unit_name',
+        'type' => 'unit_type',
+        'pricePerNight' => 'price',
         'tourismLicenseNumber' => 'tourism_permit_no',
         'tourismLicenseFileId' => 'tourism_permit_file',
-        'photos'               => 'images',
+        'photos' => 'images',
         // `location` covers lat AND lng together — the check is that the pair
         // lands inside Saudi, not that either number is present, so splitting it
         // across two fields would report a failure neither one caused.
-        'location'             => 'location',
+        'location' => 'location',
     ];
 
     public function submit(Request $request, Unit $unit): JsonResponse
@@ -199,13 +232,13 @@ class UnitController extends Controller
         if ($errors = UnitWriter::submitErrors($unit)) {
             return response()->json([
                 'message' => 'الوحدة غير مكتملة، أكمل البيانات المطلوبة قبل الإرسال',
-                'code'    => 'UNIT_INCOMPLETE',
+                'code' => 'UNIT_INCOMPLETE',
                 // Mapped to the names THIS surface uses, so a client can put the
                 // message on the field the partner actually edits. The writer
                 // speaks the dashboard's camelCase; v1 is snake_case, and
                 // returning its keys verbatim would point at inputs that do not
                 // exist here.
-                'errors'  => collect($errors)
+                'errors' => collect($errors)
                     ->mapWithKeys(fn (string $msg, string $field) => [
                         self::SUBMIT_FIELD_MAP[$field] ?? $field => [$msg],
                     ])
@@ -242,15 +275,15 @@ class UnitController extends Controller
             // Three ways to say the same thing, because partners think about
             // this differently: "these exact doors", "401 through 420", or
             // simply "I have five of them".
-            'numbers'        => ['required_without_all:from,count', 'array', 'max:'.UnitCloner::MAX_GROUP],
-            'numbers.*'      => ['string', 'max:20'],
-            'from'           => ['required_without_all:numbers,count', 'integer', 'min:0', 'max:99999'],
-            'to'             => ['required_with:from', 'integer', 'min:0', 'max:99999', 'gte:from'],
-            'prefix'         => ['nullable', 'string', 'max:5'],
+            'numbers' => ['required_without_all:from,count', 'array', 'max:'.UnitCloner::MAX_GROUP],
+            'numbers.*' => ['string', 'max:20'],
+            'from' => ['required_without_all:numbers,count', 'integer', 'min:0', 'max:99999'],
+            'to' => ['required_with:from', 'integer', 'min:0', 'max:99999', 'gte:from'],
+            'prefix' => ['nullable', 'string', 'max:5'],
             // The plain count. Numbers become 1..N, so the group still has a
             // stable identity per apartment and re-sending the same count adds
             // nothing — raising it to 8 later simply adds the missing three.
-            'count'          => ['required_without_all:numbers,from', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
+            'count' => ['required_without_all:numbers,from', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
             // Off by default: a permit issued per apartment does not cover its
             // neighbours, and copying it would put an admin in front of 99
             // listings evidenced by a licence that is not theirs.
@@ -267,6 +300,16 @@ class UnitController extends Controller
                 return $this->groupTooLarge((int) $data['count']);
             }
 
+            // The permit is checked BEFORE anything is written. `ensureTotal`
+            // creates rows, and a listing that turns out to be unlicensed
+            // halfway through leaves apartments behind that nobody meant to
+            // create — and that an admin then has to review.
+            try {
+                UnitLicense::guardGroupSize($unit, (int) $data['count']);
+            } catch (LicenseViolation $e) {
+                return $this->licenseRefusal($e);
+            }
+
             $group = UnitCloner::ensureTotal($unit, (int) $data['count'], $copyDocuments);
 
             return $this->groupResponse($group);
@@ -281,25 +324,46 @@ class UnitController extends Controller
             return $this->groupTooLarge($size);
         }
 
+        try {
+            UnitLicense::guardGroupSize($unit, $size);
+        } catch (LicenseViolation $e) {
+            return $this->licenseRefusal($e);
+        }
+
         $group = UnitCloner::assign($unit, $numbers, $copyDocuments);
 
         return $this->groupResponse($group);
+    }
+
+    /**
+     * One shape for every licence refusal: 422 with the code the dashboard
+     * branches on, because each rule has a different remedy and a sentence
+     * cannot be branched on.
+     */
+    private function licenseRefusal(LicenseViolation $e): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage(),
+            'code' => $e->reason,
+            'meta' => $e->meta,
+        ], 422);
     }
 
     private function groupTooLarge(int $size): JsonResponse
     {
         return response()->json([
             'message' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد، والمطلوب '.$size,
-            'code'    => 'GROUP_TOO_LARGE',
+            'code' => 'GROUP_TOO_LARGE',
         ], 422);
     }
 
-    /** @param  \Illuminate\Support\Collection<int, Unit>  $group */
+    /** @param  Collection<int, Unit>  $group */
     private function groupResponse($group): JsonResponse
     {
         return response()->json([
             'message' => 'المبنى يحتوي الآن على '.$group->count().' وحدة',
-            'data'    => UnitResource::collection($group->load(['images', 'features'])),
+            'data' => UnitResource::collection($group->load(['images', 'features'])),
         ], 201);
     }
 

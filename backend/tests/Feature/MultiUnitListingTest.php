@@ -49,6 +49,11 @@ class MultiUnitListingTest extends TestCase
     private function listing(string $name = 'برج الملقا'): Unit
     {
         $unit = $this->partner->units()->create([
+            // A building needs a facility permit now — the licence rule is not
+            // optional, so every fixture that expands one has to carry it.
+            'license_type' => \App\Support\Units\UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 100,
+
             'unit_name' => $name, 'unit_type' => 'apartment',
             'code' => 'GRP'.fake()->unique()->numerify('#####'),
             'price' => 500, 'capacity' => 2, 'bedrooms' => 1, 'beds' => 2,
