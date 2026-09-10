@@ -10,6 +10,7 @@ use App\Models\Unit;
 use App\Models\UnitBlockedDate;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -83,8 +84,12 @@ class BookingAvailabilityTest extends TestCase
 
         $this->actingAs($this->guest(), 'sanctum')
             ->postJson('/api/v1/bookings', $this->body($unit, 12, 14))
-            ->assertStatus(422)
-            ->assertJsonPath('message', 'الوحدة محجوزة في هذه الفترة');
+            // 409 with a CODE, not 422 with a sentence: the request was fine,
+            // the nights were not. Asserting the code rather than the Arabic
+            // means rewording the message cannot silently change the contract.
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'INSUFFICIENT_INVENTORY')
+            ->assertJsonPath('meta.available_count', 0);
     }
 
     public function test_a_partner_closure_also_blocks_the_create(): void
@@ -94,8 +99,10 @@ class BookingAvailabilityTest extends TestCase
 
         $this->actingAs($this->guest(), 'sanctum')
             ->postJson('/api/v1/bookings', $this->body($unit, 12, 14))
-            ->assertStatus(422)
-            ->assertJsonPath('message', 'الوحدة غير متاحة في هذه الفترة');
+            // A closure and a clash are different answers, and the client is
+            // told which by the code — they used to differ only in prose.
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'UNIT_BLOCKED');
     }
 
     public function test_the_second_of_two_bookings_for_the_same_nights_loses(): void
@@ -111,7 +118,7 @@ class BookingAvailabilityTest extends TestCase
 
         $this->actingAs($this->guest(), 'sanctum')
             ->postJson('/api/v1/bookings', $this->body($unit, 12, 14))
-            ->assertStatus(422);
+            ->assertStatus(409);
 
         $this->assertSame(1, Booking::where('unit_id', $unit->id)->count());
     }
@@ -125,7 +132,7 @@ class BookingAvailabilityTest extends TestCase
 
         $this->actingAs($this->guest(), 'sanctum')
             ->postJson('/api/v1/bookings', $this->body($unit, 12, 14))
-            ->assertStatus(422);
+            ->assertStatus(409);
 
         $this->assertSame(1, Booking::where('unit_id', $unit->id)->count());
     }
@@ -133,7 +140,7 @@ class BookingAvailabilityTest extends TestCase
     public function test_a_different_unit_is_unaffected(): void
     {
         $taken = $this->unit();
-        $free  = $this->unit();
+        $free = $this->unit();
         $this->booking($taken, 10, 15, Booking::STATUS_CONFIRMED);
 
         $this->actingAs($this->guest(), 'sanctum')
@@ -253,6 +260,156 @@ class BookingAvailabilityTest extends TestCase
         return now()->addDays($offset)->toDateString();
     }
 
+    /* ---------- the hold, and what it releases ---------- */
+
+    public function test_an_expired_hold_stops_blocking_before_any_job_runs(): void
+    {
+        // The point of the column: no cleanup command is invoked here. If the
+        // nights are still held, availability is waiting on a job to notice,
+        // which is up to 75 minutes of a unit nobody can book.
+        $unit = $this->unit();
+        $booking = $this->booking($unit, 10, 15, Booking::STATUS_PENDING);
+        $booking->forceFill(['hold_expires_at' => now()->subMinute()])->save();
+
+        $this->probe($unit, 12, 14)->assertOk()->assertJsonPath('available', true);
+
+        $this->actingAs($this->guest(), 'sanctum')
+            ->postJson('/api/v1/bookings', $this->body($unit, 12, 14))
+            ->assertStatus(201);
+    }
+
+    public function test_a_live_hold_still_blocks(): void
+    {
+        $unit = $this->unit();
+        $booking = $this->booking($unit, 10, 15, Booking::STATUS_PENDING);
+        $booking->forceFill(['hold_expires_at' => now()->addMinutes(5)])->save();
+
+        $this->probe($unit, 12, 14)->assertOk()->assertJsonPath('available', false);
+    }
+
+    public function test_a_booking_with_no_hold_keeps_blocking(): void
+    {
+        // Every booking made before the column existed has a null hold.
+        // Treating null as expired would have released live checkouts on deploy.
+        $unit = $this->unit();
+        $booking = $this->booking($unit, 10, 15, Booking::STATUS_PENDING);
+        $booking->forceFill(['hold_expires_at' => null])->save();
+
+        $this->probe($unit, 12, 14)->assertOk()->assertJsonPath('available', false);
+    }
+
+    public function test_a_new_booking_is_stamped_with_a_hold(): void
+    {
+        config()->set('booking.hold_minutes', 60);
+
+        $unit = $this->unit();
+
+        $this->actingAs($this->guest(), 'sanctum')
+            ->postJson('/api/v1/bookings', $this->body($unit, 10, 15))
+            ->assertStatus(201);
+
+        $booking = Booking::where('unit_id', $unit->id)->firstOrFail();
+
+        $this->assertNotNull($booking->hold_expires_at);
+        $this->assertEqualsWithDelta(60, now()->diffInMinutes($booking->hold_expires_at), 1);
+        $this->assertSame(1, (int) $booking->units_count);
+    }
+
+    /* ---------- idempotency ---------- */
+
+    public function test_the_same_idempotency_key_returns_the_first_booking(): void
+    {
+        $unit = $this->unit();
+        $guest = $this->guest();
+        $key = 'idem-'.str()->random(12);
+
+        $first = $this->actingAs($guest, 'sanctum')
+            ->withHeader('Idempotency-Key', $key)
+            ->postJson('/api/v1/bookings', $this->body($unit, 10, 15))
+            ->assertStatus(201);
+
+        // Without the guard this is a 409 — the first booking now holds the
+        // nights against the replay, which reads to the guest as the site
+        // refusing a booking it just made for them.
+        $this->actingAs($guest, 'sanctum')
+            ->withHeader('Idempotency-Key', $key)
+            ->postJson('/api/v1/bookings', $this->body($unit, 10, 15))
+            ->assertStatus(200)
+            ->assertJsonPath('data.id', $first->json('data.id'));
+
+        $this->assertSame(1, Booking::where('unit_id', $unit->id)->count());
+    }
+
+    public function test_another_guests_key_is_not_borrowed(): void
+    {
+        $unit = $this->unit();
+        $key = 'shared-key';
+
+        $this->actingAs($this->guest(), 'sanctum')
+            ->withHeader('Idempotency-Key', $key)
+            ->postJson('/api/v1/bookings', $this->body($unit, 10, 15))
+            ->assertStatus(201);
+
+        // Same key, different guest: this must NOT hand over someone else's
+        // booking. The scoped lookup misses, the unique index catches it, and
+        // the caller is told plainly rather than getting a server error.
+        $this->actingAs($this->guest(), 'sanctum')
+            ->withHeader('Idempotency-Key', $key)
+            ->postJson('/api/v1/bookings', $this->body($unit, 20, 25))
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'IDEMPOTENCY_KEY_REUSED');
+    }
+
+    /* ---------- units_count is present but shut ---------- */
+
+    public function test_asking_for_more_than_one_unit_is_refused(): void
+    {
+        $unit = $this->unit();
+
+        $this->actingAs($this->guest(), 'sanctum')
+            ->postJson('/api/v1/bookings', $this->body($unit, 10, 15) + ['units_count' => 2])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'MULTI_UNIT_BOOKING_NOT_SUPPORTED');
+    }
+
+    /* ---------- available_count agrees with the probe ---------- */
+
+    public function test_a_booked_standalone_unit_does_not_advertise_a_free_apartment(): void
+    {
+        // GET /units/{id} applies no availability filter of its own, so it used
+        // to report `available_count: 1` for a unit the create endpoint would
+        // refuse — the detail page offering a stay checkout then denies.
+        $unit = $this->unit();
+        $this->booking($unit, 10, 15, Booking::STATUS_CONFIRMED);
+
+        $this->getJson("/api/v1/units/{$unit->id}?start_date={$this->day(12)}&end_date={$this->day(14)}")
+            ->assertOk()
+            ->assertJsonPath('data.available_count', 0);
+
+        $this->probe($unit, 12, 14)->assertJsonPath('available_count', 0);
+    }
+
+    public function test_a_free_standalone_unit_still_reports_one(): void
+    {
+        $unit = $this->unit();
+
+        $this->getJson("/api/v1/units/{$unit->id}?start_date={$this->day(12)}&end_date={$this->day(14)}")
+            ->assertOk()
+            ->assertJsonPath('data.available_count', 1);
+    }
+
+    public function test_without_dates_a_listed_unit_reports_one(): void
+    {
+        $unit = $this->unit();
+        $this->booking($unit, 10, 15, Booking::STATUS_CONFIRMED);
+
+        // No window means nothing to be taken FOR. The count answers "is this
+        // listed", which is what a card with no dates chosen can honestly say.
+        $this->getJson("/api/v1/units/{$unit->id}")
+            ->assertOk()
+            ->assertJsonPath('data.available_count', 1);
+    }
+
     private function unit(): Unit
     {
         $owner = User::factory()->create();
@@ -260,15 +417,15 @@ class BookingAvailabilityTest extends TestCase
         $owner->partnerDetail()->create(['type' => 'individual', 'status' => PartnerDetail::STATUS_APPROVED]);
 
         return $owner->units()->create([
-            'unit_name'       => 'وحدة توفر',
-            'unit_type'       => 'apartment',
-            'code'            => 'MRN'.fake()->unique()->numerify('#####'),
-            'price'           => 500,
-            'capacity'        => 4,
-            'bedrooms'        => 1,
+            'unit_name' => 'وحدة توفر',
+            'unit_type' => 'apartment',
+            'code' => 'MRN'.fake()->unique()->numerify('#####'),
+            'price' => 500,
+            'capacity' => 4,
+            'bedrooms' => 1,
             'approval_status' => 'approved',
-            'status'          => 'available',
-            'calendar_token'  => str()->random(60),
+            'status' => 'available',
+            'calendar_token' => str()->random(60),
         ]);
     }
 
@@ -283,12 +440,12 @@ class BookingAvailabilityTest extends TestCase
     private function booking(Unit $unit, int $from, int $to, string $status): Booking
     {
         return Booking::create([
-            'unit_id'    => $unit->id,
-            'user_id'    => $this->guest()->id,
+            'unit_id' => $unit->id,
+            'user_id' => $this->guest()->id,
             'start_date' => $this->day($from),
-            'end_date'   => $this->day($to),
-            'guests'     => 2,
-            'status'     => $status,
+            'end_date' => $this->day($to),
+            'guests' => 2,
+            'status' => $status,
             'total_amount' => 100,
         ]);
     }
@@ -297,16 +454,16 @@ class BookingAvailabilityTest extends TestCase
     {
         return $unit->blockedDates()->create([
             'start_date' => $this->day($from),
-            'end_date'   => $this->day($to),
-            'source'     => UnitBlockedDate::SOURCE_MANUAL,
+            'end_date' => $this->day($to),
+            'source' => UnitBlockedDate::SOURCE_MANUAL,
         ]);
     }
 
-    private function probe(Unit $unit, int $from, int $to): \Illuminate\Testing\TestResponse
+    private function probe(Unit $unit, int $from, int $to): TestResponse
     {
         return $this->postJson("/api/v1/units/{$unit->id}/availability", [
             'start_date' => $this->day($from),
-            'end_date'   => $this->day($to),
+            'end_date' => $this->day($to),
         ]);
     }
 
@@ -314,10 +471,10 @@ class BookingAvailabilityTest extends TestCase
     private function body(Unit $unit, int $from, int $to): array
     {
         return [
-            'unit_id'    => $unit->id,
+            'unit_id' => $unit->id,
             'start_date' => $this->day($from),
-            'end_date'   => $this->day($to),
-            'guests'     => 2,
+            'end_date' => $this->day($to),
+            'guests' => 2,
         ];
     }
 }

@@ -159,7 +159,7 @@ class MultiUnitListingTest extends TestCase
         $this->actingAs($guest, 'sanctum')->postJson('/api/v1/bookings', [
             'unit_id' => $source->id,
             'start_date' => '2026-12-02', 'end_date' => '2026-12-05', 'guests' => 2,
-        ])->assertStatus(422);
+        ])->assertStatus(409)->assertJsonPath('code', 'INSUFFICIENT_INVENTORY');
     }
 
     public function test_two_guests_on_one_card_get_different_apartments(): void
