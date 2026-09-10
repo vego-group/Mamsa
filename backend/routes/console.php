@@ -49,3 +49,13 @@ Schedule::command('complaints:reconcile-refunds --alert')
     ->hourly()->withoutOverlapping()->appendOutputTo($scheduleLog);
 
 Schedule::command('bookings:expire-pending')->everyFifteenMinutes()->withoutOverlapping()->appendOutputTo($scheduleLog);
+
+/*
+ * The licence lives on every row of a building rather than in one place, so
+ * agreement is maintained by code rather than by the schema. Ask daily whether
+ * it still holds — a query-builder update fires no model events and slips past
+ * the model's own guard.
+ */
+Schedule::command('units:check-licenses --alert')
+    ->dailyAt('03:00')->timezone('Asia/Riyadh')
+    ->withoutOverlapping()->appendOutputTo($scheduleLog);

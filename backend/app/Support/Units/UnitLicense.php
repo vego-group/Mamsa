@@ -45,6 +45,62 @@ final class UnitLicense
 
     public const TYPES = [self::TOURIST_FACILITY, self::PRIVATE_HOSPITALITY];
 
+    /**
+     * Set only while this class is writing the licence columns.
+     *
+     * The Unit model refuses an UPDATE that touches them unless this is on, so
+     * `$unit->update(['license_type' => …])` from some future controller fails
+     * loudly instead of leaving one apartment claiming a permit its siblings do
+     * not have. Creation is deliberately NOT guarded: a new row is a group of
+     * one, and the cloner copies from the source it is cloning, so neither can
+     * introduce a disagreement.
+     *
+     * This cannot see query-builder updates — `Unit::where(...)->update(...)`
+     * fires no model events. That is precisely why the daily consistency check
+     * exists as well; the two guards catch different mistakes.
+     */
+    private static bool $writing = false;
+
+    public static function isWriting(): bool
+    {
+        return self::$writing;
+    }
+
+    /** @template T @param callable(): T $write @return T */
+    public static function write(callable $write): mixed
+    {
+        self::$writing = true;
+
+        try {
+            return $write();
+        } finally {
+            self::$writing = false;
+        }
+    }
+
+    /**
+     * Groups whose members disagree about their permit.
+     *
+     * Should always be empty. A row here means an apartment is trading under a
+     * licence that may not cover it, which is the failure this whole class is
+     * built to prevent — so it is worth asking about every day rather than
+     * trusting that no future path ever writes these columns another way.
+     *
+     * @return array<int, object{unit_group_id: string, types: int, counts: int}>
+     */
+    public static function inconsistentGroups(): array
+    {
+        return DB::table('units')
+            ->selectRaw('unit_group_id')
+            ->selectRaw('COUNT(DISTINCT license_type) AS types')
+            ->selectRaw('COUNT(DISTINCT licensed_units_count) AS counts')
+            ->whereNotNull('unit_group_id')
+            ->groupBy('unit_group_id')
+            ->havingRaw('COUNT(DISTINCT license_type) > 1 OR COUNT(DISTINCT licensed_units_count) > 1')
+            ->get()
+            ->all();
+    }
+
     /** How many rows this listing's group holds — 1 for a standalone unit. */
     public static function groupSize(Unit $unit): int
     {
@@ -164,7 +220,7 @@ final class UnitLicense
         ];
 
         if (! $unit->unit_group_id) {
-            $unit->forceFill($write)->save();
+            self::write(fn () => $unit->forceFill($write)->save());
 
             return;
         }
