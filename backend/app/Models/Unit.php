@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Units\UnitLicense;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -9,6 +10,41 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Unit extends Model
 {
+    /**
+     * The licence columns are group-wide, and this is the barrier that says so.
+     *
+     * `license_type` and `licensed_units_count` describe the PERMIT a facility
+     * operates under, and every apartment in a building operates under the same
+     * one. An update that touched them on a single row would leave the rest of
+     * the group claiming a different permit — an apartment trading under a
+     * licence that may not cover it.
+     *
+     * So updates go through UnitLicense::applyToGroup(), which writes the whole
+     * group in one transaction, and anything else fails here rather than being
+     * quietly dropped: a silently ignored write leaves the caller believing a
+     * change was saved.
+     *
+     * CREATION is not guarded on purpose — a new row is a group of one, and the
+     * cloner copies from the source it clones, so neither can introduce a
+     * disagreement. And this cannot see `Unit::where(...)->update(...)`, which
+     * fires no model events; the daily units:check-licenses command is what
+     * catches that.
+     */
+    protected static function booted(): void
+    {
+        static::updating(function (self $unit) {
+            if (UnitLicense::isWriting()) {
+                return;
+            }
+
+            if ($unit->isDirty(['license_type', 'licensed_units_count'])) {
+                throw new \LogicException(
+                    'license_type/licensed_units_count are group-wide — write them through UnitLicense::applyToGroup().'
+                );
+            }
+        });
+    }
+
     /**
      * Assumed check-out time when a listing does not state one.
      *

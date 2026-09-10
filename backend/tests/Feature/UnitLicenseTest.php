@@ -6,8 +6,10 @@ namespace Tests\Feature;
 
 use App\Models\Unit;
 use App\Models\User;
+use App\Notifications\LicenseGroupInconsistent;
 use App\Support\Units\UnitLicense;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\TestResponse;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -267,6 +269,89 @@ class UnitLicenseTest extends TestCase
             ->assertOk();
 
         $this->assertSame('approved', $unit->fresh()->approval_status);
+    }
+
+    /* ---------- the two guarantees the approval made conditional ---------- */
+
+    public function test_a_direct_single_row_licence_update_is_refused(): void
+    {
+        // Condition 1 of the approval: one write point, and nobody goes round
+        // it. Not a convention — the model refuses. A silently ignored write
+        // would be worse than a loud one: the caller would believe it saved.
+        $unit = $this->listing([
+            'license_type' => UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 5,
+        ]);
+        $this->expand($unit, ['count' => 5])->assertSuccessful();
+
+        $apartment = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)
+            ->where('id', '!=', $unit->id)->firstOrFail();
+
+        $this->expectException(\LogicException::class);
+
+        $apartment->update(['licensed_units_count' => 99]);
+    }
+
+    public function test_an_ordinary_edit_that_does_not_touch_the_licence_still_saves(): void
+    {
+        // The guard must not turn into "units cannot be edited".
+        $unit = $this->listing([
+            'license_type' => UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 5,
+        ]);
+
+        $unit->update(['price' => 777]);
+
+        $this->assertSame(777.0, (float) $unit->fresh()->price);
+    }
+
+    public function test_the_consistency_check_finds_a_group_that_disagrees(): void
+    {
+        // Condition 2: the periodic check. Drift is forced in the one way the
+        // model guard cannot see — a query-builder update fires no events.
+        $unit = $this->listing([
+            'license_type' => UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 5,
+        ]);
+        $this->expand($unit, ['count' => 5])->assertSuccessful();
+
+        $this->assertSame([], UnitLicense::inconsistentGroups(), 'a healthy group must not be reported');
+
+        $stray = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)
+            ->where('id', '!=', $unit->id)->firstOrFail();
+
+        Unit::where('id', $stray->id)->update(['licensed_units_count' => 99]);
+
+        $this->assertCount(1, UnitLicense::inconsistentGroups());
+
+        $this->artisan('units:check-licenses')->assertExitCode(1);
+    }
+
+    public function test_the_consistency_check_passes_on_a_healthy_platform(): void
+    {
+        $this->listing();
+
+        $this->artisan('units:check-licenses')->assertExitCode(0);
+    }
+
+    public function test_the_consistency_check_alerts_when_asked(): void
+    {
+        Notification::fake();
+        config()->set('complaints.alert_recipients', ['ops@mamsaa.com']);
+
+        $unit = $this->listing([
+            'license_type' => UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 5,
+        ]);
+        $this->expand($unit, ['count' => 3])->assertSuccessful();
+
+        $stray = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)
+            ->where('id', '!=', $unit->id)->firstOrFail();
+        Unit::where('id', $stray->id)->update(['license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $this->artisan('units:check-licenses --alert')->assertExitCode(1);
+
+        Notification::assertSentOnDemand(LicenseGroupInconsistent::class);
     }
 
     /* ---------- fixtures ---------- */
