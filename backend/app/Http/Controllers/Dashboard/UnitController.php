@@ -188,6 +188,29 @@ class UnitController extends DashboardController
             $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
         }
 
+        // The SOURCE must be publishable before it is copied.
+        //
+        // Every apartment inherits the source's fields, so a source missing its
+        // permit produces copies missing it too, and auto-submit then fails on
+        // rows the partner never saw — reporting a validation error about
+        // `tourismLicenseFileId` on apartments that do not exist yet. The
+        // partner reads that as "the system lost my documents".
+        //
+        // Checked here, the answer names the listing they actually have and the
+        // fields it actually lacks. Approval does not guarantee this: the gate
+        // lives in submitErrors() at SUBMIT time, so anything written straight
+        // to the database — a seeder, a migration, a fixture — can be approved
+        // without ever passing it.
+        if ($missing = UnitWriter::submitErrors($unit)) {
+            $this->fail(
+                'SOURCE_UNIT_INCOMPLETE',
+                'أكمل بيانات الوحدة الأصلية قبل إضافة وحدات إليها',
+                422,
+                $missing,
+                ['unit_id' => 'u_'.$unit->id],
+            );
+        }
+
         $before = UnitLicense::groupSize($unit);
 
         /*
