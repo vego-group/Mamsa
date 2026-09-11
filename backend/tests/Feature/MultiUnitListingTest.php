@@ -8,6 +8,7 @@ use App\Models\Booking;
 use App\Models\Unit;
 use App\Models\User;
 use App\Support\Units\UnitCloner;
+use App\Support\Units\UnitLicense;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Spatie\Permission\Models\Role;
@@ -51,7 +52,7 @@ class MultiUnitListingTest extends TestCase
         $unit = $this->partner->units()->create([
             // A building needs a facility permit now — the licence rule is not
             // optional, so every fixture that expands one has to carry it.
-            'license_type' => \App\Support\Units\UnitLicense::TOURIST_FACILITY,
+            'license_type' => UnitLicense::TOURIST_FACILITY,
             'licensed_units_count' => 100,
 
             'unit_name' => $name, 'unit_type' => 'apartment',
@@ -119,10 +120,44 @@ class MultiUnitListingTest extends TestCase
         $this->assertSame(2, $rows[0]['available_count']);
     }
 
+    public function test_a_fully_booked_building_leaves_the_search_results(): void
+    {
+        // The guest-side confirmation the frontend asked for: a building whose
+        // every apartment is taken must not be offered at all, rather than
+        // offered with a count of zero. onlyFree() removes each booked row, and
+        // a group with no surviving row has no card to collapse into.
+        $source = $this->building(3);
+        $guest = User::factory()->create();
+
+        foreach (Unit::where('unit_group_id', $source->unit_group_id)->get() as $apartment) {
+            Booking::create([
+                'unit_id' => $apartment->id, 'user_id' => $guest->id,
+                'start_date' => '2026-10-01', 'end_date' => '2026-10-05',
+                'guests' => 2, 'subtotal' => 1000, 'commission_rate' => 0.10,
+                'commission_amount' => 100, 'partner_share' => 900,
+                'total_amount' => 1150, 'status' => Booking::STATUS_CONFIRMED,
+            ]);
+        }
+
+        $rows = $this->getJson('/api/v1/units?start_date=2026-10-02&end_date=2026-10-04')
+            ->assertOk()->json('data');
+
+        $this->assertSame(
+            [],
+            collect($rows)->where('listing_id', $source->unit_group_id)->values()->all(),
+            'a building with nothing free must not appear in results at all',
+        );
+
+        // And without dates it is listed again — the question changes from
+        // "free for these nights" to "does this exist".
+        $all = $this->getJson('/api/v1/units')->assertOk()->json('data');
+        $this->assertCount(1, collect($all)->where('listing_id', $source->unit_group_id));
+    }
+
     public function test_booking_the_card_allocates_a_free_apartment(): void
     {
         $source = $this->building(3);
-        $guest  = User::factory()->create(['is_active' => true]);
+        $guest = User::factory()->create(['is_active' => true]);
         $guest->assignRole('User');
 
         // Occupy the apartment the card shows, so a literal booking would fail.
@@ -148,7 +183,7 @@ class MultiUnitListingTest extends TestCase
     public function test_a_fully_booked_building_is_refused(): void
     {
         $source = $this->building(2);
-        $guest  = User::factory()->create(['is_active' => true]);
+        $guest = User::factory()->create(['is_active' => true]);
         $guest->assignRole('User');
 
         foreach (Unit::where('unit_group_id', $source->unit_group_id)->get() as $u) {
@@ -256,7 +291,7 @@ class MultiUnitListingTest extends TestCase
     public function test_favouriting_a_building_survives_its_card_changing(): void
     {
         $source = $this->building(3);
-        $guest  = User::factory()->create(['is_active' => true]);
+        $guest = User::factory()->create(['is_active' => true]);
         $guest->assignRole('User');
 
         // Favourited from the apartment the card shows today…
@@ -278,7 +313,7 @@ class MultiUnitListingTest extends TestCase
     public function test_a_favourited_building_is_listed_once(): void
     {
         $source = $this->building(3);
-        $guest  = User::factory()->create(['is_active' => true]);
+        $guest = User::factory()->create(['is_active' => true]);
         $guest->assignRole('User');
 
         // Two apartments favourited directly — the shape legacy rows have.
