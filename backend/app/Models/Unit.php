@@ -32,6 +32,34 @@ class Unit extends Model
      */
     protected static function booted(): void
     {
+        // Creation into an EXISTING group is guarded too, on a different
+        // condition: the new row must agree with the siblings it is joining.
+        // Nothing in the application does otherwise today — the cloner copies
+        // from its source — but a seeder, a console command, or a path written
+        // six months from now could, and the daily check would only notice the
+        // next morning. This turns "caught within a day" into "cannot happen".
+        static::creating(function (self $unit) {
+            if (UnitLicense::isWriting() || ! $unit->unit_group_id) {
+                return;
+            }
+
+            $sibling = self::where('unit_group_id', $unit->unit_group_id)
+                ->first(['license_type', 'licensed_units_count']);
+
+            if ($sibling === null) {
+                return; // first row of a new group — it sets the value
+            }
+
+            $differs = $sibling->license_type !== $unit->license_type
+                || (int) $sibling->licensed_units_count !== (int) $unit->licensed_units_count;
+
+            if ($differs) {
+                throw new \LogicException(
+                    'A new apartment must carry its group\'s licence — write it through UnitLicense::applyToGroup().'
+                );
+            }
+        });
+
         static::updating(function (self $unit) {
             if (UnitLicense::isWriting()) {
                 return;

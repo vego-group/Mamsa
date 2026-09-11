@@ -354,6 +354,100 @@ class UnitLicenseTest extends TestCase
         Notification::assertSentOnDemand(LicenseGroupInconsistent::class);
     }
 
+    /* ---------- the question asked before production ---------- */
+
+    public function test_an_unlicensed_standalone_unit_survives_the_full_edit_and_approve_cycle(): void
+    {
+        // The approval guard branches on GROUP SIZE, not on whether a licence
+        // is set — `guardGroupSize` returns at `size <= 1` before it ever reads
+        // license_type. If it branched on the value instead, this test would
+        // fail and every ordinary listing on the platform would become
+        // unapprovable the moment its partner edited it, because FR-066 sends
+        // an edited approved unit back to `pending`.
+        //
+        // Every unit in production is exactly this shape: NULL licence, group
+        // of one. That is why the whole round trip is here rather than a
+        // shortcut straight to approve.
+        $unit = $this->listing();
+
+        $this->assertNull($unit->license_type);
+
+        // 1. the partner edits an approved listing
+        $this->actingAs($this->partner, 'sanctum')
+            ->putJson("/api/v1/partner/units/{$unit->id}", ['price' => 650])
+            ->assertOk();
+
+        // 2. FR-066 sends it back for review
+        $this->assertSame('pending', $unit->fresh()->approval_status);
+
+        // 3. and the admin can still approve it
+        $this->actingAs($this->admin(), 'admin-panel')
+            ->postJson("/admin/approvals/{$unit->id}/approve")
+            ->assertOk();
+
+        $this->assertSame('approved', $unit->fresh()->approval_status);
+    }
+
+    public function test_a_licensed_building_within_its_permit_also_approves(): void
+    {
+        // The other side of the same guard: a group larger than one is checked,
+        // and passes when the permit covers it.
+        $unit = $this->listing([
+            'license_type' => UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 5,
+        ]);
+        $this->expand($unit, ['count' => 3])->assertSuccessful();
+
+        $apartment = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)
+            ->where('id', '!=', $unit->id)->firstOrFail();
+        $apartment->forceFill(['approval_status' => 'pending'])->save();
+
+        $this->actingAs($this->admin(), 'admin-panel')
+            ->postJson("/admin/approvals/{$apartment->id}/approve")
+            ->assertOk();
+    }
+
+    /* ---------- creation into an existing group ---------- */
+
+    public function test_an_apartment_cannot_be_created_into_a_group_with_a_different_licence(): void
+    {
+        $unit = $this->listing([
+            'license_type' => UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 5,
+        ]);
+        $this->expand($unit, ['count' => 3])->assertSuccessful();
+
+        $this->expectException(\LogicException::class);
+
+        // What a seeder or a future path could do, and what the daily check
+        // would otherwise only notice the next morning.
+        $this->partner->units()->create([
+            'unit_name' => 'شقة مهرّبة', 'unit_type' => 'apartment',
+            'code' => 'SMG'.fake()->unique()->numerify('#####'),
+            'price' => 500, 'capacity' => 2, 'bedrooms' => 1,
+            'city' => 'الرياض', 'checkout_time' => '12:00',
+            'calendar_token' => str()->random(60),
+            'unit_group_id' => $unit->fresh()->unit_group_id,
+            'license_type' => UnitLicense::PRIVATE_HOSPITALITY,
+        ]);
+    }
+
+    public function test_the_cloner_can_still_add_apartments_to_a_licensed_group(): void
+    {
+        // The creation guard must not block the one path that legitimately
+        // writes rows into an existing group.
+        $unit = $this->listing([
+            'license_type' => UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 9,
+        ]);
+
+        $this->expand($unit, ['count' => 4])->assertSuccessful();
+        $this->expand($unit, ['count' => 9])->assertSuccessful();
+
+        $this->assertSame(9, Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->count());
+        $this->assertSame([], UnitLicense::inconsistentGroups());
+    }
+
     /* ---------- fixtures ---------- */
 
     /** @param array<string, mixed> $licence */
