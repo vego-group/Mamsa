@@ -14,6 +14,7 @@ use App\Support\Units\UnitLicense;
 use App\Support\Units\UnitWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
@@ -166,7 +167,59 @@ class UnitController extends DashboardController
         }
 
         $before = UnitLicense::groupSize($unit);
-        $group = UnitCloner::ensureTotal($unit, $count, copyDocuments: false);
+
+        /*
+         * Create AND submit, in one transaction.
+         *
+         * The partner pressed "add apartments" and typed a number — that IS the
+         * declaration. Leaving the new rows as drafts to confirm three more
+         * times hands back part of the work this feature exists to remove, and
+         * doing those submits as separate calls from the browser means a
+         * failure halfway leaves apartments on nobody's screen: not the
+         * partner's, not the reviewer's queue.
+         *
+         * So it is atomic. If any apartment cannot be submitted the whole
+         * expansion rolls back and the partner is told why, rather than ending
+         * up with a building half filed and half invisible.
+         *
+         * DOCUMENTS TRAVEL WITH THE APARTMENTS here, unlike the /api/v1 route
+         * where copying is opt-in. The cloner's comment says no code can decide
+         * that, because a permit issued for one apartment does not cover its
+         * neighbours — `license_type` now decides it. Expansion is refused
+         * unless the licence is `tourist_facility`, and a facility permit is
+         * issued to the property, so it covers every apartment in it by
+         * definition. Without copying them, submission would fail on the permit
+         * file every clone would be missing.
+         */
+        $group = DB::transaction(function () use ($unit, $count, $request) {
+            $group = UnitCloner::ensureTotal($unit, $count, copyDocuments: true);
+
+            foreach ($group as $member) {
+                if ($member->approval_status !== 'draft') {
+                    continue; // already approved, or already waiting
+                }
+
+                // The same gate a manual submit passes — a clone that could not
+                // be filed on its own must not be filed in bulk either.
+                $this->assertSubmittable($request->user(), $member);
+
+                $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
+            }
+
+            return $group;
+        });
+
+        // Reload so the response reports state AFTER filing rather than the
+        // state the rows were created in — the client reads status, not assumes.
+        if ($groupId = $unit->fresh()->unit_group_id) {
+            $group = Unit::where('unit_group_id', $groupId)->orderBy('apartment_no')->get();
+        }
+
+        // Outside the transaction: a mail failure must not undo a filing that
+        // actually happened.
+        foreach ($group->where('approval_status', 'pending') as $pending) {
+            $this->notifyAdmins($pending);
+        }
 
         return $this->ok([
             'groupId' => $unit->fresh()->unit_group_id,
@@ -180,7 +233,7 @@ class UnitController extends DashboardController
                 'status' => $u->approval_status,
             ])->values()->all(),
             'message' => $group->count() > $before
-                ? 'تمت إضافة '.($group->count() - $before).' وحدة إلى المبنى'
+                ? 'تمت إضافة '.($group->count() - $before).' وحدة وهي قيد المراجعة. مبناك الحالي يستمر في استقبال الحجوزات.'
                 : 'المبنى يحتوي بالفعل على هذا العدد',
         ]);
     }
