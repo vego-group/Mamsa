@@ -6,9 +6,12 @@ namespace App\Support\AdminPanel;
 
 use App\Http\Controllers\AdminPanel\Concerns\MapsSpec;
 use App\Models\Booking;
+use App\Models\CancellationPolicy;
+use App\Models\DashboardUpload;
 use App\Models\Unit;
 use App\Support\Dashboard\Maps;
 use App\Support\Media;
+use App\Support\Units\UnitLicense;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -44,10 +47,10 @@ class UnitPresenter
     {
         return match ($spec) {
             'pending_review' => 'pending',
-            'approved'       => 'approved',
-            'rejected'       => 'rejected',
-            'draft'          => 'draft',
-            default          => $spec,
+            'approved' => 'approved',
+            'rejected' => 'rejected',
+            'draft' => 'draft',
+            default => $spec,
         };
     }
 
@@ -57,66 +60,66 @@ class UnitPresenter
         $mamsaOwned = (bool) $u->mamsa_owned;
 
         return [
-            'id'             => (string) $u->id,
-            'code'           => $u->code ?: $this->code('UNT', $u->id),
-            'name'           => $u->unit_name,
-            'partnerId'      => (string) $u->user_id,
-            'partnerName'    => $mamsaOwned ? 'ممسى' : ($u->owner?->name ?? 'ممسى'),
-            'city'           => $u->city ?? '',
-            'district'       => $u->district ?? '',
-            'type'           => $this->unitType($u->unit_type),
-            'status'         => $this->unitStatus($u->approval_status),
-            'pricePerNight'  => (float) $u->price,
-            'bedrooms'       => (int) $u->bedrooms,
-            'bathrooms'      => (int) $u->bathrooms,
-            'capacity'       => (int) $u->capacity,
-            'sizeSqm'        => (float) $u->area,
-            'rating'         => $u->rating !== null ? round((float) $u->rating, 1) : 0.0,
-            'reviewsCount'   => (int) $u->reviews_count,
-            'occupancyRate'  => min(100, (int) round(((int) $u->booked_nights / self::OCCUPANCY_WINDOW) * 100)),
-            'revenue'        => $this->money($u->revenue),
-            'bookingsCount'  => (int) $u->bookings_count,
+            'id' => (string) $u->id,
+            'code' => $u->code ?: $this->code('UNT', $u->id),
+            'name' => $u->unit_name,
+            'partnerId' => (string) $u->user_id,
+            'partnerName' => $mamsaOwned ? 'ممسى' : ($u->owner?->name ?? 'ممسى'),
+            'city' => $u->city ?? '',
+            'district' => $u->district ?? '',
+            'type' => $this->unitType($u->unit_type),
+            'status' => $this->unitStatus($u->approval_status),
+            'pricePerNight' => (float) $u->price,
+            'bedrooms' => (int) $u->bedrooms,
+            'bathrooms' => (int) $u->bathrooms,
+            'capacity' => (int) $u->capacity,
+            'sizeSqm' => (float) $u->area,
+            'rating' => $u->rating !== null ? round((float) $u->rating, 1) : 0.0,
+            'reviewsCount' => (int) $u->reviews_count,
+            'occupancyRate' => min(100, (int) round(((int) $u->booked_nights / self::OCCUPANCY_WINDOW) * 100)),
+            'revenue' => $this->money($u->revenue),
+            'bookingsCount' => (int) $u->bookings_count,
             // Null when the unit has no photo of its own — the browse surfaces
             // render a quiet placeholder rather than a shared stock image, so
             // "no photography" stays visible wherever a unit is listed.
-            'coverImage'     => $this->realCoverImage($u),
-            'mamsaOwned'     => $mamsaOwned,
-            'rejectionReason'=> $u->rejection_reason,
-            'approvedAt'     => $u->approval_status === 'approved' ? $this->iso($u->updated_at) : null,
+            'coverImage' => $this->realCoverImage($u),
+            'mamsaOwned' => $mamsaOwned,
+            'rejectionReason' => $u->rejection_reason,
+            'approvedAt' => $u->approval_status === 'approved' ? $this->iso($u->updated_at) : null,
         ];
     }
 
     /**
      * @return array<string, mixed> ApprovalRequest (queue row) — §6. A request is
-     * a unit awaiting review; submittedAt uses submitted_at. Expects owner loaded.
+     *                              a unit awaiting review; submittedAt uses submitted_at. Expects owner loaded.
      */
     public function approvalRow(Unit $u): array
     {
         $owner = $u->owner;
 
         return [
-            'id'                => (string) $u->id,
-            'code'              => $this->code('REQ', $u->id),
-            'unitId'            => (string) $u->id,
-            'unitName'          => $u->unit_name,
-            'unitType'          => $this->unitType($u->unit_type),
+            'id' => (string) $u->id,
+            'code' => $this->code('REQ', $u->id),
+            'unitId' => (string) $u->id,
+            'unitName' => $u->unit_name,
+            'unitType' => $this->unitType($u->unit_type),
             // Null when the listing has no photo of its own: the reviewer needs
             // to see that, and a shared default would hide it (frontend §3).
-            'coverImage'        => $this->realCoverImage($u),
-            'city'              => $u->city ?? '',
-            'partnerId'         => (string) ($u->user_id ?? ''),
+            'coverImage' => $this->realCoverImage($u),
+            'city' => $u->city ?? '',
+            'partnerId' => (string) ($u->user_id ?? ''),
             // A Mamsa-owned listing has no partner: `user_id` is the admin who
             // created it. Showing their personal name here would put a staff
             // member in the queue as though they were an applicant — and the
             // units list already reads 'ممسى' for the same row, so a reviewer
             // saw two different owners for one unit.
-            'partnerName'       => $u->mamsa_owned ? 'ممسى' : ($owner?->name ?? ''),
-            'partnerType'       => $u->mamsa_owned ? 'mamsa' : ($owner?->partnerDetail?->type ?? 'individual'),
-            'mamsaOwned'        => (bool) $u->mamsa_owned,
+            'partnerName' => $u->mamsa_owned ? 'ممسى' : ($owner?->name ?? ''),
+            'partnerType' => $u->mamsa_owned ? 'mamsa' : ($owner?->partnerDetail?->type ?? 'individual'),
+            'mamsaOwned' => (bool) $u->mamsa_owned,
             // True submission time where known; updated_at is the historical
             // proxy for rows that predate the submitted_at column.
-            'submittedAt'       => $this->iso($u->submitted_at ?? $u->updated_at),
-            'requestType'       => $u->rejection_reason ? 'resubmission' : 'new',
+            'submittedAt' => $this->iso($u->submitted_at ?? $u->updated_at),
+            'requestType' => $u->rejection_reason ? 'resubmission' : 'new',
             'previousRejection' => $u->rejection_reason
                 ? ['reason' => $u->rejection_reason, 'at' => $this->iso($u->updated_at)]
                 : null,
@@ -137,42 +140,52 @@ class UnitPresenter
         $u->loadMissing('cancellationPolicy');
 
         return array_merge($this->card($u), [
-            'description'     => $u->description ?? '',
-            'images'          => $this->images($u),
+            'description' => $u->description ?? '',
+            'images' => $this->images($u),
             // Same photos, re-sendable: `id` is the upload id that goes back in
             // `photoFileIds`, so an edit can add one photo without replacing the
             // gallery. `images` stays as display URLs and is not going away.
-            'photos'          => $this->photos($u),
-            'amenities'       => $u->relationLoaded('features') ? $u->features->pluck('name')->filter()->values()->all() : [],
+            'photos' => $this->photos($u),
+            'amenities' => $u->relationLoaded('features') ? $u->features->pluck('name')->filter()->values()->all() : [],
             // The write side takes KEYS (`wifi`); `amenities` above are the
             // stored Arabic labels. Without this the round trip needs a
             // hardcoded label→key table on the client, which drifts the day a
             // label is reworded.
-            'amenityKeys'     => Maps::amenitiesToKeys($u->relationLoaded('features') ? $u->features->pluck('name') : collect()),
+            'amenityKeys' => Maps::amenitiesToKeys($u->relationLoaded('features') ? $u->features->pluck('name') : collect()),
             // `city` is the stored Arabic label. The slug is here so a locale
             // toggle doesn't have to match on the label.
-            'cityKey'         => Maps::cityToSlug($u->city ?? ''),
-            'address'         => $u->address,
-            'beds'            => $u->beds !== null ? (int) $u->beds : null,
-            'checkIn'         => self::hm($u->checkin_time),
-            'checkOut'        => self::hm($u->checkout_time),
+            'cityKey' => Maps::cityToSlug($u->city ?? ''),
+            'address' => $u->address,
+            'beds' => $u->beds !== null ? (int) $u->beds : null,
+            'checkIn' => self::hm($u->checkin_time),
+            'checkOut' => self::hm($u->checkout_time),
             // Preset slug. A unit that never chose one inherits the platform
             // default, so echo what the engine would actually apply rather than
             // null — null would be read as "no policy".
             'cancellationPolicy' => $u->cancellationPolicy?->key ?? self::defaultPolicyKey(),
-            'lat'             => $u->lat !== null ? (float) $u->lat : 0.0,
-            'lng'             => $u->lng !== null ? (float) $u->lng : 0.0,
-            'publicUrl'       => $this->publicUrl($u),
+            'lat' => $u->lat !== null ? (float) $u->lat : 0.0,
+            'lng' => $u->lng !== null ? (float) $u->lng : 0.0,
+            'publicUrl' => $this->publicUrl($u),
             'tourismPermitNo' => $u->tourism_permit_no,
-            'permitFileUrl'   => $this->fileUrl($u->tourism_permit_file),
+            'permitFileUrl' => $this->fileUrl($u->tourism_permit_file),
+            // The three the reviewer compares against the uploaded permit. The
+            // system already refuses a group bigger than the declared count, so
+            // the human check is on whether the DECLARED number matches the one
+            // printed on the document — which needs all three on screen at once.
+            //
+            // `groupSize` is always an integer, 1 for a standalone listing, so
+            // the screen never branches between "one" and "no value".
+            'licenseType' => $u->license_type,
+            'licensedUnitsCount' => $u->licensed_units_count !== null ? (int) $u->licensed_units_count : null,
+            'groupSize' => UnitLicense::groupSize($u),
             // Proof of the right to list. Same resolver: the column holds
             // either an upload id or a storage path depending on which
             // surface sent it, and resolveUrl() reads both.
             'ownershipDocUrl' => $this->fileUrl($u->ownership_doc_file),
             // The id, not the URL — this is what goes back in the write body.
             'tourismLicenseFileId' => $u->tourism_permit_file,
-            'ownershipDocFileId'   => $u->ownership_doc_file,
-            'ownerIdNumber'   => $u->owner?->partnerDetail?->national_id,
+            'ownershipDocFileId' => $u->ownership_doc_file,
+            'ownerIdNumber' => $u->owner?->partnerDetail?->national_id,
         ]);
     }
 
@@ -192,7 +205,7 @@ class UnitPresenter
      */
     private function photos(Unit $u): array
     {
-        $real  = $u->images->filter(fn ($i) => filled($i->path) && $i->path !== Media::defaultImagePath());
+        $real = $u->images->filter(fn ($i) => filled($i->path) && $i->path !== Media::defaultImagePath());
         $cover = $real->firstWhere('is_main', true) ?? $real->first();
 
         // Same derivative set the storefront gets — the approvals queue renders
@@ -201,11 +214,11 @@ class UnitPresenter
         return $real
             ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
             ->map(fn ($i) => [
-                'id'       => filled($i->file_id) ? $i->file_id : null,
-                'url'      => $i->url,
-                'isCover'  => $cover && $i->id === $cover->id,
-                'width'    => $i->width !== null ? (int) $i->width : null,
-                'height'   => $i->height !== null ? (int) $i->height : null,
+                'id' => filled($i->file_id) ? $i->file_id : null,
+                'url' => $i->url,
+                'isCover' => $cover && $i->id === $cover->id,
+                'width' => $i->width !== null ? (int) $i->width : null,
+                'height' => $i->height !== null ? (int) $i->height : null,
                 'variants' => $i->variant_urls,
             ])->values()->all();
     }
@@ -215,7 +228,7 @@ class UnitPresenter
 
     private static function defaultPolicyKey(): ?string
     {
-        return self::$defaultPolicyKey ??= \App\Models\CancellationPolicy::query()
+        return self::$defaultPolicyKey ??= CancellationPolicy::query()
             ->orderByDesc('is_default')->value('key');
     }
 
@@ -275,6 +288,6 @@ class UnitPresenter
     {
         // permit column stores a DashboardUpload id (file_...) → resolve to its
         // real public path (NOT the id used as a path, which 404/403s).
-        return \App\Models\DashboardUpload::resolveUrl($path);
+        return DashboardUpload::resolveUrl($path);
     }
 }
