@@ -8,6 +8,9 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
 use App\Support\Dashboard\UnitPresenter;
+use App\Support\Units\LicenseViolation;
+use App\Support\Units\UnitCloner;
+use App\Support\Units\UnitLicense;
 use App\Support\Units\UnitWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -62,8 +65,8 @@ class UnitController extends DashboardController
             $this->toColumns($data),
             [
                 'approval_status' => 'draft',
-                'code'            => self::uniqueCode(),
-                'calendar_token'  => Str::random(60),
+                'code' => self::uniqueCode(),
+                'calendar_token' => Str::random(60),
             ],
         ));
 
@@ -117,6 +120,67 @@ class UnitController extends DashboardController
         return $this->ok();
     }
 
+    /**
+     * Turn one listing into a building of `count` identical apartments.
+     *
+     * The logic has existed and been tested since 2026-08-30, but only on the
+     * Bearer `/api/v1` surface — this dashboard had no route for it at all, so
+     * a partner with ten apartments could not reach the feature that exists for
+     * them. This is that route, on the surface they actually use.
+     *
+     * `count` is a TOTAL, not an addition. "I have 8" on a building of 5 adds
+     * three; sending 8 again adds nothing. The response says so in its own
+     * fields rather than leaving it to a document: `groupSize` is what the
+     * building now holds, and `added` is what this call created. The difference
+     * between "I have 8" and "add 8" is the difference between a building of
+     * eight and a building of thirteen.
+     *
+     * Only `count` is exposed here. The Bearer route also takes explicit door
+     * numbers and ranges; those stay there until a screen actually asks for
+     * them, rather than shipping three input shapes and discovering which one
+     * partners use afterwards.
+     */
+    public function apartments(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->ownUnit($request, self::rawId($id));
+
+        $data = $this->validated($request, [
+            'count' => ['required', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
+        ], [
+            'count.required' => 'عدد الوحدات مطلوب',
+            'count.max' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد',
+        ]);
+
+        $count = (int) $data['count'];
+
+        // The licence is checked BEFORE anything is written: a refused
+        // expansion must not leave apartments behind for an admin to review.
+        try {
+            UnitLicense::guardGroupSize($unit, $count);
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422);
+        }
+
+        $before = UnitLicense::groupSize($unit);
+        $group = UnitCloner::ensureTotal($unit, $count, copyDocuments: false);
+
+        return $this->ok([
+            'groupId' => $unit->fresh()->unit_group_id,
+            // What the building holds now — not what was asked for. They differ
+            // whenever `count` is at or below the current size.
+            'groupSize' => $group->count(),
+            'added' => max(0, $group->count() - $before),
+            'units' => $group->map(fn (Unit $u) => [
+                'id' => 'u_'.$u->id,
+                'apartmentNo' => $u->apartment_no,
+                'status' => $u->approval_status,
+            ])->values()->all(),
+            'message' => $group->count() > $before
+                ? 'تمت إضافة '.($group->count() - $before).' وحدة إلى المبنى'
+                : 'المبنى يحتوي بالفعل على هذا العدد',
+        ]);
+    }
+
     public function submit(Request $request, string $id): JsonResponse
     {
         $unit = $this->ownUnit($request, self::rawId($id));
@@ -131,7 +195,7 @@ class UnitController extends DashboardController
         $this->notifyAdmins($unit);
 
         return $this->ok([
-            'unit'    => UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])),
+            'unit' => UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])),
             'message' => 'سيصلك إشعار خلال 24–48 ساعة',
         ]);
     }
