@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Feature;
 use App\Models\PartnerDetail;
 use App\Models\Unit;
 use App\Models\User;
@@ -205,17 +206,50 @@ class DashboardApartmentsTest extends TestCase
         $this->assertSame($unit->tourism_permit_file, $clone->tourism_permit_file);
     }
 
+    public function test_an_incomplete_source_is_refused_naming_the_source(): void
+    {
+        // A source missing its permit copies that gap into every apartment, and
+        // auto-submit then fails on rows the partner never saw — an error about
+        // `tourismLicenseFileId` on apartments that do not exist yet, which
+        // reads as "the system lost my documents". The refusal has to name the
+        // listing they actually have.
+        $unit = $this->licensed(9);
+        $unit->forceFill(['tourism_permit_file' => null])->save();
+
+        $this->expand($unit, 4)
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'SOURCE_UNIT_INCOMPLETE')
+            ->assertJsonPath('error.fields.tourismLicenseFileId', 'ملف الرخصة مطلوب')
+            ->assertJsonPath('error.meta.unit_id', 'u_'.$unit->id);
+
+        $this->assertSame(1, Unit::where('user_id', $this->partner->id)->count(),
+            'nothing may be written when the source cannot be copied');
+    }
+
     public function test_an_expansion_that_cannot_be_filed_rolls_back_entirely(): void
     {
-        // Atomicity is the whole point of doing this server-side. A building
-        // half filed and half invisible is the failure the decision named.
+        // Atomicity, on a path the pre-flight cannot see.
+        //
+        // The pre-flight checks the SOURCE's own fields, so a complete source
+        // gets past it — but submission also requires a COMPANY to have
+        // finished its payout documents, and that is a property of the partner,
+        // not the unit. A company with incomplete documents therefore reaches
+        // the loop, fails inside it, and the whole expansion must unwind.
+        //
+        // This is the case the transaction exists for: the one the guard in
+        // front of it was never going to catch.
         $unit = $this->licensed(9);
-        $unit->forceFill(['address' => null])->save(); // fails the submit gate
 
-        $this->expand($unit, 4)->assertStatus(400);
+        $this->partner->partnerDetail()->update(['type' => 'company']);
+
+        $this->expand($unit, 4)
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'COMPANY_DOCS_INCOMPLETE');
 
         $this->assertSame(1, Unit::where('user_id', $this->partner->id)->count(),
             'no apartment may survive a rolled-back expansion');
+        $this->assertNull($unit->fresh()->unit_group_id,
+            'the source must not keep a group id for a building that was rolled back');
     }
 
     /* ---------- classifying a listing from the dashboard ---------- */
