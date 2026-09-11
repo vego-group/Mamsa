@@ -218,6 +218,55 @@ class DashboardApartmentsTest extends TestCase
             'no apartment may survive a rolled-back expansion');
     }
 
+    /* ---------- classifying a listing from the dashboard ---------- */
+
+    public function test_a_partner_can_classify_a_listing_from_the_dashboard(): void
+    {
+        // Until this worked, no partner could ever reach tourist_facility from
+        // the surface they use — so every expansion was refused for want of a
+        // licence no screen could set. The whole feature was unreachable.
+        $unit = $this->unit();
+
+        $this->actingAs($this->partner, 'dashboard')
+            ->patchJson("/units/u_{$unit->id}", [
+                'licenseType' => UnitLicense::TOURIST_FACILITY,
+                'licensedUnitsCount' => 6,
+            ])
+            ->assertOk();
+
+        $fresh = $unit->fresh();
+        $this->assertSame(UnitLicense::TOURIST_FACILITY, $fresh->license_type);
+        $this->assertSame(6, (int) $fresh->licensed_units_count);
+
+        // And it is immediately usable: classify, then expand.
+        $this->expand($fresh, 4)->assertOk()->assertJsonPath('groupSize', 4);
+    }
+
+    public function test_classifying_as_a_facility_without_a_count_is_refused(): void
+    {
+        $this->actingAs($this->partner, 'dashboard')
+            ->patchJson("/units/u_{$this->unit()->id}", [
+                'licenseType' => UnitLicense::TOURIST_FACILITY,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'LICENSED_UNITS_COUNT_REQUIRED');
+    }
+
+    public function test_the_licence_edit_reaches_every_apartment_in_the_group(): void
+    {
+        $unit = $this->licensed(9);
+        $this->expand($unit, 3)->assertOk();
+
+        $this->actingAs($this->partner, 'dashboard')
+            ->patchJson("/units/u_{$unit->id}", ['licensedUnitsCount' => 7])
+            ->assertOk();
+
+        $counts = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)
+            ->pluck('licensed_units_count')->map(intval(...))->unique();
+
+        $this->assertSame([7], $counts->all(), 'the group must not disagree about its permit');
+    }
+
     /* ---------- fixtures ---------- */
 
     private function expand(Unit $unit, int $count): TestResponse
