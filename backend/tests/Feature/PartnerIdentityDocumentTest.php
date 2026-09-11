@@ -7,10 +7,12 @@ namespace Tests\Feature;
 use App\Models\DashboardUpload;
 use App\Models\PartnerDetail;
 use App\Models\User;
+use App\Support\Documents\DocumentStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
+use Tests\Support\ImageFactory;
 use Tests\TestCase;
 
 /** Identity document captured at partner registration and reviewed by an admin. */
@@ -31,11 +33,11 @@ class PartnerIdentityDocumentTest extends TestCase
     private function payload(array $over = []): array
     {
         return array_merge([
-            'type'        => 'individual',
-            'name'        => 'محمد الشهري',
-            'phone'       => '512345678',
-            'code'        => '424242',
-            'email'       => 'partner'.fake()->unique()->numerify('###').'@example.com',
+            'type' => 'individual',
+            'name' => 'محمد الشهري',
+            'phone' => '512345678',
+            'code' => '424242',
+            'email' => 'partner'.fake()->unique()->numerify('###').'@example.com',
             'national_id' => '1012345678',
         ], $over);
     }
@@ -68,7 +70,11 @@ class PartnerIdentityDocumentTest extends TestCase
         $upload = DashboardUpload::find($detail->national_id_file);
         $this->assertNotNull($upload, 'it must be a resolvable DashboardUpload');
         $this->assertSame('stored', $upload->status);
-        Storage::disk('public')->assertExists($upload->path);
+        // In the vault, and NOT on the public disk — that second assertion is
+        // the security property, and the one that would have caught this file
+        // being served as a static asset with no signature and no expiry.
+        Storage::disk('local')->assertExists(DocumentStorage::vaultPath($upload->path));
+        Storage::disk('public')->assertMissing($upload->path);
     }
 
     public function test_a_rejected_file_type_is_refused(): void
@@ -107,10 +113,10 @@ class PartnerIdentityDocumentTest extends TestCase
         $this->requestOtp('512345679');
 
         $this->post('/api/v1/auth/partner/register', $this->payload([
-            'type'        => 'company',
-            'phone'       => '512345679',
+            'type' => 'company',
+            'phone' => '512345679',
             'national_id' => null,
-            'cr_number'   => '1010101010',
+            'cr_number' => '1010101010',
         ]))->assertCreated();
     }
 
@@ -125,13 +131,13 @@ class PartnerIdentityDocumentTest extends TestCase
         $company = User::factory()->create(['is_active' => true]);
         $company->assignRole('Company');
         $company->partnerDetail()->create([
-            'type'                      => 'company',
-            'cr_number'                 => '1010101010',
-            'iban'                      => 'SA'.str_repeat('3', 22),
+            'type' => 'company',
+            'cr_number' => '1010101010',
+            'iban' => 'SA'.str_repeat('3', 22),
             'authorization_letter_file' => 'file_auth',
-            'vat_certificate_file'      => 'file_vat',
-            'operator_license_file'     => 'file_op',
-            'national_id_file'          => null,
+            'vat_certificate_file' => 'file_vat',
+            'operator_license_file' => 'file_op',
+            'national_id_file' => null,
         ]);
 
         $body = $this->actingAs($company, 'dashboard')
@@ -162,7 +168,7 @@ class PartnerIdentityDocumentTest extends TestCase
 
         // A JPEG, not a PDF. Sent to the signed URL presign handed back.
         // Really encoded — the receiver decodes every image it accepts.
-        $jpeg = \Tests\Support\ImageFactory::jpeg(600, 400);
+        $jpeg = ImageFactory::jpeg(600, 400);
         $this->call('PUT', $presign['uploadUrl'], [], [], [], [], $jpeg)->assertOk();
 
         $this->actingAs($partner, 'dashboard')
@@ -171,7 +177,11 @@ class PartnerIdentityDocumentTest extends TestCase
 
         $upload = DashboardUpload::findOrFail($fileId);
         $this->assertStringEndsWith('.jpg', $upload->path, 'a photo must not be stored as .pdf');
-        Storage::disk('public')->assertExists($upload->path);
+        // In the vault, and NOT on the public disk — that second assertion is
+        // the security property, and the one that would have caught this file
+        // being served as a static asset with no signature and no expiry.
+        Storage::disk('local')->assertExists(DocumentStorage::vaultPath($upload->path));
+        Storage::disk('public')->assertMissing($upload->path);
     }
 
     public function test_admin_sees_the_identity_scan_on_the_document_row(): void

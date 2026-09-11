@@ -288,6 +288,6 @@ class UnitPresenter
     {
         // permit column stores a DashboardUpload id (file_...) → resolve to its
         // real public path (NOT the id used as a path, which 404/403s).
-        return DashboardUpload::resolveUrl($path);
+        return DashboardUpload::signedUrl($path);
     }
 }

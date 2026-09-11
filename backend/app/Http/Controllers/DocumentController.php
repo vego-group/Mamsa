@@ -6,10 +6,10 @@ namespace App\Http\Controllers;
 
 use App\Models\DashboardUpload;
 use App\Support\AdminPermissions;
+use App\Support\Documents\DocumentStorage;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -91,27 +91,13 @@ class DocumentController extends Controller
     }
 
     /**
-     * Where the bytes actually are — vault first, then the public disk.
+     * Where the bytes actually are. Delegated so the reader and the writers
+     * cannot disagree about which disk a document is on.
      *
      * @return array{0: Filesystem|null, 1: string}
      */
     private function locate(DashboardUpload $record): array
     {
-        $path = (string) $record->path;
-
-        if ($path === '') {
-            return [null, ''];
-        }
-
-        $vault = Storage::disk(config('documents.vault_disk'));
-        $vaultPath = trim((string) config('documents.vault_root'), '/').'/'.$path;
-
-        if ($vault->exists($vaultPath)) {
-            return [$vault, $vaultPath];
-        }
-
-        $public = Storage::disk('public');
-
-        return $public->exists($path) ? [$public, $path] : [null, ''];
+        return DocumentStorage::locate($record->path);
     }
 }

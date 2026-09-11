@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\DashboardUpload;
 use App\Models\User;
+use App\Support\Documents\DocumentStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
@@ -164,6 +165,49 @@ class DocumentAccessTest extends TestCase
     {
         $this->assertNull(DashboardUpload::signedUrl(null));
         $this->assertNull(DashboardUpload::signedUrl(''));
+    }
+
+    /* ---------- the write side, after the flip ---------- */
+
+    public function test_a_photo_still_goes_to_the_public_disk(): void
+    {
+        // The guard that matters in the other direction: the upload endpoint
+        // takes photos and documents through the same method, and sending every
+        // listing image through a signed PHP route would be both wrong and slow.
+        $this->assertFalse(DocumentStorage::isSensitive('unit_photo'));
+
+        DocumentStorage::put('dashboard/unit_photo/file_x.jpg', 'PIC', sensitive: false);
+
+        Storage::disk('public')->assertExists('dashboard/unit_photo/file_x.jpg');
+        Storage::disk('local')->assertMissing(DocumentStorage::vaultPath('dashboard/unit_photo/file_x.jpg'));
+    }
+
+    public function test_every_document_kind_is_treated_as_sensitive(): void
+    {
+        foreach (['license_pdf', 'company_doc', 'ownership_doc', 'national_id'] as $kind) {
+            $this->assertTrue(DocumentStorage::isSensitive($kind), "{$kind} must never be public");
+        }
+    }
+
+    public function test_forget_keeps_a_document_something_else_still_points_at(): void
+    {
+        // Two units sharing one permit is the case that made the old code refuse
+        // to delete ids at all. It still must not delete — but only because of
+        // the reference, not because deletion is forbidden outright.
+        [$upload, $owner] = $this->document();
+
+        $owner->units()->create([
+            'unit_name' => 'وحدة', 'unit_type' => 'apartment',
+            'code' => 'DOC'.fake()->unique()->numerify('#####'),
+            'price' => 400, 'capacity' => 2, 'bedrooms' => 1, 'city' => 'الرياض',
+            'checkout_time' => '12:00', 'calendar_token' => str()->random(60),
+            'tourism_permit_file' => $upload->id,
+        ]);
+
+        DocumentStorage::forget($upload->id);
+
+        $this->assertNotNull(DashboardUpload::find($upload->id));
+        Storage::disk('public')->assertExists($upload->path);
     }
 
     /* ---------- fixtures ---------- */

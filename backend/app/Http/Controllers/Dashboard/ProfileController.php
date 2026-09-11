@@ -209,7 +209,7 @@ class ProfileController extends DashboardController
         // folding it into completeness would freeze all of them out of unit
         // submission on the day it deployed.
         $docs['crFileId'] = $d?->cr_file;
-        $docs['crUrl']    = DashboardUpload::resolveUrl($d?->cr_file);
+        $docs['crUrl']    = DashboardUpload::signedUrl($d?->cr_file);
 
         return $docs;
     }
