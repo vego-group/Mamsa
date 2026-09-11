@@ -98,6 +98,20 @@ final class UnitWriter
             'lng'                  => ['sometimes', 'nullable', 'numeric'],
             'address'              => ['sometimes', 'nullable', 'string', 'max:255'],
             'tourismLicenseNumber' => ['sometimes', 'nullable', 'string', 'max:50'],
+            /*
+             * Which permit the listing trades under, and how many units it
+             * covers. Accepted here so the partner dashboard and admin console
+             * can classify a listing at all — until this, only the Bearer
+             * /api/v1 surface could, so nobody could reach `tourist_facility`
+             * from the dashboard and every expansion was refused for want of a
+             * licence no screen could set.
+             *
+             * Deliberately NOT mapped in toColumns(): these are group-wide and
+             * have exactly one writer, UnitLicense::applyToGroup(). Letting
+             * them through the ordinary column update hits the model guard.
+             */
+            'licenseType'          => ['sometimes', 'nullable', 'in:'.implode(',', \App\Support\Units\UnitLicense::TYPES)],
+            'licensedUnitsCount'   => ['sometimes', 'nullable', 'integer', 'min:1', 'max:'.\App\Support\Units\UnitCloner::MAX_GROUP],
             'tourismLicenseFileId' => ['sometimes', 'nullable', 'string'],
             'photoFileIds'         => ['sometimes', 'nullable', 'array', 'max:'.self::MAX_PHOTOS],
             'photoFileIds.*'       => ['string'],

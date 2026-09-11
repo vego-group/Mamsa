@@ -88,6 +88,28 @@ class UnitController extends DashboardController
 
         $data = $this->validateUnit($request, required: false);
         $this->assertFilesOwned($request, $data);
+
+        // Licence columns are group-wide with a single writer, so they are
+        // pulled out before the ordinary update — sending them through it would
+        // hit the model guard. This is also the ONLY way a partner classifies a
+        // listing from this surface, and without a classification no building
+        // can ever be expanded.
+        $license = [];
+
+        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
+            if (array_key_exists($input, $data)) {
+                $license[$column] = $data[$input];
+            }
+        }
+
+        if ($license !== []) {
+            try {
+                UnitLicense::applyToGroup($unit, $license);
+            } catch (LicenseViolation $e) {
+                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+            }
+        }
+
         $columns = $this->toColumns($data);
 
         // §4 — an approved unit edited → back to pending + hidden from the site.
