@@ -199,10 +199,18 @@ final class UnitLicense
         $size = self::groupSize($unit);
 
         if ($size > 1 && $type !== self::TOURIST_FACILITY) {
+            // The message deliberately does NOT say "reduce the units first".
+            // There is no route that reduces a building: the expansion endpoint
+            // treats a smaller count as a no-op, and the dashboard only deletes
+            // DRAFT units — every apartment in an approved building fails that
+            // check. Telling a partner to do something the product cannot do is
+            // worse than a plain refusal, because they will go looking for a
+            // button that is not there. Shrinking is a backlog item; until it
+            // exists this says who can help.
             throw LicenseViolation::of(
                 'LICENSE_DOWNGRADE_BLOCKED_BY_QUANTITY',
-                'لا يمكن تغيير نوع التصريح قبل تقليل عدد الوحدات إلى واحدة',
-                ['group_size' => $size],
+                'هذا الإعلان مبنى متعدد الوحدات، ولا يمكن تحويله إلى تصريح ضيافة خاصة. تواصل مع الدعم لتعديل عدد وحدات المبنى.',
+                ['group_size' => $size, 'shrink_supported' => false],
             );
         }
 
