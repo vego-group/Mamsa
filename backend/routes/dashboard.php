@@ -10,6 +10,7 @@ declare(strict_types=1);
  * Wrapped in the `dashboard-api` middleware group (bootstrap/app.php).
  */
 
+use App\Http\Controllers\ComplaintAttachmentController;
 use App\Http\Controllers\Dashboard;
 use Illuminate\Support\Facades\Route;
 
@@ -31,7 +32,7 @@ Route::put('uploads/{upload}', [Dashboard\UploadController::class, 'receive'])
  * app (Bearer), the admin console and the partner dashboard — three guards on
  * two hosts. A short-lived signature is the one credential all three can hold,
  * and unlike a session it expires on its own if the link is forwarded. */
-Route::get('complaints/attachments/{attachment}', \App\Http\Controllers\ComplaintAttachmentController::class)
+Route::get('complaints/attachments/{attachment}', ComplaintAttachmentController::class)
     ->middleware('signed')->name('complaints.attachment');
 
 /* ---- Moyasar webhook (secret-token verified in controller) ---- */
@@ -64,6 +65,15 @@ Route::middleware(['auth:dashboard', 'throttle:120,1'])->group(function () {
     Route::patch('units/{id}', [Dashboard\UnitController::class, 'update'])->name('pd.units.update');
     Route::delete('units/{id}', [Dashboard\UnitController::class, 'destroy'])->name('pd.units.destroy');
     Route::post('units/{id}/submit', [Dashboard\UnitController::class, 'submit'])->name('pd.units.submit');
+
+    /*
+     * Multi-unit buildings. The logic shipped on 2026-08-30 but only on the
+     * Bearer /api/v1 surface, so this dashboard — the one partners actually
+     * use — had no way to reach it. `count` is a TOTAL, and it is the only
+     * input shape here on purpose; door numbers and ranges stay on /api/v1
+     * until a screen asks for them.
+     */
+    Route::post('units/{id}/apartments', [Dashboard\UnitController::class, 'apartments'])->name('pd.units.apartments');
 
     /* Calendar & availability */
     Route::get('units/{id}/calendar', [Dashboard\CalendarController::class, 'month'])->name('pd.calendar');
