@@ -448,6 +448,64 @@ class UnitLicenseTest extends TestCase
         $this->assertSame([], UnitLicense::inconsistentGroups());
     }
 
+    /* ---------- clearing the count when downgrading ---------- */
+
+    public function test_a_standalone_unit_may_downgrade_and_clear_its_count(): void
+    {
+        // What the partner dashboard sends when the partner switches the type
+        // back: an explicit null, to wipe a number left over from the previous
+        // choice. It has to be accepted rather than rejected, or the partner
+        // hits a 422 that means nothing to them.
+        $unit = $this->listing([
+            'license_type' => UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 6,
+        ]);
+
+        $this->actingAs($this->partner, 'sanctum')
+            ->putJson("/api/v1/partner/units/{$unit->id}", [
+                'license_type' => UnitLicense::PRIVATE_HOSPITALITY,
+                'licensed_units_count' => null,
+            ])
+            ->assertOk();
+
+        $fresh = $unit->fresh();
+        $this->assertSame(UnitLicense::PRIVATE_HOSPITALITY, $fresh->license_type);
+        $this->assertNull($fresh->licensed_units_count);
+    }
+
+    public function test_the_admin_review_payload_carries_all_three_numbers(): void
+    {
+        // The reviewer compares a typed number against an uploaded document, so
+        // the declared count, the permit type and the actual group size have to
+        // arrive together. They were absent entirely: the licence was added to
+        // the partner presenter and this surface uses a different class.
+        $unit = $this->listing([
+            'license_type' => UnitLicense::TOURIST_FACILITY,
+            'licensed_units_count' => 8,
+        ]);
+        $this->expand($unit, ['count' => 3])->assertSuccessful();
+        $unit->fresh()->forceFill(['approval_status' => 'pending'])->save();
+
+        $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson("/admin/approvals/{$unit->id}")
+            ->assertOk()
+            ->assertJsonPath('unit.licenseType', UnitLicense::TOURIST_FACILITY)
+            ->assertJsonPath('unit.licensedUnitsCount', 8)
+            ->assertJsonPath('unit.groupSize', 3);
+    }
+
+    public function test_group_size_is_one_for_a_standalone_listing_not_null(): void
+    {
+        $unit = $this->listing();
+        $unit->forceFill(['approval_status' => 'pending'])->save();
+
+        $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson("/admin/approvals/{$unit->id}")
+            ->assertOk()
+            ->assertJsonPath('unit.groupSize', 1)
+            ->assertJsonPath('unit.licenseType', null);
+    }
+
     /* ---------- fixtures ---------- */
 
     /** @param array<string, mixed> $licence */
