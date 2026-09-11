@@ -158,7 +158,11 @@ class UnitController extends DashboardController
         try {
             UnitLicense::guardGroupSize($unit, $count);
         } catch (LicenseViolation $e) {
-            $this->fail($e->reason, $e->getMessage(), 422);
+            // meta carries the numbers the message talks about — the dashboard
+            // renders "your permit covers 8 units" from the field, not by
+            // reading the Arabic. Dropping it here was the whole point of the
+            // refusal being machine-readable, undone one argument short.
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
         }
 
         $before = UnitLicense::groupSize($unit);
