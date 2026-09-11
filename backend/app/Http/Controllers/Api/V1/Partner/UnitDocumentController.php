@@ -7,9 +7,13 @@ namespace App\Http\Controllers\Api\V1\Partner;
 use App\Http\Controllers\Controller;
 use App\Models\DashboardUpload;
 use App\Models\Unit;
+use App\Support\Documents\DocumentStorage;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * Partner unit documents on the v1 surface — the tourism licence and the
@@ -39,8 +43,8 @@ class UnitDocumentController extends Controller
      * form because that is where a partner is already attaching paperwork.
      */
     private const TYPES = [
-        'tourism_permit'   => ['scope' => 'unit',    'column' => 'tourism_permit_file'],
-        'ownership_doc'    => ['scope' => 'unit',    'column' => 'ownership_doc_file'],
+        'tourism_permit' => ['scope' => 'unit',    'column' => 'tourism_permit_file'],
+        'ownership_doc' => ['scope' => 'unit',    'column' => 'ownership_doc_file'],
         'bank_certificate' => ['scope' => 'partner', 'column' => 'bank_certificate_file'],
     ];
 
@@ -57,10 +61,10 @@ class UnitDocumentController extends Controller
             'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'], // 10 MB
         ], [
             'type.required' => 'نوع المستند مطلوب.',
-            'type.in'       => 'نوع المستند غير صحيح.',
+            'type.in' => 'نوع المستند غير صحيح.',
             'file.required' => 'اختر ملفاً.',
-            'file.mimes'    => 'الصيغ المسموحة: pdf, jpg, png, webp.',
-            'file.max'      => 'حجم الملف يجب ألا يتجاوز 10 ميجابايت.',
+            'file.mimes' => 'الصيغ المسموحة: pdf, jpg, png, webp.',
+            'file.max' => 'حجم الملف يجب ألا يتجاوز 10 ميجابايت.',
         ]);
 
         [$holder, $column] = $this->target($request, $unit, $data['type']);
@@ -71,20 +75,70 @@ class UnitDocumentController extends Controller
         // elsewhere, so deleting its bytes from here would break that surface.
         $previous = $holder->{$column};
 
-        $path = $request->file('file')->store("units/{$unit->id}/docs", 'public');
-        $holder->update([$column => $path]);
+        // Recorded as a DashboardUpload rather than a bare path.
+        //
+        // This surface used to store `units/12/docs/abc.pdf` straight into the
+        // column. A bare path cannot be signed: the /documents route resolves an
+        // upload row to decide who may read it, and a path has no owner to check.
+        // So these documents could never move off the public disk while the
+        // other surfaces did — the same file type protected or not depending on
+        // which screen uploaded it.
+        //
+        // An id costs one row and makes every document in the system uniform.
+        // Both resolveUrl() and signedUrl() already branch on the `file_` prefix,
+        // so existing bare paths keep working untouched.
+        $upload = $this->record($request, $unit, $data['type'], $request->file('file'));
 
-        if (filled($previous) && ! str_starts_with((string) $previous, 'file_')) {
-            Storage::disk('public')->delete($previous);
-        }
+        $holder->update([$column => $upload->id]);
+
+        // The previous document is finished unless something else still points
+        // at it. The old rule — never delete an id — was right when this surface
+        // did not create ids; now that it does, keeping it would orphan a file
+        // on every single replacement.
+        DocumentStorage::forget($previous);
 
         return response()->json([
             'data' => [
                 'type' => $data['type'],
-                'path' => $path,
-                'url'  => DashboardUpload::resolveUrl($path),
+                // `path` stays in the response for clients that read it, but it
+                // is now the upload id — the value actually stored on the unit.
+                'path' => $upload->id,
+                'url' => DashboardUpload::signedUrl($upload->id),
             ],
         ], 201);
+    }
+
+    /**
+     * Store the bytes in the vault and record the row that authorises them.
+     *
+     * `kind` maps the caller's document TYPE onto the storage kinds the rest of
+     * the platform uses, so a permit uploaded here lands in the same directory,
+     * under the same rules, as one uploaded from the dashboard.
+     */
+    private function record(Request $request, Unit $unit, string $type, UploadedFile $file): DashboardUpload
+    {
+        $kind = match ($type) {
+            'tourism_permit' => 'license_pdf',
+            'bank_certificate' => 'company_doc',
+            default => 'ownership_doc',
+        };
+
+        $id = 'file_'.Str::ulid();
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->guessExtension() ?: 'pdf');
+        $path = "dashboard/{$kind}/{$id}.{$ext}";
+
+        DocumentStorage::put($path, (string) file_get_contents($file->getRealPath()), sensitive: true);
+
+        return DashboardUpload::create([
+            'id' => $id,
+            'user_id' => $request->user()->id,
+            'kind' => $kind,
+            'original_name' => $file->getClientOriginalName(),
+            'mime' => $file->getClientMimeType(),
+            'size' => $file->getSize(),
+            'path' => $path,
+            'status' => 'stored',
+        ]);
     }
 
     /** DELETE /partner/units/{unit}/documents/{type} */
@@ -97,11 +151,12 @@ class UnitDocumentController extends Controller
         [$holder, $column] = $this->target($request, $unit, $type);
         $value = $holder->{$column};
 
-        if (filled($value) && ! str_starts_with((string) $value, 'file_')) {
-            Storage::disk('public')->delete($value);
-        }
-
+        // Clear the column FIRST. forget() only drops an upload nothing points
+        // at, so running it while this column still held the id would find its
+        // own reference and keep the file forever.
         $holder->update([$column => null]);
+
+        DocumentStorage::forget($value);
 
         return response()->json(['message' => 'تم حذف المستند']);
     }
@@ -109,7 +164,7 @@ class UnitDocumentController extends Controller
     /**
      * The record that stores this document, and the column on it.
      *
-     * @return array{0: \Illuminate\Database\Eloquent\Model, 1: string}
+     * @return array{0: Model, 1: string}
      */
     private function target(Request $request, Unit $unit, string $type): array
     {

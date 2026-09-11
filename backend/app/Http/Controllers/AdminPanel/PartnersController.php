@@ -465,6 +465,6 @@ class PartnersController extends Controller
     {
         // KYC doc columns store a DashboardUpload id (file_...) → resolve to its
         // real public path.
-        return \App\Models\DashboardUpload::resolveUrl($path);
+        return \App\Models\DashboardUpload::signedUrl($path);
     }
 }

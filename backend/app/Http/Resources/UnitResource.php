@@ -122,11 +122,11 @@ class UnitResource extends JsonResource
                         ? (int) $this->licensed_units_count : null,
                     'tourism_permit_no' => $this->tourism_permit_no,
                     'company_license_no' => $this->company_license_no,
-                    'tourism_permit_url' => DashboardUpload::resolveUrl($this->tourism_permit_file),
-                    'ownership_doc_url' => DashboardUpload::resolveUrl($this->ownership_doc_file),
+                    'tourism_permit_url' => DashboardUpload::signedUrl($this->tourism_permit_file),
+                    'ownership_doc_url' => DashboardUpload::signedUrl($this->ownership_doc_file),
                     // Partner-scoped, surfaced here so the unit form can show
                     // whether it is already on file without a second request.
-                    'bank_certificate_url' => DashboardUpload::resolveUrl(
+                    'bank_certificate_url' => DashboardUpload::signedUrl(
                         $this->owner?->partnerDetail?->bank_certificate_file,
                     ),
                 ],

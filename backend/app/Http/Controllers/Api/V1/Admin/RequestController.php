@@ -141,14 +141,14 @@ class RequestController extends Controller
                     filled($d->iban) || filled($d->bank_certificate_file) => 'pending',
                     default => 'missing',
                 },
-                'fileUrl' => \App\Models\DashboardUpload::resolveUrl($d->bank_certificate_file),
+                'fileUrl' => \App\Models\DashboardUpload::signedUrl($d->bank_certificate_file),
             ], fn ($v) => $v !== null),
             array_filter([
                 'key'     => 'ownership',
                 // Not $state(): an ownership document is verified when an admin
                 // has looked at THIS file, and approving the partner is not that.
                 'status'  => filled($ownership) ? 'pending' : 'missing',
-                'fileUrl' => \App\Models\DashboardUpload::resolveUrl($ownership),
+                'fileUrl' => \App\Models\DashboardUpload::signedUrl($ownership),
             ], fn ($v) => $v !== null),
         ]));
     }

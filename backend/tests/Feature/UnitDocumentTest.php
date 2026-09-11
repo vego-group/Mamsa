@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\DashboardUpload;
+use App\Models\PartnerDetail;
 use App\Models\Unit;
 use App\Models\User;
+use App\Support\Documents\DocumentStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -65,8 +68,14 @@ class UnitDocumentTest extends TestCase
             ->assertJsonPath('data.type', 'tourism_permit');
 
         $this->unit->refresh();
-        $this->assertNotNull($this->unit->tourism_permit_file);
-        Storage::disk('public')->assertExists($this->unit->tourism_permit_file);
+        // The column now holds an upload id, and the bytes live in the vault —
+        // not on the public disk, which is the whole point of the change.
+        $id = $this->unit->tourism_permit_file;
+        $this->assertStringStartsWith('file_', $id);
+
+        $upload = DashboardUpload::findOrFail($id);
+        Storage::disk('local')->assertExists(DocumentStorage::vaultPath($upload->path));
+        Storage::disk('public')->assertMissing($upload->path);
     }
 
     public function test_a_partner_can_attach_an_ownership_document_as_an_image(): void
@@ -98,8 +107,16 @@ class UnitDocumentTest extends TestCase
         $second = $this->unit->fresh()->ownership_doc_file;
 
         $this->assertNotSame($first, $second);
-        Storage::disk('public')->assertMissing($first);
-        Storage::disk('public')->assertExists($second);
+
+        // Replacing finishes the old document: nothing else points at it, so
+        // its bytes and its row go. Without this every replacement would leave
+        // a file in the vault that nobody can reach and nobody deletes — the
+        // way the orphans on production accumulated in the first place.
+        $this->assertNull(DashboardUpload::find($first), 'the superseded upload row must be gone');
+        $this->assertNotNull(DashboardUpload::find($second));
+        Storage::disk('local')->assertExists(
+            DocumentStorage::vaultPath(DashboardUpload::findOrFail($second)->path),
+        );
     }
 
     public function test_a_dashboard_upload_id_is_never_deleted_from_disk(): void
@@ -169,15 +186,15 @@ class UnitDocumentTest extends TestCase
             ->assertOk();
 
         $this->assertNull($this->unit->fresh()->ownership_doc_file);
-        Storage::disk('public')->assertMissing($path);
+        $this->assertNull(DashboardUpload::find($path), 'deleting the document removes its row and bytes');
     }
 
     public function test_the_documents_never_appear_on_a_public_unit_payload(): void
     {
         $this->unit->update([
-            'approval_status'    => 'approved',
-            'status'             => 'available',
-            'tourism_permit_no'  => 'TL-SECRET-1',
+            'approval_status' => 'approved',
+            'status' => 'available',
+            'tourism_permit_no' => 'TL-SECRET-1',
             'ownership_doc_file' => 'units/1/docs/deed.jpg',
         ]);
 
@@ -197,12 +214,12 @@ class UnitDocumentTest extends TestCase
 
         $this->partner->partnerDetail()->create([
             'type' => 'individual',
-            'status' => \App\Models\PartnerDetail::STATUS_APPROVED,
+            'status' => PartnerDetail::STATUS_APPROVED,
             // The three files the row USED to be derived from. None of them is
             // proof of property ownership, and an approved partner made the row
             // read "verified" while no deed existed anywhere.
             'authorization_letter_file' => 'file_auth',
-            'vat_certificate_file'      => 'file_vat',
+            'vat_certificate_file' => 'file_vat',
         ]);
         $this->unit->update(['approval_status' => 'pending']);
 
@@ -222,7 +239,7 @@ class UnitDocumentTest extends TestCase
         $this->assertStringContainsString('deed.pdf', $after['fileUrl']);
     }
 
-    public function test_the_bank_certificate_is_stored_on_the_PARTNER_not_the_unit(): void
+    public function test_the_bank_certificate_is_stored_on_the_partne_r_not_the_unit(): void
     {
         $second = $this->makeUnit($this->partner);
 
@@ -247,7 +264,7 @@ class UnitDocumentTest extends TestCase
         $admin->assignRole('Admin');
         $detail = $this->partner->partnerDetail()->create([
             'type' => 'individual',
-            'status' => \App\Models\PartnerDetail::STATUS_APPROVED,
+            'status' => PartnerDetail::STATUS_APPROVED,
         ]);
         $this->unit->update(['approval_status' => 'pending']);
 
@@ -274,9 +291,9 @@ class UnitDocumentTest extends TestCase
     public function test_the_owner_does_see_them(): void
     {
         $this->unit->update([
-            'approval_status'    => 'approved',
-            'status'             => 'available',
-            'tourism_permit_no'  => 'TL-SECRET-1',
+            'approval_status' => 'approved',
+            'status' => 'available',
+            'tourism_permit_no' => 'TL-SECRET-1',
         ]);
 
         // A REAL Bearer token, not actingAs(): on this PUBLIC route there is no

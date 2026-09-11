@@ -26,4 +26,29 @@ return [
      */
     'vault_disk' => 'local',
     'vault_root' => 'secured-documents',
+
+    /*
+     * Which upload kinds are compliance documents rather than public imagery.
+     *
+     * One list, read by the writers, the reader and the orphan sweep, because
+     * the cost of them disagreeing is asymmetric: a document mistaken for a
+     * photo is published, while a photo mistaken for a document merely goes
+     * through PHP. `unit_photo` is the only kind deliberately absent.
+     *
+     * `national_id` appears here even though it is not a DashboardUpload::KINDS
+     * value — registration writes ID scans into that folder under the
+     * `company_doc` kind, so the DIRECTORY has to be covered too.
+     */
+    'sensitive_kinds' => ['license_pdf', 'company_doc', 'ownership_doc', 'national_id'],
+
+    /*
+     * Directories holding documents, for sweeps that work on paths rather than
+     * rows — the orphan mover among them.
+     */
+    'sensitive_dirs' => [
+        'dashboard/license_pdf',
+        'dashboard/national_id',
+        'dashboard/company_doc',
+        'dashboard/ownership_doc',
+    ],
 ];

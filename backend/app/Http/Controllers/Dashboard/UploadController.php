@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Dashboard;
 
 use App\Models\DashboardUpload;
+use App\Support\Documents\DocumentStorage;
 use App\Support\Images\ImageProcessor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,7 +35,7 @@ class UploadController extends DashboardController
      * but never resized — shrinking an ID scan costs legibility for nothing.
      */
     private const RULES = [
-        'unit_photo'  => ['images' => true,  'pdf' => false, 'derive' => true],
+        'unit_photo' => ['images' => true,  'pdf' => false, 'derive' => true],
         'license_pdf' => ['images' => false, 'pdf' => true,  'derive' => false],
         // Images allowed as well as PDF: a KYC document is usually PHOTOGRAPHED,
         // not scanned to PDF — and registration already accepts jpg/png for the
@@ -49,20 +50,20 @@ class UploadController extends DashboardController
     public function presign(Request $request): JsonResponse
     {
         $data = $this->validated($request, [
-            'kind'     => ['required', 'in:'.implode(',', DashboardUpload::KINDS)],
+            'kind' => ['required', 'in:'.implode(',', DashboardUpload::KINDS)],
             'fileName' => ['required', 'string', 'max:255'],
             'mimeType' => ['required', 'string', 'max:100'],
-            'size'     => ['required', 'integer', 'min:1', 'max:'.config('dashboard.upload_max_bytes')],
+            'size' => ['required', 'integer', 'min:1', 'max:'.config('dashboard.upload_max_bytes')],
         ]);
 
         $upload = DashboardUpload::create([
-            'id'            => 'file_'.Str::lower((string) Str::ulid()),
-            'user_id'       => $request->user()->id,
-            'kind'          => $data['kind'],
+            'id' => 'file_'.Str::lower((string) Str::ulid()),
+            'user_id' => $request->user()->id,
+            'kind' => $data['kind'],
             'original_name' => $data['fileName'],
-            'mime'          => $data['mimeType'],
-            'size'          => $data['size'],
-            'status'        => 'pending',
+            'mime' => $data['mimeType'],
+            'size' => $data['size'],
+            'status' => 'pending',
         ]);
 
         $uploadUrl = URL::temporarySignedRoute('pd.uploads.receive', now()->addMinutes(30), ['upload' => $upload->id]);
@@ -82,7 +83,7 @@ class UploadController extends DashboardController
         }
 
         $bytes = $request->getContent();
-        $size  = strlen($bytes);
+        $size = strlen($bytes);
 
         if ($size === 0) {
             $this->fail('EMPTY_FILE', 'الملف فارغ', 400);
@@ -91,8 +92,8 @@ class UploadController extends DashboardController
             $this->fail('FILE_TOO_LARGE', 'حجم الملف يتجاوز الحد المسموح (10MB)', 400);
         }
 
-        $rules  = self::RULES[$record->kind];
-        $isPdf  = str_starts_with($bytes, '%PDF');
+        $rules = self::RULES[$record->kind];
+        $isPdf = str_starts_with($bytes, '%PDF');
         $format = $isPdf ? null : ImageProcessor::detect($bytes);
 
         if (! ($isPdf && $rules['pdf']) && ! ($format !== null && $rules['images'])) {
@@ -102,7 +103,7 @@ class UploadController extends DashboardController
         // Extension follows the BYTES, not the kind: a company_doc may now be a
         // photo, and storing a PNG as .pdf would make it unopenable.
         $meta = ['status' => 'stored', 'size' => $size];
-        $ext  = 'pdf';
+        $ext = 'pdf';
 
         if ($format !== null) {
             [$bytes, $ext, $meta] = $this->prepareImage($record, $bytes, $format, $rules['derive']);
@@ -110,7 +111,12 @@ class UploadController extends DashboardController
         }
 
         $path = "dashboard/{$record->kind}/{$record->id}.{$ext}";
-        Storage::disk('public')->put($path, $bytes);
+
+        // Photos stay public; documents go to the vault. This endpoint takes
+        // both, which is exactly why the decision is delegated rather than
+        // written here — a permit and a listing photo arrive through the same
+        // method, and getting the branch wrong publishes the permit.
+        DocumentStorage::put($path, $bytes, DocumentStorage::isSensitive($record->kind));
 
         if ($rules['derive']) {
             // Best effort: a listing whose photos could not be optimised is
@@ -123,7 +129,14 @@ class UploadController extends DashboardController
 
         $record->update($meta + ['status' => 'stored', 'path' => $path, 'size' => $size]);
 
-        return $this->ok(['fileId' => $record->id, 'url' => Storage::disk('public')->url($path)]);
+        // A document has no public URL any more, so none is returned. The
+        // client already holds `fileId`, which is what every write body takes
+        // and what the signed route resolves — handing back a URL that 404s
+        // would be worse than handing back none.
+        return $this->ok(array_filter([
+            'fileId' => $record->id,
+            'url' => DocumentStorage::isSensitive($record->kind) ? null : Storage::disk('public')->url($path),
+        ], fn ($v) => $v !== null));
     }
 
     /**
@@ -156,7 +169,7 @@ class UploadController extends DashboardController
         }
 
         return [$normalised['bytes'], $normalised['ext'], [
-            'width'  => $normalised['width'],
+            'width' => $normalised['width'],
             'height' => $normalised['height'],
         ]];
     }
@@ -168,7 +181,7 @@ class UploadController extends DashboardController
      */
     private function assertLargeEnough(int $width, int $height): void
     {
-        $minLong  = (int) config('dashboard.image_min_long_edge');
+        $minLong = (int) config('dashboard.image_min_long_edge');
         $minShort = (int) config('dashboard.image_min_short_edge');
 
         if (max($width, $height) < $minLong || min($width, $height) < $minShort) {

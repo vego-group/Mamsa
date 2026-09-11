@@ -7,8 +7,10 @@ namespace Tests\Feature;
 use App\Models\DashboardUpload;
 use App\Models\PartnerDetail;
 use App\Models\User;
+use App\Support\Documents\DocumentStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -70,19 +72,19 @@ class CompanyCrDocumentTest extends TestCase
 
     public function test_a_company_registers_with_its_cr_scan(): void
     {
-        $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class);
+        $this->withoutMiddleware(ThrottleRequests::class);
 
         $phone = '512345678';
         $this->seedOtp('+966512345678');
 
         $response = $this->postJson('/api/v1/auth/partner/register', [
-            'type'      => 'company',
-            'name'      => 'شركة الأفق',
-            'phone'     => $phone,
-            'code'      => '123456',
-            'email'     => 'ops@alofuq.test',
+            'type' => 'company',
+            'name' => 'شركة الأفق',
+            'phone' => $phone,
+            'code' => '123456',
+            'email' => 'ops@alofuq.test',
             'cr_number' => '1010101010',
-            'cr_file'   => UploadedFile::fake()->image('cr.jpg'),
+            'cr_file' => UploadedFile::fake()->image('cr.jpg'),
         ]);
 
         $response->assertSuccessful();
@@ -97,13 +99,17 @@ class CompanyCrDocumentTest extends TestCase
         $upload = DashboardUpload::find($detail->cr_file);
         $this->assertNotNull($upload);
         $this->assertSame('company_doc', $upload->kind);
-        Storage::disk('public')->assertExists($upload->path);
+        // In the vault, and NOT on the public disk — that second assertion is
+        // the security property, and the one that would have caught this file
+        // being served as a static asset with no signature and no expiry.
+        Storage::disk('local')->assertExists(DocumentStorage::vaultPath($upload->path));
+        Storage::disk('public')->assertMissing($upload->path);
     }
 
     /** A CR is usually photographed; a PDF scan must work too. */
     public function test_a_pdf_cr_is_accepted_at_registration(): void
     {
-        $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class);
+        $this->withoutMiddleware(ThrottleRequests::class);
         $this->seedOtp('+966512345679');
 
         $this->postJson('/api/v1/auth/partner/register', [
@@ -119,7 +125,7 @@ class CompanyCrDocumentTest extends TestCase
 
     public function test_an_unsupported_cr_file_type_is_rejected(): void
     {
-        $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class);
+        $this->withoutMiddleware(ThrottleRequests::class);
         $this->seedOtp('+966512345670');
 
         $this->postJson('/api/v1/auth/partner/register', [
@@ -154,7 +160,7 @@ class CompanyCrDocumentTest extends TestCase
     public function test_a_file_belonging_to_another_partner_is_refused(): void
     {
         $company = $this->company();
-        $other   = $this->company();
+        $other = $this->company();
 
         $presign = $this->actingAs($other, 'dashboard')->postJson('/uploads/presign', [
             'kind' => 'company_doc', 'fileName' => 'cr.pdf',
@@ -197,11 +203,11 @@ class CompanyCrDocumentTest extends TestCase
     {
         $company = $this->company();
         $company->partnerDetail->update([
-            'iban'                      => 'SA2480000000000000000000',
-            'vat_certificate_file'      => 'file_vat',
-            'operator_license_file'     => 'file_licence',
+            'iban' => 'SA2480000000000000000000',
+            'vat_certificate_file' => 'file_vat',
+            'operator_license_file' => 'file_licence',
             'authorization_letter_file' => 'file_auth',
-            'cr_file'                   => null,          // never uploaded
+            'cr_file' => null,          // never uploaded
         ]);
 
         $this->assertTrue(
