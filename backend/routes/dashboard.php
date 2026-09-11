@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\ComplaintAttachmentController;
 use App\Http\Controllers\Dashboard;
+use App\Http\Controllers\DocumentController;
 use Illuminate\Support\Facades\Route;
 
 /* ---- Auth (public) ---- */
@@ -32,6 +33,20 @@ Route::put('uploads/{upload}', [Dashboard\UploadController::class, 'receive'])
  * app (Bearer), the admin console and the partner dashboard — three guards on
  * two hosts. A short-lived signature is the one credential all three can hold,
  * and unlike a session it expires on its own if the link is forwarded. */
+/* ---- Compliance documents: signed AND authorised ----
+ *
+ * Unlike the attachment route above, a signature alone is not enough here. That
+ * one is read from three surfaces with three different guards, so a short-lived
+ * signature is the only credential all three can carry. These documents —
+ * permits, commercial registrations, national IDs — are read by exactly two
+ * people, the reviewer and the owner, and both have sessions. Identity is
+ * available, so it is required: the controller checks both cookie guards.
+ *
+ * Sits in this group for EncryptCookies + StartSession; DashboardApi only
+ * gates unsafe methods, so a GET passes through it untouched. */
+Route::get('documents/{upload}', DocumentController::class)
+    ->middleware('signed')->name('documents.show');
+
 Route::get('complaints/attachments/{attachment}', ComplaintAttachmentController::class)
     ->middleware('signed')->name('complaints.attachment');
 
