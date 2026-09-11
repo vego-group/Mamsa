@@ -1,13 +1,28 @@
 <?php
 
+use App\Exceptions\AdminPanelException;
+use App\Exceptions\DashboardException;
+use App\Exceptions\OtpException;
+use App\Http\Middleware\AdminPanelApi;
+use App\Http\Middleware\DashboardApi;
+use App\Http\Middleware\EnsureAdminPermission;
+use App\Http\Middleware\ForceJsonResponse;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Middleware\PermissionMiddleware;
+use Spatie\Permission\Middleware\RoleMiddleware;
+use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -20,12 +35,12 @@ return Application::configure(basePath: dirname(__DIR__))
         then: function () {
             // Partner-dashboard contract API: root-mounted paths (/auth/otp/*,
             // /me, /units, …) served with cookie sessions — routes/dashboard.php.
-            \Illuminate\Support\Facades\Route::middleware('dashboard-api')
+            Route::middleware('dashboard-api')
                 ->group(base_path('routes/dashboard.php'));
 
             // Admin-panel (Next.js) contract API: root-mounted under /admin/*,
             // cookie sessions, OTP auth — routes/admin-panel.php.
-            \Illuminate\Support\Facades\Route::middleware('admin-panel')
+            Route::middleware('admin-panel')
                 ->group(base_path('routes/admin-panel.php'));
         },
     )
@@ -40,7 +55,7 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         $middleware->api(prepend: [
-            \App\Http\Middleware\ForceJsonResponse::class,
+            ForceJsonResponse::class,
         ]);
 
         // Partner-dashboard group: cookie session (httpOnly) without the web
@@ -59,30 +74,30 @@ return Application::configure(basePath: dirname(__DIR__))
         // controller takes a `string $id` and resolves it by hand. What it does
         // is make the next model type-hint work instead of failing obscurely.
         $middleware->group('dashboard-api', [
-            \App\Http\Middleware\DashboardApi::class,
-            \Illuminate\Cookie\Middleware\EncryptCookies::class,
-            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-            \Illuminate\Session\Middleware\StartSession::class,
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            DashboardApi::class,
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            SubstituteBindings::class,
         ]);
 
         // Admin-panel (Next.js) BFF group: same cookie-session stack, distinct
         // marker middleware so the exception renderer uses the flat envelope.
         $middleware->group('admin-panel', [
-            \App\Http\Middleware\AdminPanelApi::class,
-            \Illuminate\Cookie\Middleware\EncryptCookies::class,
-            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-            \Illuminate\Session\Middleware\StartSession::class,
+            AdminPanelApi::class,
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
             // Same omission, same reasoning — see the dashboard group above.
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            SubstituteBindings::class,
         ]);
 
         $middleware->alias([
             // Per-endpoint authz for the admin-panel BFF (contract §4.3).
-            'admin.can'          => \App\Http\Middleware\EnsureAdminPermission::class,
-            'role'               => \Spatie\Permission\Middleware\RoleMiddleware::class,
-            'permission'         => \Spatie\Permission\Middleware\PermissionMiddleware::class,
-            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+            'admin.can' => EnsureAdminPermission::class,
+            'role' => RoleMiddleware::class,
+            'permission' => PermissionMiddleware::class,
+            'role_or_permission' => RoleOrPermissionMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -95,12 +110,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // Admin-panel (Next.js) envelope: flat { message, code } — distinct from
         // the partner-dashboard { error: { code, message } }. Runs before the
         // dashboard renderer so admin requests never fall into it.
-        $exceptions->render(function (\Throwable $e, Request $request) {
+        $exceptions->render(function (Throwable $e, Request $request) {
             if (! $request->attributes->get('admin_panel_api')) {
                 return null; // not an admin-panel request — fall through
             }
 
-            if ($e instanceof \App\Exceptions\AdminPanelException) {
+            if ($e instanceof AdminPanelException) {
                 return $e->render();
             }
 
@@ -108,11 +123,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 ['message' => $message, 'code' => $code], $status, $headers,
             );
 
-            if ($e instanceof \App\Exceptions\OtpException) {
+            if ($e instanceof OtpException) {
                 $code = match ($e->otpCode) {
                     'OTP_EXPIRED' => 'OTP_EXPIRED',
-                    'OTP_LOCKED'  => 'OTP_MAX_ATTEMPTS',
-                    default       => 'OTP_INVALID',
+                    'OTP_LOCKED' => 'OTP_MAX_ATTEMPTS',
+                    default => 'OTP_INVALID',
                 };
                 $status = $code === 'OTP_MAX_ATTEMPTS' ? 429 : 422;
 
@@ -120,7 +135,28 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             if ($e instanceof ValidationException) {
-                return $flat('VALIDATION_ERROR', $e->validator->errors()->first() ?: 'بيانات غير صالحة', 422);
+                // Every failing field, not just the first.
+                //
+                // A validation error reached through here — a FormRequest, or a
+                // bare $request->validate() — used to arrive as one sentence,
+                // while the same failure through AdminPanel\Controller::validate()
+                // arrived with every field named. So the answer depended on how
+                // the check happened to be written, and the thin version sends
+                // an admin round the form once per mistake: fix the permit
+                // number, resubmit, discover the coordinates, resubmit again.
+                //
+                // Shape matches AdminPanelException::render() exactly, so a
+                // client cannot tell which path produced the response.
+                $fields = collect($e->errors())->map(fn (array $msgs) => (string) ($msgs[0] ?? ''))->all();
+
+                return response()->json([
+                    'message' => $e->validator->errors()->first() ?: 'بيانات غير صالحة',
+                    'code' => 'VALIDATION_ERROR',
+                    // Omitted rather than sent empty, exactly as
+                    // AdminPanelException::render() does: a key that is always
+                    // present but sometimes meaningless is one a client has to
+                    // test anyway.
+                ] + ($fields === [] ? [] : ['fields' => $fields]), 422);
             }
 
             if ($e instanceof AuthenticationException) {
@@ -159,16 +195,16 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         // Partner-dashboard envelope: { error: { code, message, fields? } }.
-        $exceptions->render(function (\Throwable $e, Request $request) {
+        $exceptions->render(function (Throwable $e, Request $request) {
             if (! $request->attributes->get('dashboard_api')) {
                 return null; // fall through to default rendering
             }
 
-            if ($e instanceof \App\Exceptions\DashboardException) {
+            if ($e instanceof DashboardException) {
                 return $e->render();
             }
 
-            if ($e instanceof \App\Exceptions\OtpException) {
+            if ($e instanceof OtpException) {
                 $status = $e->otpCode === 'OTP_LOCKED' ? 429 : 401;
 
                 return response()->json([
@@ -179,9 +215,9 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($e instanceof ValidationException) {
                 return response()->json([
                     'error' => [
-                        'code'    => 'VALIDATION',
+                        'code' => 'VALIDATION',
                         'message' => 'بيانات غير صالحة',
-                        'fields'  => collect($e->errors())->map(fn ($msgs) => $msgs[0])->all(),
+                        'fields' => collect($e->errors())->map(fn ($msgs) => $msgs[0])->all(),
                     ],
                 ], 400);
             }
@@ -214,7 +250,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
                 return response()->json([
                     'error' => [
-                        'code'    => $status === 403 ? 'FORBIDDEN' : 'HTTP_ERROR',
+                        'code' => $status === 403 ? 'FORBIDDEN' : 'HTTP_ERROR',
                         'message' => $status === 403
                             ? 'الرابط غير صالح أو انتهت صلاحيته'
                             : 'تعذّر تنفيذ الطلب',
@@ -243,7 +279,7 @@ return Application::configure(basePath: dirname(__DIR__))
          * Validation and auth responses keep their existing shapes, which
          * clients already parse.
          */
-        $exceptions->render(function (\Throwable $e, Request $request) {
+        $exceptions->render(function (Throwable $e, Request $request) {
             if (! $request->is('api/*')
                 || $request->attributes->get('dashboard_api')
                 || $request->attributes->get('admin_panel_api')) {
@@ -257,7 +293,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($e instanceof ValidationException
                 || $e instanceof AuthenticationException
                 || $e instanceof ThrottleRequestsException
-                || $e instanceof \App\Exceptions\OtpException
+                || $e instanceof OtpException
                 || $e instanceof HttpExceptionInterface) {
                 return null; // keep the shapes clients already handle
             }
