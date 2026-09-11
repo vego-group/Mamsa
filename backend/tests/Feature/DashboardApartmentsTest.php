@@ -89,7 +89,12 @@ class DashboardApartmentsTest extends TestCase
 
         $this->expand($unit, 9)
             ->assertStatus(422)
-            ->assertJsonPath('error.code', 'QUANTITY_EXCEEDS_LICENSED_UNITS');
+            ->assertJsonPath('error.code', 'QUANTITY_EXCEEDS_LICENSED_UNITS')
+            // The dashboard says "your permit covers 4 units" from these two
+            // numbers. Without them it renders `undefined`, and the refusal
+            // stops being machine-readable one argument short of the envelope.
+            ->assertJsonPath('error.meta.licensed_units_count', 4)
+            ->assertJsonPath('error.meta.requested', 9);
 
         $this->assertSame(1, Unit::where('user_id', $this->partner->id)->count(),
             'a refused expansion must not leave apartments behind');
@@ -133,6 +138,37 @@ class DashboardApartmentsTest extends TestCase
             ->postJson("/units/u_{$this->licensed(5)->id}/apartments", [])
             ->assertStatus(400)
             ->assertJsonPath('error.code', 'VALIDATION');
+    }
+
+    public function test_a_refusal_with_nothing_to_report_carries_no_meta_key(): void
+    {
+        // An empty meta would make clients branch on a key that means nothing.
+        $this->expand($this->unit(), 3)
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'MULTI_UNIT_REQUIRES_FACILITY_LICENSE')
+            ->assertJsonPath('error.meta.max_units', 1);
+    }
+
+    public function test_new_apartments_are_drafts_and_cannot_be_sold_unreviewed(): void
+    {
+        // The frontend asked whether expanding lets a partner add apartments
+        // with no human review. It does not: a clone starts `draft`, and draft
+        // is excluded from search, from the availability count, and from the
+        // allocation the booking endpoint picks from. The declared licence
+        // number bounds how many CAN exist; an admin still has to approve each
+        // one before it can be sold.
+        $unit = $this->licensed(9);
+
+        $body = $this->expand($unit, 4)->assertOk()->json();
+
+        $new = collect($body['units'])->where('status', 'draft');
+        $this->assertCount(3, $new, 'the three new apartments start as drafts');
+        $this->assertSame('approved', collect($body['units'])->firstWhere('id', 'u_'.$unit->id)['status']);
+
+        // The building still advertises only what was already approved.
+        $this->getJson("/api/v1/units/{$unit->id}")
+            ->assertOk()
+            ->assertJsonPath('data.available_count', 1);
     }
 
     /* ---------- fixtures ---------- */
