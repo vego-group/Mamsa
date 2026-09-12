@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\BankDetail;
 use App\Models\Booking;
 use App\Models\PartnerDetail;
 use App\Models\PartnerLedgerEntry;
 use App\Models\PartnerWallet;
+use App\Models\Payout;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\EmailVerificationService;
 use App\Services\OtpService;
 use App\Support\TestMode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,31 +71,31 @@ class SecurityTest extends TestCase
     private function unit(User $owner): Unit
     {
         return $owner->units()->create([
-            'unit_name'       => 'وحدة اختبار',
-            'unit_type'       => 'apartment',
-            'code'            => 'SEC'.fake()->unique()->numerify('#####'),
-            'price'           => 300,
-            'capacity'        => 2,
-            'bedrooms'        => 1,
+            'unit_name' => 'وحدة اختبار',
+            'unit_type' => 'apartment',
+            'code' => 'SEC'.fake()->unique()->numerify('#####'),
+            'price' => 300,
+            'capacity' => 2,
+            'bedrooms' => 1,
             'approval_status' => 'approved',
-            'status'          => 'available',
-            'calendar_token'  => str()->random(60),
+            'status' => 'available',
+            'calendar_token' => str()->random(60),
         ]);
     }
 
     private function booking(Unit $unit, User $guest): Booking
     {
         return Booking::create([
-            'unit_id'      => $unit->id,
-            'user_id'      => $guest->id,
-            'start_date'   => now()->addDays(5)->toDateString(),
-            'end_date'     => now()->addDays(7)->toDateString(),
-            'guests'       => 1,
+            'unit_id' => $unit->id,
+            'user_id' => $guest->id,
+            'start_date' => now()->addDays(5)->toDateString(),
+            'end_date' => now()->addDays(7)->toDateString(),
+            'guests' => 1,
             'nightly_rate' => 300,
-            'subtotal'     => 600,
-            'taxes'        => 90,
+            'subtotal' => 600,
+            'taxes' => 90,
             'total_amount' => 690,
-            'status'       => Booking::STATUS_CONFIRMED,
+            'status' => Booking::STATUS_CONFIRMED,
         ]);
     }
 
@@ -185,7 +188,7 @@ class SecurityTest extends TestCase
         // Both users are created up-front: Spatie resolves a role's guard from the
         // ACTIVE session, so assigning a role while acting as another guard fails.
         $finance = $this->financeAdmin();
-        $super   = $this->admin();
+        $super = $this->admin();
 
         $this->actingAs($finance, 'admin-panel')->getJson('/admin/me')
             ->assertOk()->assertJsonPath('role', 'finance');
@@ -231,8 +234,8 @@ class SecurityTest extends TestCase
     public function test_guest_booking_response_never_exposes_commission_or_partner_share(): void
     {
         $partner = $this->partner();
-        $unit    = $this->unit($partner);
-        $guest   = User::factory()->create();
+        $unit = $this->unit($partner);
+        $guest = User::factory()->create();
         $guest->assignRole('User');
 
         $booking = $this->booking($unit, $guest);
@@ -248,18 +251,41 @@ class SecurityTest extends TestCase
 
     /* ========== 4. a fixed OTP is never honoured for an ordinary user ========== */
 
-    public function test_fixed_otp_code_is_ignored_in_production(): void
+    public function test_there_is_no_fixed_otp_path_in_any_environment(): void
     {
-        // OTP_FIXED_CODE exists for staging/local only. If this guard is ever
-        // removed, every account on production becomes openable with a constant.
+        // This test used to assert that OTP_FIXED_CODE was ignored in
+        // PRODUCTION, which conceded the real problem: on every other
+        // environment one constant opened every account, and the only thing
+        // between that and production was a single env var. This project has
+        // already run production with APP_DEBUG=true for five days, so that is
+        // not a control.
+        //
+        // The path is gone rather than narrowed, so the assertion is no longer
+        // about an environment: setting the old key has no effect anywhere.
         config(['otp.fixed_code' => '424242']);
         config(['test_mode.otp' => false]);
-        $this->app['env'] = 'production';
 
-        $code = app(OtpService::class)->request('512345678', 'login');
+        foreach (['production', 'staging', 'local'] as $env) {
+            $this->app['env'] = $env;
 
-        $this->assertNotSame('424242', $code, 'A fixed OTP was honoured in production.');
-        $this->assertMatchesRegularExpression('/^\d{6}$/', $code);
+            $code = app(OtpService::class)->request('51234'.random_int(1000, 9999), 'login');
+
+            $this->assertNotSame('424242', $code, "A fixed OTP was honoured in {$env}.");
+            $this->assertMatchesRegularExpression('/^\d{6}$/', $code);
+        }
+    }
+
+    public function test_the_email_otp_has_no_fixed_path_either(): void
+    {
+        // The email service mirrored OtpService, flaw included. Fixing one and
+        // leaving the other is a fix that reads as done.
+        config(['otp.fixed_code' => '424242']);
+        $this->app['env'] = 'local';
+
+        $user = User::factory()->create();
+        $code = app(EmailVerificationService::class)->start($user, 'someone@example.com');
+
+        $this->assertNotSame('424242', $code, 'A fixed OTP was honoured for email verification.');
     }
 
     public function test_test_mode_bypass_never_applies_to_a_non_allowlisted_phone(): void
@@ -267,8 +293,8 @@ class SecurityTest extends TestCase
         // The scoped bypass has no production guard of its own — the allowlist IS
         // the control. A real user must never fall into it, in any environment.
         config([
-            'test_mode.otp'    => true,
-            'test_mode.code'   => '424242',
+            'test_mode.otp' => true,
+            'test_mode.code' => '424242',
             'test_mode.phones' => ['+966555000003'],
         ]);
         $this->app['env'] = 'production';
@@ -280,8 +306,8 @@ class SecurityTest extends TestCase
     public function test_blank_fixed_code_disables_the_bypass_entirely(): void
     {
         config([
-            'test_mode.otp'    => true,
-            'test_mode.code'   => '',              // the kill switch used during incidents
+            'test_mode.otp' => true,
+            'test_mode.code' => '',              // the kill switch used during incidents
             'test_mode.phones' => ['+966555000003'],
         ]);
 
@@ -330,43 +356,43 @@ class SecurityTest extends TestCase
 
     public function test_payout_record_ignores_client_supplied_amount_and_iban(): void
     {
-        $admin   = $this->admin();
+        $admin = $this->admin();
         $partner = $this->partner();
 
-        \App\Models\BankDetail::create([
-            'partner_user_id'     => $partner->id,
-            'iban'                => 'SA2480000000000000000000',
+        BankDetail::create([
+            'partner_user_id' => $partner->id,
+            'iban' => 'SA2480000000000000000000',
             'account_holder_name' => 'شريك',
-            'bank_name'           => 'مصرف الراجحي',
-            'verified'            => true,
-            'verified_at'         => now(),
+            'bank_name' => 'مصرف الراجحي',
+            'verified' => true,
+            'verified_at' => now(),
         ]);
 
         $unit = $this->unit($partner);
 
-        \App\Models\Booking::create([
-            'unit_id'           => $unit->id,
-            'user_id'           => User::factory()->create()->id,
-            'code'              => 'BK-SEC-1',
-            'start_date'        => now()->subDays(5),
-            'end_date'          => now()->subDays(2),
-            'guests'            => 2,
-            'subtotal'          => 3000.00,
-            'taxes'             => 450.00,
+        Booking::create([
+            'unit_id' => $unit->id,
+            'user_id' => User::factory()->create()->id,
+            'code' => 'BK-SEC-1',
+            'start_date' => now()->subDays(5),
+            'end_date' => now()->subDays(2),
+            'guests' => 2,
+            'subtotal' => 3000.00,
+            'taxes' => 450.00,
             'commission_amount' => 60.00,
-            'partner_share'     => 2940.00,
-            'total_amount'      => 3450.00,
-            'status'            => \App\Models\Booking::STATUS_COMPLETED,
+            'partner_share' => 2940.00,
+            'total_amount' => 3450.00,
+            'status' => Booking::STATUS_COMPLETED,
         ]);
 
         // The core control of the payout feature: the accountant records a
         // transfer, they never state its size or destination.
         $this->actingAs($admin, 'admin-panel')
             ->postJson('/admin/payouts/record', [
-                'partnerId'     => 'prt_'.$partner->id,
+                'partnerId' => 'prt_'.$partner->id,
                 'bankReference' => 'FT-SEC-0001',
-                'amount'        => 999999.99,
-                'iban'          => 'SA0000000000000000000000',
+                'amount' => 999999.99,
+                'iban' => 'SA0000000000000000000000',
             ])
             ->assertOk()
             ->assertJsonPath('ok', true)
@@ -376,7 +402,7 @@ class SecurityTest extends TestCase
 
         // And the recorded transfer is what the SERVER computed, not what was
         // asked for — the assertion the fixture version could never make.
-        $payout = \App\Models\Payout::firstOrFail();
+        $payout = Payout::firstOrFail();
         $this->assertEqualsWithDelta(2940.00, $payout->amount, 0.001);
         $this->assertSame('••••0000', $payout->iban_masked);
     }
@@ -389,12 +415,12 @@ class SecurityTest extends TestCase
 
         $entry = PartnerLedgerEntry::create([
             'partner_user_id' => $partner->id,
-            'type'            => PartnerLedgerEntry::TYPE_EARNING,
-            'amount'          => 100.00,
-            'balance_after'   => 100.00,
-            'ref_type'        => 'booking',
-            'ref_id'          => '1',
-            'created_at'      => now(),
+            'type' => PartnerLedgerEntry::TYPE_EARNING,
+            'amount' => 100.00,
+            'balance_after' => 100.00,
+            'ref_type' => 'booking',
+            'ref_id' => '1',
+            'created_at' => now(),
         ]);
 
         $this->expectException(\RuntimeException::class);
@@ -407,12 +433,12 @@ class SecurityTest extends TestCase
 
         $entry = PartnerLedgerEntry::create([
             'partner_user_id' => $partner->id,
-            'type'            => PartnerLedgerEntry::TYPE_PAYOUT,
-            'amount'          => -100.00,
-            'balance_after'   => 0.00,
-            'ref_type'        => 'payout',
-            'ref_id'          => '1',
-            'created_at'      => now(),
+            'type' => PartnerLedgerEntry::TYPE_PAYOUT,
+            'amount' => -100.00,
+            'balance_after' => 0.00,
+            'ref_type' => 'payout',
+            'ref_id' => '1',
+            'created_at' => now(),
         ]);
 
         $this->expectException(\RuntimeException::class);
@@ -426,7 +452,7 @@ class SecurityTest extends TestCase
         $partner = $this->partner();
 
         $wallet = PartnerWallet::create([
-            'partner_user_id'   => $partner->id,
+            'partner_user_id' => $partner->id,
             'available_balance' => -150.00,
         ]);
 

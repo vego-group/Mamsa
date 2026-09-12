@@ -163,16 +163,28 @@ class OtpService
         }
     }
 
+    /**
+     * Always random. There is no fixed-code path here any more.
+     *
+     * There used to be: OTP_FIXED_CODE made EVERY code for EVERY account equal
+     * to one constant whenever APP_ENV was not "production". Two things made
+     * that worse than it looked. It was not scoped to a phone, so it unlocked
+     * any account on the environment rather than a test account. And its only
+     * defence was a denylist on one environment variable — this project has
+     * already run production with APP_DEBUG=true for five days, so "APP_ENV is
+     * definitely right" is not a control.
+     *
+     * The scoped mechanism it duplicated is TestMode::otpBypass(), which
+     * requires a master switch AND a configured code AND the phone to be on an
+     * explicit allowlist. That one can stay: it cannot unlock anything but a
+     * listed test number, wherever it runs.
+     *
+     * Removing this costs developers nothing, which is why it could go rather
+     * than merely being narrowed: `debug_otp` already returns the real code on
+     * non-production, and staging runs SMS_DRIVER=log.
+     */
     private function generateCode(): string
     {
-        // Deterministic code for non-production testing (staging/local), set via
-        // OTP_FIXED_CODE. Never honoured in production — live codes are always
-        // random. Do not name the actual value here: this repository is public.
-        $fixed = config('otp.fixed_code');
-        if ($fixed !== null && $fixed !== '' && ! app()->isProduction()) {
-            return (string) $fixed;
-        }
-
         $length = max(4, (int) config('otp.length', 6));
         $max = (10 ** $length) - 1;
 

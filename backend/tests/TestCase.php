@@ -32,12 +32,12 @@ abstract class TestCase extends BaseTestCase
         // only the one that hurt is what let the cache leak survive the
         // database fix; the rule is the class, not the instance.
         $required = [
-            'DB_CONNECTION'        => 'sqlite',
-            'DB_DATABASE'          => ':memory:',
-            'CACHE_STORE'          => 'array',
-            'SESSION_DRIVER'       => 'array',
-            'QUEUE_CONNECTION'     => 'sync',
-            'MAIL_MAILER'          => 'array',
+            'DB_CONNECTION' => 'sqlite',
+            'DB_DATABASE' => ':memory:',
+            'CACHE_STORE' => 'array',
+            'SESSION_DRIVER' => 'array',
+            'QUEUE_CONNECTION' => 'sync',
+            'MAIL_MAILER' => 'array',
             'BROADCAST_CONNECTION' => 'null',
         ];
 
@@ -83,5 +83,30 @@ abstract class TestCase extends BaseTestCase
         $value = getenv($key);
 
         return $value === false || $value === '' ? null : (string) $value;
+    }
+
+    /**
+     * Make the OTP for ONE phone predictable, through the mechanism that
+     * actually exists in production.
+     *
+     * Tests used to set `otp.fixed_code`, which made every code on the
+     * environment equal to one constant. That key is gone — it was a back door
+     * to any account, not a test fixture — so a test that needs to know a code
+     * allowlists the phone it is testing instead. Same convenience, and it
+     * exercises the path real demo accounts use rather than one no environment
+     * should have.
+     */
+    protected function fixOtpFor(string $phone, string $code = '424242'): string
+    {
+        config([
+            'test_mode.otp' => true,
+            'test_mode.code' => $code,
+            'test_mode.phones' => array_values(array_unique(array_merge(
+                (array) config('test_mode.phones', []),
+                [$phone],
+            ))),
+        ]);
+
+        return $code;
     }
 }

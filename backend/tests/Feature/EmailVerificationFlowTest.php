@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Mail\EmailVerificationCode;
-use App\Models\Unit;
+use App\Models\Booking;
 use App\Models\User;
 use App\Notifications\CheckinReminder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,9 +36,8 @@ class EmailVerificationFlowTest extends TestCase
         // only) — and pin the contract's OTP policy so a dev .env with
         // shortened staging values can't skew these assertions.
         config([
-            'otp.fixed_code'         => '424242',
-            'otp.resend_seconds'     => 60,
-            'otp.exp_minutes'        => 5,
+            'otp.resend_seconds' => 60,
+            'otp.exp_minutes' => 5,
             'otp.email_max_attempts' => 5,
         ]);
     }
@@ -129,7 +128,7 @@ class EmailVerificationFlowTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('code', 'OTP_MAX_ATTEMPTS');
 
-        // Even the right code is dead now → expired (must request a new one).
+        // Even a well-formed code is dead now → expired (must request a new one).
         $this->actingAs($user)
             ->postJson('/api/v1/user/email/verify', ['code' => '424242'])
             ->assertStatus(422)
@@ -137,18 +136,18 @@ class EmailVerificationFlowTest extends TestCase
 
         // Fresh code, but past its 300s validity → OTP_EXPIRED.
         $this->travel(61)->seconds();
-        $this->actingAs($user)->postJson('/api/v1/user/email/resend')->assertOk();
+        $stale = $this->currentEmailCode($user);
         $this->travel(6)->minutes();
         $this->actingAs($user)
-            ->postJson('/api/v1/user/email/verify', ['code' => '424242'])
+            ->postJson('/api/v1/user/email/verify', ['code' => $stale])
             ->assertStatus(422)
             ->assertJsonPath('code', 'OTP_EXPIRED');
 
         // Fresh code, right away → verified.
         $this->travel(2)->minutes();
-        $this->actingAs($user)->postJson('/api/v1/user/email/resend')->assertOk();
+        $fresh = $this->currentEmailCode($user);
         $this->actingAs($user)
-            ->postJson('/api/v1/user/email/verify', ['code' => '424242'])
+            ->postJson('/api/v1/user/email/verify', ['code' => $fresh])
             ->assertOk()
             ->assertJsonPath('data.verified', true);
 
@@ -167,13 +166,14 @@ class EmailVerificationFlowTest extends TestCase
 
         // The frontend shipped against the task doc's /account/* paths —
         // they must behave identically to the canonical /user/email*.
-        $this->actingAs($user)
+        $code = (string) $this->actingAs($user)
             ->postJson('/api/v1/account/email', ['email' => 'alias@m.com'])
             ->assertOk()
-            ->assertJsonPath('data.verified', false);
+            ->assertJsonPath('data.verified', false)
+            ->json('data.debug_otp');
 
         $this->actingAs($user)
-            ->postJson('/api/v1/account/email/verify', ['code' => '424242'])
+            ->postJson('/api/v1/account/email/verify', ['code' => $code])
             ->assertOk()
             ->assertJsonPath('data.verified', true);
 
@@ -217,10 +217,10 @@ class EmailVerificationFlowTest extends TestCase
         ]);
 
         $payload = [
-            'unit_id'    => $unit->id,
+            'unit_id' => $unit->id,
             'start_date' => now()->addDays(10)->toDateString(),
-            'end_date'   => now()->addDays(12)->toDateString(),
-            'guests'     => 2,
+            'end_date' => now()->addDays(12)->toDateString(),
+            'guests' => 2,
         ];
 
         // No verified email → machine-coded 422, nothing created.
@@ -240,7 +240,7 @@ class EmailVerificationFlowTest extends TestCase
         $this->actingAs($unverified)
             ->postJson('/api/v1/bookings', array_merge($payload, [
                 'start_date' => now()->addDays(20)->toDateString(),
-                'end_date'   => now()->addDays(21)->toDateString(),
+                'end_date' => now()->addDays(21)->toDateString(),
             ]))
             ->assertStatus(201);
     }
@@ -262,19 +262,19 @@ class EmailVerificationFlowTest extends TestCase
         $tomorrowRiyadh = Carbon::now('Asia/Riyadh')->addDay()->toDateString();
 
         $guest = $this->guest(['email' => 'r@m.com', 'email_verified_at' => now()]);
-        $due = \App\Models\Booking::create([
+        $due = Booking::create([
             'unit_id' => $unit->id, 'user_id' => $guest->id,
             'start_date' => $tomorrowRiyadh,
             'end_date' => Carbon::parse($tomorrowRiyadh)->addDays(2)->toDateString(),
-            'guests' => 2, 'status' => \App\Models\Booking::STATUS_CONFIRMED,
+            'guests' => 2, 'status' => Booking::STATUS_CONFIRMED,
             'total_amount' => 1150,
         ]);
         // Not due: check-in further out.
-        \App\Models\Booking::create([
+        Booking::create([
             'unit_id' => $unit->id, 'user_id' => $guest->id,
             'start_date' => Carbon::parse($tomorrowRiyadh)->addDays(5)->toDateString(),
             'end_date' => Carbon::parse($tomorrowRiyadh)->addDays(6)->toDateString(),
-            'guests' => 2, 'status' => \App\Models\Booking::STATUS_CONFIRMED,
+            'guests' => 2, 'status' => Booking::STATUS_CONFIRMED,
             'total_amount' => 575,
         ]);
 
@@ -323,5 +323,19 @@ class EmailVerificationFlowTest extends TestCase
             ->postJson('/api/v1/user/email', ['email' => 'real@example.com'])
             ->assertOk()
             ->assertJsonMissingPath('data.debug_otp');
+    }
+
+    /**
+     * The code the service actually issued.
+     *
+     * These tests used to hardcode a constant, which worked because
+     * `otp.fixed_code` made every code on the environment identical. That key
+     * was a back door to any account and has been removed, so the code is read
+     * the way a developer reads it on staging: from `debug_otp`, which the
+     * endpoint returns outside production.
+     */
+    private function currentEmailCode(User $user, string $path = '/api/v1/user/email/resend'): string
+    {
+        return (string) $this->actingAs($user)->postJson($path)->assertOk()->json('data.debug_otp');
     }
 }

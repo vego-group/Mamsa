@@ -29,14 +29,17 @@ class AuthTest extends TestCase
             Role::findOrCreate($r, 'web');
         }
 
-        // Deterministic OTP for the flow test (honoured only outside production).
-        config(['otp.fixed_code' => '123456']);
+        // The OTP is made predictable per PHONE, not globally — see
+        // TestCase::fixOtpFor(). The global fixed code was a back door to every
+        // account and no longer exists.
     }
 
     private function admin(bool $active = true): User
     {
         $user = User::factory()->create(['is_active' => $active]);
         $user->assignRole('SuperAdmin');
+
+        $this->fixOtpFor($user->phone, '123456');
 
         return $user;
     }
