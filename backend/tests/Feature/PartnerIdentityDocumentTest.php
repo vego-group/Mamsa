@@ -27,7 +27,6 @@ class PartnerIdentityDocumentTest extends TestCase
         foreach (['Individual', 'Company', 'User', 'SuperAdmin'] as $r) {
             Role::findOrCreate($r, 'web');
         }
-        config(['otp.fixed_code' => '424242']);
     }
 
     private function payload(array $over = []): array
@@ -44,6 +43,10 @@ class PartnerIdentityDocumentTest extends TestCase
 
     private function requestOtp(string $phone = '512345678'): void
     {
+        // Allowlist whatever phone this call uses, so a test that introduces a
+        // second number cannot fail for want of a fixture nobody remembers.
+        $this->fixOtpFor($phone);
+
         $this->postJson('/api/v1/auth/request-otp', ['phone' => $phone])->assertOk();
     }
 
