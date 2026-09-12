@@ -59,3 +59,12 @@ Schedule::command('bookings:expire-pending')->everyFifteenMinutes()->withoutOver
 Schedule::command('units:check-licenses --alert')
     ->dailyAt('03:00')->timezone('Asia/Riyadh')
     ->withoutOverlapping()->appendOutputTo($scheduleLog);
+
+/*
+ * A payment webhook that never arrives used to be recovered only by the guest
+ * returning to the page. One who paid and closed the tab had no server-side
+ * path at all — and bookings:expire-pending reads the local row, not the
+ * gateway, so it would eventually cancel a paid stay. Ask Moyasar instead.
+ */
+Schedule::command('payments:reconcile-pending --alert')
+    ->everyTenMinutes()->withoutOverlapping()->appendOutputTo($scheduleLog);
