@@ -7,6 +7,10 @@ namespace App\Http\Controllers\AdminPanel;
 use App\Models\Booking;
 use App\Models\Unit;
 use App\Support\AdminPanel\UnitPresenter;
+use App\Support\City;
+use App\Support\Pricing;
+use App\Support\Units\LicenseViolation;
+use App\Support\Units\UnitLicense;
 use App\Support\Units\UnitWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,20 +23,20 @@ use Illuminate\Support\Str;
 class UnitsController extends Controller
 {
     private const SORT = [
-        'pricePerNight'  => 'price',
-        'rating'         => 'rating',
-        'occupancyRate'  => 'booked_nights',
-        'revenue'        => 'revenue',
-        'bookingsCount'  => 'bookings_count',
-        'name'           => 'unit_name',
-        'createdAt'      => 'created_at',
+        'pricePerNight' => 'price',
+        'rating' => 'rating',
+        'occupancyRate' => 'booked_nights',
+        'revenue' => 'revenue',
+        'bookingsCount' => 'bookings_count',
+        'name' => 'unit_name',
+        'createdAt' => 'created_at',
     ];
 
     public function __construct(private readonly UnitPresenter $units) {}
 
     public function index(Request $request): JsonResponse
     {
-        $args  = $this->listArgs($request);
+        $args = $this->listArgs($request);
         $query = $this->units->baseQuery();
 
         if ($status = $this->cleanParam($request->query('status'))) {
@@ -42,7 +46,7 @@ class UnitsController extends Controller
             $query->where('unit_type', $type === 'hotel_room' ? 'hotel' : $type);
         }
         if ($city = $this->cleanParam($request->query('city'))) {
-            \App\Support\City::filter($query, 'city', $city);
+            City::filter($query, 'city', $city);
         }
         if ($partnerId = $this->cleanParam($request->query('partnerId'))) {
             $query->where('user_id', $partnerId);
@@ -55,17 +59,17 @@ class UnitsController extends Controller
 
     public function stats(): JsonResponse
     {
-        $since        = now()->subDays(UnitPresenter::OCCUPANCY_WINDOW)->toDateString();
-        $approved     = Unit::where('approval_status', 'approved')->count();
+        $since = now()->subDays(UnitPresenter::OCCUPANCY_WINDOW)->toDateString();
+        $approved = Unit::where('approval_status', 'approved')->count();
         $bookedNights = (int) Booking::query()->revenue()->where('start_date', '>=', $since)
             ->selectRaw($this->nightsSql().' as n')->value('n');
 
         return response()->json([
-            'total'         => Unit::count(),
-            'approved'      => $approved,
+            'total' => Unit::count(),
+            'approved' => $approved,
             'pendingReview' => Unit::where('approval_status', 'pending')->count(),
-            'avgOccupancy'  => $approved > 0 ? min(100, (int) round(($bookedNights / ($approved * UnitPresenter::OCCUPANCY_WINDOW)) * 100)) : 0,
-            'totalRevenue'  => $this->money(Booking::query()->revenue()->sum('total_amount')),
+            'avgOccupancy' => $approved > 0 ? min(100, (int) round(($bookedNights / ($approved * UnitPresenter::OCCUPANCY_WINDOW)) * 100)) : 0,
+            'totalRevenue' => $this->money(Booking::query()->revenue()->sum('total_amount')),
         ]);
     }
 
@@ -87,7 +91,7 @@ class UnitsController extends Controller
      * goes through the same review pipeline as partner units. Owner = the acting
      * admin (units.user_id is NOT NULL); mamsa_owned flags it as platform-owned,
      * which is what stops the booking engine paying a 98% share to an admin who
-     * is not a partner ({@see \App\Support\Pricing::breakdown()}).
+     * is not a partner ({@see Pricing::breakdown()}).
      */
     public function store(Request $request): JsonResponse
     {
@@ -95,20 +99,38 @@ class UnitsController extends Controller
         $this->assertFilesOwned($request, $data);
 
         $unit = Unit::create(array_merge(UnitWriter::toColumns($data), [
-            'user_id'         => $request->user()->getKey(),
-            'mamsa_owned'     => true,
-            'code'            => UnitWriter::uniqueCode(),
+            'user_id' => $request->user()->getKey(),
+            'mamsa_owned' => true,
+            'code' => UnitWriter::uniqueCode(),
             'approval_status' => 'draft',
-            'status'          => 'available',
-            'calendar_token'  => Str::random(60),
+            'status' => 'available',
+            'calendar_token' => Str::random(60),
             // A listing with one bedroom sleeps at least one; the console has no
             // separate "beds" input, so seed it from bedrooms and let an edit
             // correct it. Without this every admin unit fails the submit gate.
-            'beds'            => $data['beds'] ?? max(1, (int) ($data['bedrooms'] ?? 1)),
+            'beds' => $data['beds'] ?? max(1, (int) ($data['bedrooms'] ?? 1)),
         ]));
 
         UnitWriter::syncAmenities($unit, $data);
         UnitWriter::syncPhotos((int) $request->user()->id, $unit, $data);
+
+        // Same as update(): the licence goes through its single writer rather
+        // than being silently discarded by toColumns().
+        $license = [];
+
+        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
+            if (array_key_exists($input, $data)) {
+                $license[$column] = $data[$input];
+            }
+        }
+
+        if ($license !== []) {
+            try {
+                UnitLicense::applyToGroup($unit, $license);
+            } catch (LicenseViolation $e) {
+                $this->fail($e->reason, $e->getMessage(), 422);
+            }
+        }
 
         return response()->json($this->units->detail($this->reload($unit)), 201);
     }
@@ -128,6 +150,28 @@ class UnitsController extends Controller
         }
 
         $data = $this->validateUnit($request, required: false);
+
+        // Licence columns have one writer and are group-wide. Until this, the
+        // admin console ACCEPTED licenseType/licensedUnitsCount (the shared
+        // rules validate them) and then dropped them, because toColumns()
+        // deliberately does not map them — a 200 with nothing saved. For a
+        // Mamsa-owned listing this was the only surface that could ever set a
+        // licence at all, so no platform building could be classified.
+        $license = [];
+
+        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
+            if (array_key_exists($input, $data)) {
+                $license[$column] = $data[$input];
+            }
+        }
+
+        if ($license !== []) {
+            try {
+                UnitLicense::applyToGroup($unit, $license);
+            } catch (LicenseViolation $e) {
+                $this->fail($e->reason, $e->getMessage(), 422);
+            }
+        }
         $this->assertFilesOwned($request, $data);
 
         $columns = UnitWriter::toColumns($data);
@@ -205,21 +249,21 @@ class UnitsController extends Controller
         }
 
         return $this->validate($request, $rules, [
-            'name.required'          => 'اسم الوحدة مطلوب',
-            'type.required'          => 'نوع الوحدة مطلوب',
-            'type.in'                => 'نوع الوحدة غير صالح — المدعوم: شقة، استوديو، فيلا',
-            'city.required'          => 'المدينة مطلوبة',
-            'district.required'      => 'الحي مطلوب',
+            'name.required' => 'اسم الوحدة مطلوب',
+            'type.required' => 'نوع الوحدة مطلوب',
+            'type.in' => 'نوع الوحدة غير صالح — المدعوم: شقة، استوديو، فيلا',
+            'city.required' => 'المدينة مطلوبة',
+            'district.required' => 'الحي مطلوب',
             'pricePerNight.required' => 'سعر الليلة مطلوب',
-            'bedrooms.required'      => 'عدد غرف النوم مطلوب',
-            'bathrooms.required'     => 'عدد دورات المياه مطلوب',
-            'capacity.required'      => 'السعة مطلوبة',
-            'sizeSqm.required'       => 'المساحة مطلوبة',
-            'description.max'        => 'الوصف يجب ألا يتجاوز '.UnitWriter::MAX_DESCRIPTION.' حرف',
-            'amenities.*.in'         => 'إحدى المرافق غير معروفة',
-            'checkIn.date_format'    => 'صيغة وقت الدخول يجب أن تكون HH:mm',
-            'checkOut.date_format'   => 'صيغة وقت الخروج يجب أن تكون HH:mm',
-            'photoFileIds.max'       => 'الحد الأقصى 10 صور',
+            'bedrooms.required' => 'عدد غرف النوم مطلوب',
+            'bathrooms.required' => 'عدد دورات المياه مطلوب',
+            'capacity.required' => 'السعة مطلوبة',
+            'sizeSqm.required' => 'المساحة مطلوبة',
+            'description.max' => 'الوصف يجب ألا يتجاوز '.UnitWriter::MAX_DESCRIPTION.' حرف',
+            'amenities.*.in' => 'إحدى المرافق غير معروفة',
+            'checkIn.date_format' => 'صيغة وقت الدخول يجب أن تكون HH:mm',
+            'checkOut.date_format' => 'صيغة وقت الخروج يجب أن تكون HH:mm',
+            'photoFileIds.max' => 'الحد الأقصى 10 صور',
         ]);
     }
 

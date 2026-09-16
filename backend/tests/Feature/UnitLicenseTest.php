@@ -506,6 +506,36 @@ class UnitLicenseTest extends TestCase
             ->assertJsonPath('unit.licenseType', null);
     }
 
+    /* ---------- the admin console can classify too ---------- */
+
+    public function test_an_admin_can_classify_a_listing_and_it_is_actually_saved(): void
+    {
+        // The shared rules already ACCEPTED these keys on the admin surface and
+        // toColumns() then dropped them — a 200 with nothing saved. For a
+        // Mamsa-owned listing this was the only surface that could set a licence
+        // at all, so no platform building could ever be classified.
+        $unit = $this->listing();
+
+        $this->actingAs($this->admin(), 'admin-panel')
+            ->patchJson("/admin/units/{$unit->id}", [
+                'licenseType' => UnitLicense::TOURIST_FACILITY,
+                'licensedUnitsCount' => 12,
+            ])
+            ->assertOk();
+
+        $fresh = $unit->fresh();
+        $this->assertSame(UnitLicense::TOURIST_FACILITY, $fresh->license_type, 'the admin\'s classification must be saved, not silently dropped');
+        $this->assertSame(12, (int) $fresh->licensed_units_count);
+    }
+
+    public function test_the_admin_surface_refuses_an_incoherent_licence_too(): void
+    {
+        $this->actingAs($this->admin(), 'admin-panel')
+            ->patchJson("/admin/units/{$this->listing()->id}", ['licenseType' => UnitLicense::TOURIST_FACILITY])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'LICENSED_UNITS_COUNT_REQUIRED');
+    }
+
     /* ---------- fixtures ---------- */
 
     /** @param array<string, mixed> $licence */
