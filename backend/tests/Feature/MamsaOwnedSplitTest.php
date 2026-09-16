@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Booking;
+use App\Models\PartnerDetail;
+use App\Models\PartnerLedgerEntry;
+use App\Models\PartnerWallet;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\PartnerWalletService;
@@ -59,7 +62,7 @@ class MamsaOwnedSplitTest extends TestCase
         // the frozen columns existed. Merging them would restate history.
         $this->assertNotSame(
             (float) config('booking.commission_rate'),
-            \App\Models\Booking::LEGACY_COMMISSION_RATE,
+            Booking::LEGACY_COMMISSION_RATE,
         );
     }
 
@@ -87,7 +90,7 @@ class MamsaOwnedSplitTest extends TestCase
                     $p['gross'],
                     round($p['commission_amount'] + $p['partner_share'] + $p['vat'], 2),
                     0.01,
-                    "commission + partnerShare + vat drifted from gross (mamsaOwned: ".var_export($owned, true).")",
+                    'commission + partnerShare + vat drifted from gross (mamsaOwned: '.var_export($owned, true).')',
                 );
                 $this->assertEqualsWithDelta($p['gross'], round($p['net_base'] + $p['vat'], 2), 0.01);
             }
@@ -114,26 +117,26 @@ class MamsaOwnedSplitTest extends TestCase
         $pricing = Pricing::breakdown((float) $unit->price, 1, (bool) $unit->mamsa_owned);
 
         $booking = Booking::create([
-            'unit_id'           => $unit->id,
-            'user_id'           => $guest->id,
-            'start_date'        => now()->addDays(3)->toDateString(),
-            'end_date'          => now()->addDays(4)->toDateString(),
-            'guests'            => 2,
-            'nights'            => 1,
-            'subtotal'          => $pricing['subtotal'],
-            'taxes'             => $pricing['taxes'],
-            'tax_percent'       => $pricing['tax_percent'],
-            'total_amount'      => $pricing['total'],
-            'commission_rate'   => $pricing['commission_rate'],
+            'unit_id' => $unit->id,
+            'user_id' => $guest->id,
+            'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(4)->toDateString(),
+            'guests' => 2,
+            'nights' => 1,
+            'subtotal' => $pricing['subtotal'],
+            'taxes' => $pricing['taxes'],
+            'tax_percent' => $pricing['tax_percent'],
+            'total_amount' => $pricing['total'],
+            'commission_rate' => $pricing['commission_rate'],
             'commission_amount' => $pricing['commission_amount'],
-            'partner_share'     => $pricing['partner_share'],
-            'status'            => Booking::STATUS_COMPLETED,
+            'partner_share' => $pricing['partner_share'],
+            'status' => Booking::STATUS_COMPLETED,
         ]);
 
         // BookingEarningObserver already ran on create — this is the real path,
         // so the ledger is what to assert on, not a second manual call.
-        $this->assertSame(0, \App\Models\PartnerLedgerEntry::count(), 'A Mamsa-owned booking paid an earning to the admin who created the unit.');
-        $this->assertSame(0, \App\Models\PartnerWallet::where('partner_user_id', $admin->id)->count());
+        $this->assertSame(0, PartnerLedgerEntry::count(), 'A Mamsa-owned booking paid an earning to the admin who created the unit.');
+        $this->assertSame(0, PartnerWallet::where('partner_user_id', $admin->id)->count());
 
         // And a re-run stays silent (idempotent, and still nothing to pay).
         $this->assertNull(app(PartnerWalletService::class)->recordEarning($booking->fresh('unit')));
@@ -169,7 +172,7 @@ class MamsaOwnedSplitTest extends TestCase
             'status' => Booking::STATUS_COMPLETED,
         ]);
 
-        $entry = \App\Models\PartnerLedgerEntry::where('ref_id', (string) $booking->id)->first();
+        $entry = PartnerLedgerEntry::where('ref_id', (string) $booking->id)->first();
 
         $this->assertNotNull($entry, 'The partner was not credited at all.');
         // Whatever the live rate is, the wallet must be credited the share that
@@ -177,5 +180,54 @@ class MamsaOwnedSplitTest extends TestCase
         $this->assertEqualsWithDelta($pricing['partner_share'], (float) $entry->amount, 0.01);
         $this->assertEqualsWithDelta(900.00, (float) $entry->amount, 0.01, 'net base 1000 less 10%');
         $this->assertSame($partner->id, $entry->partner_user_id);
+    }
+
+    public function test_a_guest_sees_the_platform_as_host_not_the_admin_who_created_it(): void
+    {
+        // `units.user_id` on a Mamsa-owned listing is the ADMIN who created it.
+        // The public payload presented that row as the host — a staff member\'s
+        // personal name on the storefront, typed as an unverified individual.
+        // Confirmed live on production 2026-09-16 (unit #34).
+        Role::findOrCreate('SuperAdmin', 'web');
+
+        $admin = User::factory()->create(['name' => 'مشرف تجريبي']);
+        $admin->assignRole('SuperAdmin');
+
+        $unit = $admin->units()->create([
+            'unit_name' => 'وحدة ممسى', 'unit_type' => 'apartment', 'code' => 'MRN'.fake()->unique()->numerify('#####'),
+            'price' => 500, 'capacity' => 2, 'bedrooms' => 1, 'beds' => 1, 'bathrooms' => 1, 'area' => 60,
+            'city' => 'الرياض', 'approval_status' => 'approved', 'status' => 'available',
+            'checkout_time' => '12:00', 'calendar_token' => str()->random(60), 'mamsa_owned' => true,
+        ]);
+
+        $owner = $this->getJson("/api/v1/units/{$unit->id}")->assertOk()->json('data.owner');
+
+        $this->assertSame('ممسى', $owner['name'], 'the host of a platform listing is the platform');
+        $this->assertSame('mamsa', $owner['type']);
+        $this->assertTrue($owner['is_verified']);
+        $this->assertStringNotContainsString('مشرف', json_encode($owner, JSON_UNESCAPED_UNICODE),
+            'the creating admin\'s name must not reach a guest');
+    }
+
+    public function test_a_partner_listing_still_shows_its_real_owner(): void
+    {
+        // The fix must not turn every host into ممسى.
+        Role::findOrCreate('Individual', 'web');
+
+        $partner = User::factory()->create(['name' => 'خالد الشريك']);
+        $partner->assignRole('Individual');
+        $partner->partnerDetail()->create(['type' => 'individual', 'status' => PartnerDetail::STATUS_APPROVED]);
+
+        $unit = $partner->units()->create([
+            'unit_name' => 'وحدة شريك', 'unit_type' => 'apartment', 'code' => 'MRN'.fake()->unique()->numerify('#####'),
+            'price' => 500, 'capacity' => 2, 'bedrooms' => 1, 'beds' => 1, 'bathrooms' => 1, 'area' => 60,
+            'city' => 'الرياض', 'approval_status' => 'approved', 'status' => 'available',
+            'checkout_time' => '12:00', 'calendar_token' => str()->random(60),
+        ]);
+
+        $owner = $this->getJson("/api/v1/units/{$unit->id}")->assertOk()->json('data.owner');
+
+        $this->assertSame('خالد الشريك', $owner['name']);
+        $this->assertSame('individual', $owner['type']);
     }
 }

@@ -120,7 +120,10 @@ class Analytics
     /** Top partners by (range-scoped) revenue from paid stays. */
     public function topPartners(int $limit = 5, ?CarbonInterface $since = null): array
     {
-        // Paid stays (confirmed + completed); commission = 2% of subtotal.
+        // Paid stays (confirmed + completed). Commission is read per booking from its
+        // frozen commission_amount — never recomputed from a rate. The rate has
+        // been 10% since 2026-08-27 (2% before), and Mamsa-owned listings freeze
+        // at 100%; a mix of all three totals correctly only this way.
         $revenue = fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)
             ->when($since, fn ($b) => $b->where('bookings.created_at', '>=', $since));
 

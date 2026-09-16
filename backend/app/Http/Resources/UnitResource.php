@@ -183,15 +183,28 @@ class UnitResource extends JsonResource
             // from "rated zero" by reading the count, not the average.
             'avg_rating' => round((float) ($this->reviews_avg_rating ?? $this->reviews()->avg('rating')), 1),
             'reviews_count' => (int) ($this->reviews_count ?? $this->reviews()->count()),
-            'owner' => $this->whenLoaded('owner', fn () => [
-                'id' => $this->owner->id,
-                'name' => $this->owner->name,
-                // individual | company — companies were showing as "مالك فردي".
-                'type' => $this->owner->partnerDetail?->type ?? 'individual',
-                'is_verified' => $this->owner->partnerDetail?->status === PartnerDetail::STATUS_APPROVED,
-                // No avatar storage yet — null so the UI keeps its initials fallback.
-                'avatar_url' => null,
-            ]),
+            'owner' => $this->whenLoaded('owner', fn () => $this->mamsa_owned
+                // A platform-owned listing has no partner. `units.user_id` holds
+                // the ADMIN who created it — an employee — and presenting that
+                // row as the host put a staff member's personal name on the
+                // storefront, typed as an unverified individual. Verified live on
+                // production 2026-09-16 on unit #34. The host is the platform.
+                ? [
+                    'id' => $this->owner->id,
+                    'name' => 'ممسى',
+                    'type' => 'mamsa',
+                    'is_verified' => true,
+                    'avatar_url' => null,
+                ]
+                : [
+                    'id' => $this->owner->id,
+                    'name' => $this->owner->name,
+                    // individual | company — companies were showing as "مالك فردي".
+                    'type' => $this->owner->partnerDetail?->type ?? 'individual',
+                    'is_verified' => $this->owner->partnerDetail?->status === PartnerDetail::STATUS_APPROVED,
+                    // No avatar storage yet — null so the UI keeps its initials fallback.
+                    'avatar_url' => null,
+                ]),
         ];
     }
 
