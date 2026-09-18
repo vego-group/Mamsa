@@ -1,6 +1,19 @@
 # Runbook — documents step two to production
 
-**Window:** was 2026-09-13 06:00 Asia/Riyadh — **did not run**. To be rescheduled.
+**Window:** **2026-09-19 (Saturday), 06:00 Asia/Riyadh.**
+*(The 2026-09-13 slot did not run and nobody noticed for five days — the gate
+was an inventory number that never arrived and was never chased.)*
+
+**Two commitments for this window, both hard:**
+1. **The production inventory number is in the owner's hands BEFORE anything
+   moves.** If it is not there by 06:15, the owner will treat the window as not
+   having run. Send it, then wait for the acknowledgement.
+2. **Step zero is an abort, not a hurdle.** If `route:list --name=documents`
+   does not show the route after the routes file is written, stop, restore the
+   snapshot, and report. Do not work around it inside the window.
+
+**Consoles:** unchanged since the 13th — admin `97716ab`, partner `7561eb0`,
+both pushed. Nothing on their side needs redoing.
 **Duration:** ~30 min
 **Precondition:** both consoles confirmed green on staging
 
@@ -13,6 +26,32 @@ links to documents still sitting in the open.
 Unit photos are not affected and must stay on the public disk.
 
 ---
+
+## 0a. Riders — named, because they go whether or not they are wanted
+
+`UnitResource.php` carries **one change beyond documents**: the Mamsa-owned
+host fix (`0005792`). A guest viewing a platform-owned unit currently sees the
+creating admin's personal name as host, typed `individual`, unverified; after
+this deploy they see `ممسى`, `type: "mamsa"`, verified. Confirmed live on
+production unit #34 on 2026-09-16. It is correct and already known to the
+frontend, but it arrives under a deploy about something else. The guest app has
+been told `owner.type` may now be `"mamsa"`.
+
+Everything else in the set is documents-only, or already on production
+(licence fields in `UnitResource` and `AdminPanel\UnitPresenter` — verified
+present 2026-09-18).
+
+**Not in this deploy, deliberately:** the admin-console licence writer fix and
+the reports commission split (both staged 2026-09-18). Separate features;
+separate approval.
+
+## 0b. Pre-staged on 2026-09-18
+
+The route insertion was rehearsed against a fresh copy of production's
+`routes/dashboard.php`: block inserted at line 39, immediately before the
+`auth:dashboard` group at line 42, `php -l` clean. **Re-fetch the production
+file at 06:00 and re-insert — do not deploy the 18/09 staged copy**, in case the
+file changed in between.
 
 ## 0. Files in this deploy
 
