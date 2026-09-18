@@ -1,6 +1,6 @@
 # Runbook — documents step two to production
 
-**Window:** 2026-09-13, 06:00 Asia/Riyadh
+**Window:** was 2026-09-13 06:00 Asia/Riyadh — **did not run**. To be rescheduled.
 **Duration:** ~30 min
 **Precondition:** both consoles confirmed green on staging
 
@@ -29,11 +29,29 @@ app/Http/Controllers/Dashboard/ProfileController.php             reader
 app/Http/Controllers/Api/V1/Admin/RequestController.php          reader
 app/Support/AdminPanel/UnitPresenter.php                         reader
 app/Models/DashboardUpload.php                                   signedUrl()
+routes/dashboard.php  (ONE route inserted by hand — see below, never copied)
 ```
 
-`routes/dashboard.php` is NOT in this list — the `/documents` route went to
-production with step one. Confirm, do not re-copy the file: the branch version
-carries complaints routes production has no controllers for.
+**CORRECTION 2026-09-18.** An earlier version of this runbook said the
+`/documents` route "went to production with step one". **That was false** —
+step one was deployed to staging only. Verified on production 2026-09-18:
+`DocumentController.php` absent, `routes/dashboard.php` has no `documents/`
+route. Had this runbook been followed as written, every document URL would have
+pointed at a 404.
+
+So the route is PART of this deploy. Do NOT copy `routes/dashboard.php`
+wholesale — the branch version carries complaints routes production has no
+controllers for. Insert this block into production's own copy, INSIDE nothing
+(it is unauthenticated by design; the controller checks both guards itself):
+
+```php
+Route::get('documents/{upload}', \App\Http\Controllers\DocumentController::class)
+    ->middleware('signed')->name('documents.show');
+```
+
+placed before `Route::middleware(['auth:dashboard', ...])->group(`, beside the
+complaint-attachment route position. Then `route:cache` and confirm with
+`route:list --name=documents`.
 
 ---
 
@@ -57,6 +75,8 @@ proceeding.
 
 ## 4. Verify — in this order
 
+0. **`route:list --name=documents` shows the route** — if it does not, stop;
+   every signed URL about to be emitted points at nothing.
 1. `/api/v1/units` 200 · `/me` 401 · `/admin/me` 401 · `/units` 401
 2. An existing document's admin URL is now `/documents/…?expires=…&signature=…`
 3. That link **anonymous → 403** (the session check is live)
