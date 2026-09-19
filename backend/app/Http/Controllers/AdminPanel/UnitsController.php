@@ -320,14 +320,22 @@ class UnitsController extends Controller
      * the wizard — the exact work the group model exists to remove, on the one
      * surface that had no entry point for it.
      *
-     * FIRST SHAPE: the apartments are created APPROVED. The alternative is an
-     * admin filing units for an admin to approve, which is theatre, not a gate
-     * (the frontend's word for it, and the right one). What actually protects
-     * the storefront is kept and moved to the front: the source must itself be
-     * approved, must pass the same completeness gate a submission passes, and
-     * the permit must cover the building. If management decides platform units
-     * should go through review after all, `approved` below becomes `pending`
-     * and nothing else moves.
+     * The apartments are FILED FOR REVIEW, not published. The first draft of
+     * this route created them approved — "an admin filing units for an admin
+     * to approve is theatre" — and that held only while Mamsa was assumed to be
+     * the permit holder. The first real permit to reach the team (19/09) was a
+     * third party's: a natural person's private-hospitality licence, with an
+     * expiry date, a specific address and a stated capacity. Those are facts a
+     * reviewer checks against the listing, and none of them is checked by code.
+     * So the copies go through the same queue partner units do. If management
+     * later exempts platform listings, `pending` below becomes `approved` and
+     * nothing else moves; the reverse — apartments sold under an expired permit
+     * — is not undone by a one-line change.
+     *
+     * What IS enforced here, before anything is written: the source must itself
+     * be approved (the copies are of a published listing, not of a draft), must
+     * pass the same completeness gate a submission passes, and the permit must
+     * cover the building.
      *
      * `count` is the TOTAL the building should hold, not an addition — the same
      * meaning as the partner surface, so a console reusing that component does
@@ -350,9 +358,10 @@ class UnitsController extends Controller
         }
 
         if ($unit->approval_status !== 'approved') {
-            // The copies inherit the source's standing. A draft or rejected
-            // source has no standing to inherit — approve it first, then build.
-            $this->fail('SOURCE_NOT_APPROVED', 'اعتمد الوحدة الأصلية أولاً — الوحدات الجديدة تُنشأ معتمدة وترث حالتها', 409);
+            // Expansion is of a PUBLISHED listing. Copies of a draft would reach
+            // the reviewer while their source never had — five pending doors
+            // and a source nobody filed. Approve it first, then build.
+            $this->fail('SOURCE_NOT_APPROVED', 'اعتمد الوحدة الأصلية أولاً — التوسيع يكون لوحدة منشورة', 409);
         }
 
         $data = $this->validate($request, [
@@ -374,10 +383,11 @@ class UnitsController extends Controller
             $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
         }
 
-        // The SOURCE must be publishable before it is copied — the copies are
-        // going straight to the storefront, so this is the only gate they meet.
-        // Approval does not guarantee it: the gate lives at SUBMIT time, and a
-        // row written straight to the database (seeder, migration, fixture)
+        // The SOURCE must be publishable before it is copied. Every apartment
+        // inherits its fields, so a source missing its permit produces copies
+        // missing it too, and filing then fails on rows nobody has seen yet.
+        // Approval does not guarantee this: the gate lives at SUBMIT time, and
+        // a row written straight to the database (seeder, migration, fixture)
         // can be approved without ever passing it. Production unit #39 is one.
         if ($missing = UnitWriter::submitErrors($unit)) {
             $this->fail(
@@ -391,9 +401,11 @@ class UnitsController extends Controller
 
         $before = UnitLicense::groupSize($unit);
 
-        // Create and approve in one transaction. Documents travel with the
-        // apartments: expansion requires a facility permit, and a facility
-        // permit is issued to the property, so it covers every door in it.
+        // Create and file in one transaction, as the partner surface does: a
+        // failure halfway must not leave apartments on nobody's screen.
+        // Documents travel with the apartments — expansion requires a facility
+        // permit, and a facility permit is issued to the property, so it covers
+        // every door in it.
         $group = DB::transaction(function () use ($unit, $count) {
             $group = UnitCloner::ensureTotal($unit, $count, copyDocuments: true);
 
@@ -402,10 +414,10 @@ class UnitsController extends Controller
                     continue; // the source, or an apartment from an earlier expansion
                 }
 
-                // Each copy meets the same gate on its own — a source that
-                // passed it a moment ago produces copies that pass it too, but
-                // "should" is not a reason to skip the check on rows about to
-                // be published. A failure rolls the whole expansion back.
+                // Each copy meets the same gate a manual submit passes — a
+                // source that passed it a moment ago produces copies that
+                // pass it too, but "should" is not a reason to skip the
+                // check. A failure rolls the whole expansion back.
                 if ($errors = UnitWriter::submitErrors($member)) {
                     throw new AdminPanelException(
                         'APARTMENT_INCOMPLETE',
@@ -416,21 +428,16 @@ class UnitsController extends Controller
                     );
                 }
 
-                $member->update([
-                    'approval_status' => 'approved',
-                    // Stamped by hand: the observer stamps it on the way INTO
-                    // review, and these never go there. Left null, the row
-                    // reads as "approved without ever being submitted" —
-                    // which is what the frontend flagged on #39.
-                    'submitted_at' => now(),
-                    'rejection_reason' => null,
-                ]);
+                // `submitted_at` and the reviewer's feed entry come from
+                // UnitApprovalObserver on the way into `pending`, the same as
+                // every other path that files a unit.
+                $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
             }
 
             return $group;
         });
 
-        // Reload so the response reports the state AFTER approval.
+        // Reload so the response reports the state AFTER filing.
         if ($groupId = $unit->fresh()->unit_group_id) {
             $group = Unit::where('unit_group_id', $groupId)->orderBy('apartment_no')->get();
         }
@@ -448,7 +455,7 @@ class UnitsController extends Controller
                 'status' => $u->approval_status,
             ])->values()->all(),
             'message' => $added > 0
-                ? 'تمت إضافة '.$added.' وحدة وهي منشورة الآن'
+                ? 'تمت إضافة '.$added.' وحدة وهي قيد المراجعة. الوحدة الأصلية تستمر في استقبال الحجوزات.'
                 : 'المبنى يحتوي بالفعل على هذا العدد',
         ]);
     }

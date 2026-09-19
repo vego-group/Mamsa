@@ -20,9 +20,12 @@ use Tests\TestCase;
  * is exactly the work the group model exists to remove, on the one surface
  * that had no entry point for it.
  *
- * First shape: the apartments are created APPROVED. An admin filing units for
- * an admin to approve is theatre, not a gate; the real protections (approved
- * source, completeness gate, permit coverage) are kept and moved to the front.
+ * The apartments are filed for REVIEW. The first draft created them approved —
+ * "an admin filing units for an admin to approve is theatre" — which held only
+ * while Mamsa was assumed to hold the permit. The first real permit to reach the
+ * team (19/09) was a third party's, with an expiry, an address and a capacity:
+ * things a reviewer checks and code does not. The protections that ARE code
+ * (approved source, completeness gate, permit coverage) run before any write.
  */
 class ApartmentsTest extends TestCase
 {
@@ -155,7 +158,7 @@ class ApartmentsTest extends TestCase
 
     /* ---------- the expansion ---------- */
 
-    public function test_the_apartments_are_created_approved_and_owned_by_the_platform(): void
+    public function test_the_apartments_are_filed_for_review_and_owned_by_the_platform(): void
     {
         $unit = $this->licensed(8);
 
@@ -164,20 +167,18 @@ class ApartmentsTest extends TestCase
             ->assertJsonPath('groupSize', 4)
             ->assertJsonPath('added', 3)
             ->assertJsonCount(4, 'units')
-            ->assertJsonPath('units.0.status', 'approved')
-            ->assertJsonPath('units.3.status', 'approved');
+            ->assertJsonPath('units.0.status', 'approved')   // the source
+            ->assertJsonPath('units.1.status', 'pending')
+            ->assertJsonPath('units.3.status', 'pending');
 
         $this->assertNotNull($r->json('groupId'));
 
-        $group = Unit::where('unit_group_id', $r->json('groupId'))->get();
-        $this->assertCount(4, $group);
+        $copies = Unit::where('unit_group_id', $r->json('groupId'))->where('id', '!=', $unit->id)->get();
+        $this->assertCount(3, $copies);
 
-        foreach ($group as $member) {
-            $this->assertSame('approved', $member->approval_status);
-            if ($member->id !== $unit->id) {
-                // The source keeps its own history; the copies get a real one.
-                $this->assertNotNull($member->submitted_at, 'An approved apartment with submitted_at NULL — the #39 shape.');
-            }
+        foreach ($copies as $member) {
+            $this->assertSame('pending', $member->approval_status);
+            $this->assertNotNull($member->submitted_at, 'A filed apartment with submitted_at NULL — the SLA clock never started.');
             $this->assertTrue((bool) $member->mamsa_owned);
             $this->assertSame(User::platform()->id, $member->user_id);
             // The permit travels: a facility permit covers every door in it.
@@ -187,22 +188,34 @@ class ApartmentsTest extends TestCase
             $this->assertSame(8, (int) $member->licensed_units_count);
         }
 
-        // Nothing was filed for review — that is the first shape.
-        $this->assertSame(0, Unit::where('approval_status', 'pending')->count());
-        // The admin feed got no "new approval request" for them either.
-        $this->assertSame(0, $this->admin->fresh()->notifications()->count());
+        // The source is untouched — it keeps selling while the copies wait.
+        $this->assertSame('approved', $unit->fresh()->approval_status);
+
+        // And the reviewer knows: one feed entry per apartment, from the same
+        // observer every other filing path goes through.
+        $this->assertSame(3, $this->admin->fresh()->notifications()->count());
     }
 
-    public function test_the_building_is_one_card_on_the_storefront(): void
+    public function test_the_copies_stay_off_the_storefront_until_approved(): void
     {
         $unit = $this->licensed(8);
         $this->expand($unit, 5)->assertOk();
 
-        // Five approved rows, one representative — the guest sees a building,
-        // not five identical studios (the exact thing #34/#35 are today).
-        $this->getJson('/api/v1/units')
-            ->assertOk()
-            ->assertJsonCount(1, 'data');
+        // Before review: the source alone, as a single sellable door.
+        $this->getJson('/api/v1/units')->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.available_count', 1);
+
+        foreach (Unit::where('approval_status', 'pending')->get() as $copy) {
+            $this->actingAs($this->admin, 'admin-panel')
+                ->postJson("/admin/approvals/{$copy->id}/approve")->assertOk();
+        }
+
+        // After review: still ONE card — the guest sees a building with five
+        // doors, not five identical studios (the exact thing #34/#35 are today).
+        $this->getJson('/api/v1/units')->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.available_count', 5);
     }
 
     public function test_count_is_a_total_not_an_addition(): void
@@ -220,19 +233,19 @@ class ApartmentsTest extends TestCase
         $this->assertSame(5, Unit::count());
     }
 
-    public function test_a_reviewer_can_re_approve_an_existing_apartment_while_partner_expansion_is_off(): void
+    public function test_a_reviewer_can_approve_a_filed_apartment_while_partner_expansion_is_off(): void
     {
-        // An edit to one apartment of a live building sends it back to review
-        // (edit → pending). With the rollout flag inside the approval check,
-        // that apartment could never come back while partners were switched
-        // off — stuck off the storefront for a reason unrelated to it.
+        // With the rollout flag inside the approval check, every apartment this
+        // route files would be un-approvable on production (flag off until the
+        // partner UI ships) — and so would any apartment of a live building
+        // sent back to review by an edit. Approval checks the permit, not the
+        // rollout.
         $unit = $this->licensed(8);
         $this->expand($unit, 3)->assertOk();
 
         config()->set('units.multi_unit_enabled', false);
 
-        $member = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->where('id', '!=', $unit->id)->firstOrFail();
-        $member->update(['approval_status' => 'pending']);
+        $member = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->where('approval_status', 'pending')->firstOrFail();
 
         $this->actingAs($this->admin, 'admin-panel')
             ->postJson("/admin/approvals/{$member->id}/approve")
@@ -252,8 +265,7 @@ class ApartmentsTest extends TestCase
         // application refuses this downgrade, which is the point of the guard).
         Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->update(['licensed_units_count' => 2]);
 
-        $member = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->where('id', '!=', $unit->id)->firstOrFail();
-        $member->update(['approval_status' => 'pending']);
+        $member = Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->where('approval_status', 'pending')->firstOrFail();
 
         $this->actingAs($this->admin, 'admin-panel')
             ->postJson("/admin/approvals/{$member->id}/approve")
