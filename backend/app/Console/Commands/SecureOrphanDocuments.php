@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Models\DashboardUpload;
-use App\Models\PartnerDetail;
 use App\Models\Unit;
+use App\Support\Documents\DocumentStorage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -113,37 +112,9 @@ class SecureOrphanDocuments extends Command
         return $failed === [] ? self::SUCCESS : self::FAILURE;
     }
 
-    /**
-     * Every public-disk path a live column points at.
-     *
-     * Columns hold either a raw path or a `file_…` upload id, so both are
-     * resolved. A file reachable from any of them is in use and stays put —
-     * this command's whole safety rests on that list being complete, which is
-     * why it reads the columns rather than a hardcoded guess.
-     *
-     * @return Collection<int, string>
-     */
+    /** @return Collection<int, string> */
     private function referencedPaths(): Collection
     {
-        $values = collect();
-
-        foreach (['tourism_permit_file', 'ownership_doc_file'] as $column) {
-            $values = $values->merge(Unit::whereNotNull($column)->pluck($column));
-        }
-
-        foreach (PartnerDetail::query()->getModel()->getFillable() as $column) {
-            if (str_contains($column, 'file')) {
-                $values = $values->merge(PartnerDetail::whereNotNull($column)->pluck($column));
-            }
-        }
-
-        $ids = $values->filter(fn ($v) => str_starts_with((string) $v, 'file_'));
-        $paths = $values->reject(fn ($v) => str_starts_with((string) $v, 'file_'));
-
-        return $paths
-            ->merge(DashboardUpload::whereIn('id', $ids)->pluck('path'))
-            ->filter()
-            ->unique()
-            ->values();
+        return DocumentStorage::referencedPaths();
     }
 }

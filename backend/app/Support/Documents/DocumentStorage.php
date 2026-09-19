@@ -8,6 +8,7 @@ use App\Models\DashboardUpload;
 use App\Models\PartnerDetail;
 use App\Models\Unit;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -166,6 +167,46 @@ final class DocumentStorage
         }
 
         return false;
+    }
+
+    /**
+     * Every path a live document column points at.
+     *
+     * This is the list the migration moves and the list the orphan sweep
+     * protects — one definition, because the two must agree exactly: a path in
+     * one and not the other is a document either moved out from under a
+     * reviewer or left public while the count says it is closed.
+     *
+     * Columns hold either a bare path or a `file_…` upload id, so both are
+     * resolved. Driven from the DATABASE, not from directories: a folder list is
+     * a guess about where things are, the references are where things actually
+     * are — and a directory-driven sweep once missed every file under
+     * units/{id}/docs/ for exactly that reason.
+     *
+     * @return Collection<int, string>
+     */
+    public static function referencedPaths(): Collection
+    {
+        $values = collect();
+
+        foreach (['tourism_permit_file', 'ownership_doc_file'] as $column) {
+            $values = $values->merge(Unit::whereNotNull($column)->pluck($column));
+        }
+
+        foreach ((new PartnerDetail)->getFillable() as $column) {
+            if (str_contains($column, 'file')) {
+                $values = $values->merge(PartnerDetail::whereNotNull($column)->pluck($column));
+            }
+        }
+
+        $ids = $values->filter(fn ($v) => str_starts_with((string) $v, 'file_'));
+        $paths = $values->reject(fn ($v) => str_starts_with((string) $v, 'file_'));
+
+        return $paths
+            ->merge(DashboardUpload::whereIn('id', $ids)->pluck('path'))
+            ->filter()
+            ->unique()
+            ->values();
     }
 
     public static function vaultPath(string $path): string
