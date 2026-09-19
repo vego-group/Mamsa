@@ -158,6 +158,27 @@ final class UnitLicense
             );
         }
 
+        self::guardLicenceCovers($unit, $size);
+    }
+
+    /**
+     * The legal half of {@see guardGroupSize()} alone: does this listing's
+     * permit cover a group of `$size`?
+     *
+     * Separated from the rollout flag because the two answer different
+     * questions. The flag says whether PARTNERS may expand yet — a product
+     * switch, off on production until their UI ships. The permit says whether
+     * a building of this size may trade at all — a legal fact that holds
+     * regardless of any switch. The platform expanding its own inventory, and
+     * a reviewer re-approving an apartment that already exists, need the
+     * second answer and are not the rollout the first one gates.
+     */
+    public static function guardLicenceCovers(Unit $unit, int $size): void
+    {
+        if ($size <= 1) {
+            return;
+        }
+
         if ($unit->license_type !== self::TOURIST_FACILITY) {
             throw LicenseViolation::of(
                 'MULTI_UNIT_REQUIRES_FACILITY_LICENSE',
