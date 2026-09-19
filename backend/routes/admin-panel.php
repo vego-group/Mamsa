@@ -79,6 +79,7 @@ Route::prefix('admin')->group(function () {
         Route::patch('units/{id}', [AdminPanel\UnitsController::class, 'update'])->middleware('admin.can:units.manage')->name('ap.units.update');
         Route::delete('units/{id}', [AdminPanel\UnitsController::class, 'destroy'])->middleware('admin.can:units.manage')->name('ap.units.destroy');
         Route::post('units/{id}/submit', [AdminPanel\UnitsController::class, 'submit'])->middleware('admin.can:units.manage')->name('ap.units.submit');
+        Route::post('units/{id}/apartments', [AdminPanel\UnitsController::class, 'apartments'])->middleware('admin.can:units.manage')->name('ap.units.apartments');
         Route::post('units/{id}/unpublish', [AdminPanel\UnitsController::class, 'unpublish'])->middleware('admin.can:units.manage')->name('ap.units.unpublish');
 
         /* Uploads (presign → signed PUT) — the partner flow on an admin session */

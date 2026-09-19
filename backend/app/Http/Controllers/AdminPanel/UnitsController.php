@@ -10,11 +10,14 @@ use App\Models\User;
 use App\Support\AdminPanel\UnitPresenter;
 use App\Support\City;
 use App\Support\Pricing;
+use App\Exceptions\AdminPanelException;
 use App\Support\Units\LicenseViolation;
+use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
 use App\Support\Units\UnitWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -309,6 +312,147 @@ class UnitsController extends Controller
     }
 
     /** POST /admin/units/:id/unpublish — { reason }, approved → rejected (off the public site). */
+    /**
+     * POST /admin/units/:id/apartments — turn a Mamsa-owned listing into a
+     * building of `count` apartments.
+     *
+     * The platform's own duplicated studios were being added one by one through
+     * the wizard — the exact work the group model exists to remove, on the one
+     * surface that had no entry point for it.
+     *
+     * FIRST SHAPE: the apartments are created APPROVED. The alternative is an
+     * admin filing units for an admin to approve, which is theatre, not a gate
+     * (the frontend's word for it, and the right one). What actually protects
+     * the storefront is kept and moved to the front: the source must itself be
+     * approved, must pass the same completeness gate a submission passes, and
+     * the permit must cover the building. If management decides platform units
+     * should go through review after all, `approved` below becomes `pending`
+     * and nothing else moves.
+     *
+     * `count` is the TOTAL the building should hold, not an addition — the same
+     * meaning as the partner surface, so a console reusing that component does
+     * not double a building by resending a number. Shrinking is refused by the
+     * cloner: an apartment may already hold a booking.
+     *
+     * Restricted to `mamsa_owned`. A partner's building is theirs to expand,
+     * from their dashboard, under their permit; an admin doing it for them
+     * would file apartments the partner never declared.
+     *
+     * Not behind `units.multi_unit_enabled`: that flag gates the PARTNER
+     * rollout ({@see \App\Support\Units\UnitLicense::guardLicenceCovers()}).
+     */
+    public function apartments(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->findUnit($id);
+
+        if (! $unit->mamsa_owned) {
+            $this->fail('NOT_MAMSA_OWNED', 'هذا المسار لوحدات ممسى فقط — وحدات الشركاء يوسّعها الشريك من لوحته', 403);
+        }
+
+        if ($unit->approval_status !== 'approved') {
+            // The copies inherit the source's standing. A draft or rejected
+            // source has no standing to inherit — approve it first, then build.
+            $this->fail('SOURCE_NOT_APPROVED', 'اعتمد الوحدة الأصلية أولاً — الوحدات الجديدة تُنشأ معتمدة وترث حالتها', 409);
+        }
+
+        $data = $this->validate($request, [
+            'count' => ['required', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
+        ], [
+            'count.required' => 'عدد الوحدات مطلوب',
+            'count.integer' => 'عدد الوحدات يجب أن يكون رقماً صحيحاً',
+            'count.min' => 'عدد الوحدات يجب أن يكون 1 على الأقل',
+            'count.max' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد',
+        ]);
+
+        $count = (int) $data['count'];
+
+        // The permit is checked BEFORE anything is written — a refused
+        // expansion must not leave approved apartments behind.
+        try {
+            UnitLicense::guardLicenceCovers($unit, $count);
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
+
+        // The SOURCE must be publishable before it is copied — the copies are
+        // going straight to the storefront, so this is the only gate they meet.
+        // Approval does not guarantee it: the gate lives at SUBMIT time, and a
+        // row written straight to the database (seeder, migration, fixture)
+        // can be approved without ever passing it. Production unit #39 is one.
+        if ($missing = UnitWriter::submitErrors($unit)) {
+            $this->fail(
+                'SOURCE_UNIT_INCOMPLETE',
+                'أكمل بيانات الوحدة الأصلية قبل إضافة وحدات إليها',
+                422,
+                $missing,
+                ['unitId' => (string) $unit->id],
+            );
+        }
+
+        $before = UnitLicense::groupSize($unit);
+
+        // Create and approve in one transaction. Documents travel with the
+        // apartments: expansion requires a facility permit, and a facility
+        // permit is issued to the property, so it covers every door in it.
+        $group = DB::transaction(function () use ($unit, $count) {
+            $group = UnitCloner::ensureTotal($unit, $count, copyDocuments: true);
+
+            foreach ($group as $member) {
+                if ($member->approval_status !== 'draft') {
+                    continue; // the source, or an apartment from an earlier expansion
+                }
+
+                // Each copy meets the same gate on its own — a source that
+                // passed it a moment ago produces copies that pass it too, but
+                // "should" is not a reason to skip the check on rows about to
+                // be published. A failure rolls the whole expansion back.
+                if ($errors = UnitWriter::submitErrors($member)) {
+                    throw new AdminPanelException(
+                        'APARTMENT_INCOMPLETE',
+                        'تعذّر إنشاء الوحدات — إحدى النسخ غير مكتملة',
+                        422,
+                        $errors,
+                        ['apartmentNo' => $member->apartment_no],
+                    );
+                }
+
+                $member->update([
+                    'approval_status' => 'approved',
+                    // Stamped by hand: the observer stamps it on the way INTO
+                    // review, and these never go there. Left null, the row
+                    // reads as "approved without ever being submitted" —
+                    // which is what the frontend flagged on #39.
+                    'submitted_at' => now(),
+                    'rejection_reason' => null,
+                ]);
+            }
+
+            return $group;
+        });
+
+        // Reload so the response reports the state AFTER approval.
+        if ($groupId = $unit->fresh()->unit_group_id) {
+            $group = Unit::where('unit_group_id', $groupId)->orderBy('apartment_no')->get();
+        }
+
+        $added = max(0, $group->count() - $before);
+
+        return response()->json([
+            'groupId' => $unit->fresh()->unit_group_id,
+            // What the building holds now — not what was asked for.
+            'groupSize' => $group->count(),
+            'added' => $added,
+            'units' => $group->map(fn (Unit $u) => [
+                'id' => (string) $u->id,
+                'apartmentNo' => $u->apartment_no,
+                'status' => $u->approval_status,
+            ])->values()->all(),
+            'message' => $added > 0
+                ? 'تمت إضافة '.$added.' وحدة وهي منشورة الآن'
+                : 'المبنى يحتوي بالفعل على هذا العدد',
+        ]);
+    }
+
     public function unpublish(Request $request, string $id): JsonResponse
     {
         $data = $this->validate($request, [
