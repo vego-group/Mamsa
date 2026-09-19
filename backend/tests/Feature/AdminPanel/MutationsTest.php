@@ -242,7 +242,10 @@ class MutationsTest extends TestCase
         $this->assertNotNull($unit);
         $this->assertTrue($unit->mamsa_owned);
         $this->assertSame('draft', $unit->approval_status);
-        $this->assertSame($this->adminUser->id, $unit->user_id);
+        // Owned by the platform account, not by the admin who typed it in —
+        // that admin's name was reaching the storefront as the unit's host.
+        $this->assertSame(User::platform()->id, $unit->user_id);
+        $this->assertNotSame($this->adminUser->id, $unit->user_id);
 
         // Its card shows mamsaOwned + partnerName "ممسى".
         $row = $this->as()->getJson('/admin/units/'.$unit->id)->json();

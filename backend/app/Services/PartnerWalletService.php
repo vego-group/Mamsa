@@ -93,14 +93,20 @@ class PartnerWalletService
      */
     public function recordEarning(Booking $booking, ?\DateTimeInterface $at = null): ?PartnerLedgerEntry
     {
-        $partnerId = $booking->unit?->user_id;
+        $unit      = $booking->unit;
+        $partnerId = $unit?->user_id;
         $share     = round((float) ($booking->partner_share ?? 0), 2);
 
-        if (! $partnerId || $share <= 0 || $this->alreadyEarned($booking)) {
+        // A platform-owned unit has no partner to pay. Its `partner_share` is
+        // already 0 (Pricing splits at rate 1), so `$share <= 0` catches it
+        // today — but that guard is arithmetic living in another file, and a
+        // rounding change there would silently start crediting the platform
+        // account. This says the intent in the one place it matters.
+        if (! $partnerId || $unit?->mamsa_owned || $share <= 0 || $this->alreadyEarned($booking)) {
             return null;
         }
 
-        $unitName = $booking->unit?->unit_name ?: 'وحدة';
+        $unitName = $unit->unit_name ?: 'وحدة';
         $code     = $booking->code ?: (string) $booking->id;
 
         return $this->post(

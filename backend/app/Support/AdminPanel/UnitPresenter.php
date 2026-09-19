@@ -108,11 +108,10 @@ class UnitPresenter
             'coverImage' => $this->realCoverImage($u),
             'city' => $u->city ?? '',
             'partnerId' => (string) ($u->user_id ?? ''),
-            // A Mamsa-owned listing has no partner: `user_id` is the admin who
-            // created it. Showing their personal name here would put a staff
-            // member in the queue as though they were an applicant — and the
-            // units list already reads 'ممسى' for the same row, so a reviewer
-            // saw two different owners for one unit.
+            // A Mamsa-owned listing has no partner: `user_id` is the platform
+            // account (historically the admin who created it, whose personal
+            // name then appeared here as though they were an applicant). Read
+            // the flag, not the owner row, so the two lists agree.
             'partnerName' => $u->mamsa_owned ? 'ممسى' : ($owner?->name ?? ''),
             'partnerType' => $u->mamsa_owned ? 'mamsa' : ($owner?->partnerDetail?->type ?? 'individual'),
             'mamsaOwned' => (bool) $u->mamsa_owned,
