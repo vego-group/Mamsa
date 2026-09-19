@@ -152,7 +152,9 @@ class ComplaintsController extends Controller
             ],
             'partner' => [
                 'name'                    => $booking?->unit?->owner?->name,
-                'phone'                   => $booking?->unit?->owner?->phone,
+                // The platform account has no phone to call; its sentinel is
+                // not a number and must not be shown as one.
+                'phone'                   => $booking?->unit?->owner?->isPlatform() ? null : $booking?->unit?->owner?->phone,
                 'availableBalanceHalalas' => (int) round((float) ($wallet?->available_balance ?? 0) * 100),
             ],
             'unit' => [

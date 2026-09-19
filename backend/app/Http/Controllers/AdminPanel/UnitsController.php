@@ -6,6 +6,7 @@ namespace App\Http\Controllers\AdminPanel;
 
 use App\Models\Booking;
 use App\Models\Unit;
+use App\Models\User;
 use App\Support\AdminPanel\UnitPresenter;
 use App\Support\City;
 use App\Support\Pricing;
@@ -88,10 +89,11 @@ class UnitsController extends Controller
 
     /**
      * POST /admin/units — create a Mamsa-owned listing. It starts as a draft and
-     * goes through the same review pipeline as partner units. Owner = the acting
-     * admin (units.user_id is NOT NULL); mamsa_owned flags it as platform-owned,
-     * which is what stops the booking engine paying a 98% share to an admin who
-     * is not a partner ({@see Pricing::breakdown()}).
+     * goes through the same review pipeline as partner units. Owner = the
+     * platform account ({@see User::platform()}; units.user_id is NOT NULL);
+     * mamsa_owned flags it as platform-owned, which is what stops the booking
+     * engine paying a partner share on it ({@see Pricing::breakdown()},
+     * {@see \App\Services\PartnerWalletService::recordEarning()}).
      */
     public function store(Request $request): JsonResponse
     {
@@ -99,7 +101,12 @@ class UnitsController extends Controller
         $this->assertFilesOwned($request, $data);
 
         $unit = Unit::create(array_merge(UnitWriter::toColumns($data), [
-            'user_id' => $request->user()->getKey(),
+            // Owned by the platform account, not by whoever is typing. The
+            // admin's own id here put an employee's name on the storefront as
+            // host, and would have attributed platform revenue to them in any
+            // query joining on the owner. Who created it is the audit trail's
+            // business; who owns it is Mamsa.
+            'user_id' => User::platform()->getKey(),
             'mamsa_owned' => true,
             'code' => UnitWriter::uniqueCode(),
             'approval_status' => 'draft',
@@ -186,7 +193,14 @@ class UnitsController extends Controller
 
         $unit->update($columns);
         UnitWriter::syncAmenities($unit, $data);
-        UnitWriter::syncPhotos((int) $unit->user_id, $unit, $data);
+        // Uploads belong to whoever presigned them — the acting admin — not to
+        // the unit's owner. With the owner id here, assertFilesOwned() passed
+        // (it checks the acting admin) and syncPhotos() then found nothing it
+        // recognised: the gallery was cleared and nothing re-attached, behind
+        // a 200. It only ever worked because owner and editor were the same
+        // person; a second admin editing, or the platform account owning,
+        // breaks that coincidence.
+        UnitWriter::syncPhotos((int) $request->user()->id, $unit, $data);
 
         return response()->json($this->units->detail($this->reload($unit)));
     }

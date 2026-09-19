@@ -27,7 +27,11 @@ class SmsChannel
         }
 
         $message = trim((string) $notification->toSms($notifiable));
-        $to = $notifiable->routeNotificationFor('sms', $notification) ?? ($notifiable->phone ?? null);
+        // The notifiable's answer is final: a null from routeNotificationForSms()
+        // means "no phone to send to", not "fall back to the phone column".
+        $to = method_exists($notifiable, 'routeNotificationForSms')
+            ? $notifiable->routeNotificationForSms($notification)
+            : ($notifiable->routeNotificationFor('sms', $notification) ?? ($notifiable->phone ?? null));
 
         if ($message === '' || blank($to)) {
             return;
