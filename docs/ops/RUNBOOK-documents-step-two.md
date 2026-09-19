@@ -1,6 +1,22 @@
 # Runbook — documents step two to production
 
-**Window:** **2026-09-19 (Saturday), 06:00 Asia/Riyadh.**
+**Executed:** 2026-09-19, 15:40 UTC, in an open session. Step three followed
+in the same session. Both gates held: the inventory number (7) was sent and
+approved before anything moved; step zero passed before the seven verifications.
+
+**Two rules this runbook now carries permanently, from how it was learned:**
+
+1. **Windows are set by "first session", never by an hour.** The agent runs
+   when a session is open and someone says go — it has no clock. Two 06:00 slots
+   died of that, not of neglect. A time-of-day window is structurally impossible.
+2. **Step zero stays, on every deploy that emits URLs to a route.** On its first
+   real run it would have caught a runbook that said the route was on production
+   when it was not — every document link a 404, on a Saturday morning. Verify
+   the route exists BEFORE the code that mints links to it goes live.
+
+---
+
+**Window (historical):** **2026-09-19 (Saturday), 06:00 Asia/Riyadh — did not run.**
 *(The 2026-09-13 slot did not run and nobody noticed for five days — the gate
 was an inventory number that never arrived and was never chased.)*
 
