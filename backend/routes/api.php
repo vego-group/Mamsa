@@ -194,35 +194,50 @@ Route::prefix('v1')->group(function () {
             Route::get('profile', [Partner\ProfileController::class, 'show'])->name('profile');
             Route::put('profile', [Partner\ProfileController::class, 'update'])->name('profile.update');
 
+            /*
+             * Units on the legacy Bearer surface.
+             *
+             * READS stay open — this is still a live surface for anything that
+             * only looks. Every WRITE is RETIRED (410 ENDPOINT_RETIRED, every
+             * call logged): the partner dashboard and the admin console are the
+             * two surfaces that get the permit rules, and keeping a third and
+             * fourth write path correct through uniqueness, expiry and
+             * per-apartment permits buys nothing — no client needs them.
+             *
+             * The routes stay registered rather than deleted so a caller gets
+             * an answer that names the reason, and so the log tells us within
+             * days whether anything real was using them. Reverting is removing
+             * `retired` from these lines.
+             */
             Route::prefix('units')->name('units.')->group(function () {
                 Route::get('/', [Partner\UnitController::class, 'index'])->name('index');
-                Route::post('/', [Partner\UnitController::class, 'store'])->name('store');
                 Route::get('{unit}', [Partner\UnitController::class, 'show'])->name('show');
-                Route::put('{unit}', [Partner\UnitController::class, 'update'])->name('update');
-                Route::delete('{unit}', [Partner\UnitController::class, 'destroy'])->name('destroy');
-                Route::post('{unit}/submit', [Partner\UnitController::class, 'submit'])->name('submit');
-
-                // Multi-unit buildings: one built listing becomes every
-                // apartment that shares its spec, grouped by unit_group_id.
-                Route::post('{unit}/apartments', [Partner\UnitController::class, 'apartments'])->name('apartments');
-
-                // Availability calendar (anti double-booking): manual closures + iCal sync.
                 Route::get('{unit}/calendar', [Partner\CalendarController::class, 'show'])->name('calendar.show');
-                Route::put('{unit}/calendar', [Partner\CalendarController::class, 'update'])->name('calendar.update');
-                Route::post('{unit}/blocked-dates', [Partner\CalendarController::class, 'storeBlock'])->name('blocked.store');
-                Route::delete('{unit}/blocked-dates/{block}', [Partner\CalendarController::class, 'destroyBlock'])->name('blocked.destroy');
 
-                // Unit gallery (multipart uploads to the public disk).
-                Route::post('{unit}/images', [Partner\UnitImageController::class, 'store'])->name('images.store');
-                Route::delete('{unit}/images/{image}', [Partner\UnitImageController::class, 'destroy'])->name('images.destroy');
-                Route::post('{unit}/images/{image}/main', [Partner\UnitImageController::class, 'setMain'])->name('images.main');
+                Route::middleware('retired')->group(function () {
+                    Route::post('/', [Partner\UnitController::class, 'store'])->name('store');
+                    Route::put('{unit}', [Partner\UnitController::class, 'update'])->name('update');
+                    Route::delete('{unit}', [Partner\UnitController::class, 'destroy'])->name('destroy');
+                    Route::post('{unit}/submit', [Partner\UnitController::class, 'submit'])->name('submit');
 
-                // Tourism licence + ownership proof. The dashboard attaches these
-                // through /uploads/presign, which is cookie-session only — so
-                // before this the Bearer clients could not attach the licence
-                // that submitting a listing requires.
-                Route::post('{unit}/documents', [Partner\UnitDocumentController::class, 'store'])->name('documents.store');
-                Route::delete('{unit}/documents/{type}', [Partner\UnitDocumentController::class, 'destroy'])->name('documents.destroy');
+                    // Multi-unit buildings: one built listing becomes every
+                    // apartment that shares its spec, grouped by unit_group_id.
+                    Route::post('{unit}/apartments', [Partner\UnitController::class, 'apartments'])->name('apartments');
+
+                    // Availability calendar (anti double-booking): manual closures + iCal sync.
+                    Route::put('{unit}/calendar', [Partner\CalendarController::class, 'update'])->name('calendar.update');
+                    Route::post('{unit}/blocked-dates', [Partner\CalendarController::class, 'storeBlock'])->name('blocked.store');
+                    Route::delete('{unit}/blocked-dates/{block}', [Partner\CalendarController::class, 'destroyBlock'])->name('blocked.destroy');
+
+                    // Unit gallery (multipart uploads to the public disk).
+                    Route::post('{unit}/images', [Partner\UnitImageController::class, 'store'])->name('images.store');
+                    Route::delete('{unit}/images/{image}', [Partner\UnitImageController::class, 'destroy'])->name('images.destroy');
+                    Route::post('{unit}/images/{image}/main', [Partner\UnitImageController::class, 'setMain'])->name('images.main');
+
+                    // Tourism licence + ownership proof.
+                    Route::post('{unit}/documents', [Partner\UnitDocumentController::class, 'store'])->name('documents.store');
+                    Route::delete('{unit}/documents/{type}', [Partner\UnitDocumentController::class, 'destroy'])->name('documents.destroy');
+                });
             });
 
             Route::get('bookings', [Partner\BookingController::class, 'index'])->name('bookings.index');
@@ -260,16 +275,23 @@ Route::prefix('v1')->group(function () {
                 Route::post('{user}/revoke', [Admin\PartnerController::class, 'revoke'])->name('revoke');
             });
 
+            // Unit review on the legacy console. Reads open; the two DECISIONS
+            // are retired — an approval here bypasses the permit checks the
+            // admin console's own approve() runs. See RetiredEndpoint.
             Route::prefix('requests')->name('requests.')->group(function () {
                 Route::get('/', [Admin\RequestController::class, 'index'])->name('index');
                 Route::get('{unit}', [Admin\RequestController::class, 'show'])->name('show');
-                Route::post('{unit}/approve', [Admin\RequestController::class, 'approve'])->name('approve');
-                Route::post('{unit}/reject', [Admin\RequestController::class, 'reject'])->name('reject');
+
+                Route::middleware('retired')->group(function () {
+                    Route::post('{unit}/approve', [Admin\RequestController::class, 'approve'])->name('approve');
+                    Route::post('{unit}/reject', [Admin\RequestController::class, 'reject'])->name('reject');
+                });
             });
 
             Route::get('units', [Admin\UnitController::class, 'index'])->name('units.index');
             // Editorial "featured" toggle for the storefront home section.
-            Route::patch('units/{unit}/featured', [Admin\UnitController::class, 'setFeatured'])->name('units.featured');
+            Route::patch('units/{unit}/featured', [Admin\UnitController::class, 'setFeatured'])
+                ->middleware('retired')->name('units.featured');
             Route::get('bookings', [Admin\BookingController::class, 'index'])->name('bookings.index');
             Route::get('cancellations', [Admin\CancellationController::class, 'index'])->name('cancellations.index');
             Route::get('reports', [Admin\ReportController::class, 'index'])->name('reports');

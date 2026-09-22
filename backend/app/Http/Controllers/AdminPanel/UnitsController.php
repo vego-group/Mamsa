@@ -125,9 +125,9 @@ class UnitsController extends Controller
         UnitWriter::syncAmenities($unit, $data);
         UnitWriter::syncPhotos((int) $request->user()->id, $unit, $data);
 
-        // The row was created with its number and file, which seeded its
-        // permit (Unit::created). The licence classification goes through the
-        // same writer rather than being silently discarded by toColumns().
+        // The permit is written after the row exists, by its own writer, so
+        // the licence rules run and a bad pair is a named 422 rather than a
+        // CHECK violation from the insert.
         if ($permit = UnitWriter::permitChanges($data)) {
             try {
                 PermitWriter::apply($unit, $permit, (int) $request->user()->id);

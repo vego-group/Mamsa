@@ -126,6 +126,11 @@ class PermitWriterTest extends TestCase
 
     public function test_the_v1_partner_surface_writes_the_permit_through_the_writer(): void
     {
+        // Retired by default (RetiredEndpointsTest); enabled here because the
+        // revert path must still write through the one writer if it is ever
+        // turned back on.
+        config()->set('units.legacy_unit_writes', true);
+
         $unit = $this->unit(['approval_status' => 'draft']);
 
         $this->actingAs($this->partner)
@@ -251,6 +256,46 @@ class PermitWriterTest extends TestCase
         $this->assertSame(UnitLicense::TOURIST_FACILITY, $unit->fresh()->license_type);
         $this->assertSame(5, (int) $unit->fresh()->licensed_units_count);
         $this->assertSame(5, Permit::currentFor($unit)->licensed_units_count);
+    }
+
+    public function test_creating_a_listing_with_a_bad_licence_pair_is_a_named_refusal(): void
+    {
+        // Not a CHECK violation from the insert. `tourist_facility` with no
+        // count satisfies no rule, and the DB says so with a 500 if the row is
+        // written first — so the permit is written after the row, by its
+        // writer, and the partner gets the code that names what is missing.
+        $this->actingAs($this->partner, 'dashboard')
+            ->postJson('/units', [
+                'name' => 'شقة', 'type' => 'apartment', 'city' => 'riyadh',
+                'licenseType' => UnitLicense::TOURIST_FACILITY,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'LICENSED_UNITS_COUNT_REQUIRED');
+
+        // And the half-made draft is not left behind.
+        $this->assertSame(0, Unit::where('user_id', $this->partner->id)->where('unit_name', 'شقة')->count());
+        $this->assertSame(0, Permit::count());
+    }
+
+    public function test_creating_a_listing_with_a_good_licence_pair_writes_the_permit(): void
+    {
+        $id = $this->actingAs($this->partner, 'dashboard')
+            ->postJson('/units', [
+                'name' => 'مبنى', 'type' => 'apartment', 'city' => 'riyadh',
+                'licenseType' => UnitLicense::TOURIST_FACILITY, 'licensedUnitsCount' => 6,
+                'tourismLicenseNumber' => '٥٥٥',
+            ])
+            ->assertStatus(201)
+            ->json('id');
+
+        $unit = Unit::findOrFail((int) str_replace('u_', '', (string) $id));
+        $permit = Permit::currentFor($unit);
+
+        $this->assertNotNull($permit);
+        $this->assertSame(UnitLicense::TOURIST_FACILITY, $permit->license_type);
+        $this->assertSame(6, $permit->licensed_units_count);
+        $this->assertSame('555', $permit->number);
+        $this->assertSame('555', $unit->tourism_permit_no);
     }
 
     /* ---------- the daily check ---------- */

@@ -72,6 +72,19 @@ class UnitController extends DashboardController
             ],
         ));
 
+        // The permit is written after the row exists, by its own writer: the
+        // licence rules run there, so `tourist_facility` with no count is a
+        // named 422 instead of the CHECK violation the insert would raise.
+        if ($permit = UnitWriter::permitChanges($data)) {
+            try {
+                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
+            } catch (LicenseViolation $e) {
+                $unit->delete(); // the draft never existed as far as the partner is concerned
+
+                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+            }
+        }
+
         UnitWriter::syncAmenities($unit, $data);
         $this->syncPhotos($request, $unit, $data);
 
