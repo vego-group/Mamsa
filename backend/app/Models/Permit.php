@@ -57,15 +57,25 @@ class Permit extends Model
     /* ---------- scope ---------- */
 
     /**
-     * The scope a unit's permit lives at: its group when it has one, else
-     * itself. A grouped unit never has a permit of its own in mode B; in
-     * mode A (one permit per apartment) it does — see PermitWriter.
+     * Where a NEW permit for this unit belongs.
+     *
+     * The licence type decides, not the grouping: a facility permit is issued
+     * to the property, so a grouped unit's permit is the building's; a private
+     * permit names one apartment, so it stays with that apartment even inside
+     * a building of them.
+     *
+     * Getting this wrong is not subtle. Scoping a private permit to the group
+     * made the second apartment's permit UPDATE the first one's row — one
+     * permit at group scope carrying the last number written, mirrored onto
+     * every door, and the earlier apartments' licences gone.
      *
      * @return array{0: string, 1: string} [scope_type, scope_id]
      */
     public static function scopeOf(Unit $unit): array
     {
-        return $unit->unit_group_id
+        $perUnit = $unit->license_type === 'private_hospitality';
+
+        return $unit->unit_group_id && ! $perUnit
             ? [self::SCOPE_GROUP, (string) $unit->unit_group_id]
             : [self::SCOPE_UNIT, (string) $unit->getKey()];
     }

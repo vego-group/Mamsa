@@ -104,13 +104,18 @@ class UnitLicenseTest extends TestCase
 
     /* ---------- growing a group ---------- */
 
-    public function test_a_private_licence_cannot_become_a_building(): void
+    public function test_a_private_licence_cannot_become_a_building_on_this_surface(): void
     {
+        // A private permit names one apartment, so a building of them needs a
+        // permit per door — which this legacy surface has no way to carry. It
+        // refuses rather than creating apartments covered by nothing. The live
+        // surfaces do it properly; see ApartmentModeTest.
         $unit = $this->listing(['license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
 
         $this->expand($unit, ['count' => 4])
             ->assertStatus(422)
-            ->assertJsonPath('code', 'MULTI_UNIT_REQUIRES_FACILITY_LICENSE');
+            ->assertJsonPath('code', 'PERMIT_MODE_MIXED')
+            ->assertJsonPath('meta.group_mode', 'per_unit');
 
         $this->assertSame(1, Unit::where('user_id', $this->partner->id)->count(),
             'a refused expansion must leave no apartments behind');
@@ -256,10 +261,13 @@ class UnitLicenseTest extends TestCase
             ->where('approval_status', 'draft')->firstOrFail();
         $pending->forceFill(['approval_status' => 'pending'])->save();
 
+        // Refused on the per-unit rule now: the group claims every door carries
+        // its own permit, and this one carries none — the facility permit it
+        // used to sit under is gone.
         $this->actingAs($this->admin(), 'admin-panel')
             ->postJson("/admin/approvals/{$pending->id}/approve")
             ->assertStatus(422)
-            ->assertJsonPath('code', 'MULTI_UNIT_REQUIRES_FACILITY_LICENSE');
+            ->assertJsonPath('code', 'PERMIT_MODE_MIXED');
 
         $this->assertSame('pending', $pending->fresh()->approval_status);
     }

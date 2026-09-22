@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Units;
 
 use App\Models\Unit;
+use App\Support\Permits\PermitMode;
 use App\Support\Permits\PermitWriter;
 use Illuminate\Support\Facades\DB;
 
@@ -199,6 +200,32 @@ final class UnitLicense
             return;
         }
 
+        // Two ways to be a building, and only one of them needs a facility
+        // permit. Under `private_hospitality` every door carries its own
+        // licence, so the group is legal at any size the cloner allows — on
+        // one condition, checked here because this is the question every
+        // caller asks before publishing a row: THIS apartment must hold a
+        // permit of its own. A door in a per-unit building with nothing
+        // scoped to it is covered by nothing at all; the building's other
+        // permits name other apartments.
+        if ($unit->license_type === self::PRIVATE_HOSPITALITY) {
+            $own = \App\Models\Permit::query()
+                ->where('scope_type', \App\Models\Permit::SCOPE_UNIT)
+                ->where('scope_id', (string) $unit->getKey())
+                ->current()
+                ->exists();
+
+            if (! $own) {
+                throw LicenseViolation::of(
+                    'PERMIT_MODE_MIXED',
+                    'كل وحدة في هذا المبنى تحتاج تصريحها الخاص — هذه الوحدة بلا تصريح',
+                    ['group_mode' => PermitMode::PER_UNIT, 'unit_id' => $unit->getKey()],
+                );
+            }
+
+            return;
+        }
+
         if ($unit->license_type !== self::TOURIST_FACILITY) {
             throw LicenseViolation::of(
                 'MULTI_UNIT_REQUIRES_FACILITY_LICENSE',
@@ -230,6 +257,15 @@ final class UnitLicense
     public static function guardChange(Unit $unit, ?string $type, ?int $count): void
     {
         $size = self::groupSize($unit);
+
+        // A building of per-unit permits is not a downgrade candidate: it was
+        // never trading under one licence, so converting it to `private` is
+        // what it already is. The block exists for the other direction — a
+        // facility building cannot become a single-unit permit while it still
+        // has the apartments.
+        if ($size > 1 && $type === self::PRIVATE_HOSPITALITY && PermitMode::of($unit) === PermitMode::PER_UNIT) {
+            return;
+        }
 
         if ($size > 1 && $type !== self::TOURIST_FACILITY) {
             // The message deliberately does NOT say "reduce the units first".

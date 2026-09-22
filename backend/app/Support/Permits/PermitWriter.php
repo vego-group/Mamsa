@@ -100,15 +100,19 @@ final class PermitWriter
         return DB::transaction(function () use ($unit, $changes, $actorId) {
             $unit->refresh();
 
-            $current = Permit::query()->forUnit($unit)->current()->lockForUpdate()->first();
+            [$scopeType, $scopeId] = Permit::scopeOf($unit);
 
-            // An existing permit keeps its scope; a new one takes the unit's
-            // default scope (the group when grouped — phase 1 only writes
-            // facility permits onto groups, since guardChange refuses anything
-            // else at size > 1).
-            [$scopeType, $scopeId] = $current
-                ? [$current->scope_type, (string) $current->scope_id]
-                : Permit::scopeOf($unit);
+            // The permit being changed is the one at the scope this unit's
+            // licence belongs to — not merely the one covering it. A door in a
+            // per-unit building may still be mirroring the building's old
+            // facility permit; writing its own must create a row beside that
+            // one rather than editing it and taking its neighbours with it.
+            $current = Permit::query()
+                ->where('scope_type', $scopeType)
+                ->where('scope_id', $scopeId)
+                ->current()
+                ->lockForUpdate()
+                ->first();
 
             // The starting point is the current permit; failing that, whatever
             // the unit's own columns say (a legacy row never adopted).
@@ -128,6 +132,11 @@ final class PermitWriter
             // Licence rules — before anything is written.
             UnitLicense::guardFields($merged['license_type'], $merged['licensed_units_count']);
             UnitLicense::guardChange($unit, $merged['license_type'], $merged['licensed_units_count']);
+
+            // And the number is not already another listing's. Inside the
+            // transaction, after the lock above: two requests both reading
+            // "free" and both writing is the race a check outside cannot see.
+            PermitUniqueness::guard($merged['number'], $scopeType, $scopeId, $current?->getKey());
 
             $empty = $merged['number'] === null && $merged['file'] === null && $merged['license_type'] === null;
 

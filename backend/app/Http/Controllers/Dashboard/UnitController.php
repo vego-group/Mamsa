@@ -9,8 +9,10 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
 use App\Support\Dashboard\UnitPresenter;
+use App\Support\Permits\PermitMode;
 use App\Support\Permits\PermitRenewal;
 use App\Support\Permits\PermitWriter;
+use App\Support\Units\ApartmentExpansion;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
@@ -175,14 +177,38 @@ class UnitController extends DashboardController
     {
         $unit = $this->ownUnit($request, self::rawId($id));
 
-        $data = $this->validated($request, [
-            'count' => ['required', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
-        ], [
+        $data = $this->validated($request, self::apartmentRules(), [
             'count.required' => 'عدد الوحدات مطلوب',
             'count.max' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد',
+            'permits.*.number.required' => 'رقم التصريح مطلوب لكل وحدة',
         ]);
 
         $count = (int) $data['count'];
+        $permits = $data['permits'] ?? [];
+
+        // The request's shape has to match the mode the building is in: a
+        // facility permit covers the new doors, a private one does not — and
+        // sending the wrong half is a different mistake from sending too few.
+        try {
+            PermitMode::guardShape($unit, array_key_exists('permits', $data));
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
+
+        // Each apartment's licence file must be this partner's own, stored, and
+        // of the licence kind — the same check every other attachment passes,
+        // applied per entry so the answer names which one.
+        $fileErrors = [];
+
+        foreach ($permits as $i => $permit) {
+            if ($errors = UnitWriter::fileErrors((int) $request->user()->id, ['tourismLicenseFileId' => $permit['fileId'] ?? null])) {
+                $fileErrors["permits.{$i}.fileId"] = reset($errors);
+            }
+        }
+
+        if ($fileErrors !== []) {
+            $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $fileErrors);
+        }
 
         // The licence is checked BEFORE anything is written: a refused
         // expansion must not leave apartments behind for an admin to review.
@@ -219,10 +245,8 @@ class UnitController extends DashboardController
             );
         }
 
-        $before = UnitLicense::groupSize($unit);
-
         /*
-         * Create AND submit, in one transaction.
+         * Create AND file, in ONE transaction.
          *
          * The partner pressed "add apartments" and typed a number — that IS the
          * declaration. Leaving the new rows as drafts to confirm three more
@@ -231,36 +255,40 @@ class UnitController extends DashboardController
          * failure halfway leaves apartments on nobody's screen: not the
          * partner's, not the reviewer's queue.
          *
-         * So it is atomic. If any apartment cannot be submitted the whole
-         * expansion rolls back and the partner is told why, rather than ending
-         * up with a building half filed and half invisible.
+         * So it is atomic. If any apartment cannot be filed the whole expansion
+         * rolls back, rather than leaving a building half filed and half
+         * invisible.
          *
-         * DOCUMENTS TRAVEL WITH THE APARTMENTS here, unlike the /api/v1 route
-         * where copying is opt-in. The cloner's comment says no code can decide
-         * that, because a permit issued for one apartment does not cover its
-         * neighbours — `license_type` now decides it. Expansion is refused
-         * unless the licence is `tourist_facility`, and a facility permit is
-         * issued to the property, so it covers every apartment in it by
-         * definition. Without copying them, submission would fail on the permit
-         * file every clone would be missing.
+         * WHETHER THE DOCUMENTS TRAVEL is the licence mode's decision, not this
+         * method's: a facility permit is issued to the property and covers
+         * every door, so the clones copy it; a private permit names one unit,
+         * so each new door arrives with its own and nothing is copied.
+         * {@see ApartmentExpansion}
          */
-        $group = DB::transaction(function () use ($unit, $count, $request) {
-            $group = UnitCloner::ensureTotal($unit, $count, copyDocuments: true);
+        try {
+            $result = DB::transaction(function () use ($unit, $count, $permits, $request) {
+                $result = ApartmentExpansion::run($unit, $count, $permits, (int) $request->user()->id);
 
-            foreach ($group as $member) {
-                if ($member->approval_status !== 'draft') {
-                    continue; // already approved, or already waiting
+                foreach ($result['added'] as $member) {
+                    if ($member->approval_status !== 'draft') {
+                        continue; // already approved, or already waiting
+                    }
+
+                    // The same gate a manual submit passes — a clone that could
+                    // not be filed on its own must not be filed in bulk either.
+                    $this->assertSubmittable($request->user(), $member->fresh());
+
+                    $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
                 }
 
-                // The same gate a manual submit passes — a clone that could not
-                // be filed on its own must not be filed in bulk either.
-                $this->assertSubmittable($request->user(), $member);
+                return $result;
+            });
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
 
-                $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
-            }
-
-            return $group;
-        });
+        $before = $result['before'];
+        $group = $result['group'];
 
         // Reload so the response reports state AFTER filing rather than the
         // state the rows were created in — the client reads status, not assumes.
@@ -395,6 +423,34 @@ class UnitController extends DashboardController
     private function validateUnit(Request $request, bool $required): array
     {
         return $this->validated($request, UnitWriter::rules($required));
+    }
+
+    /**
+     * The expansion body. `permits` is per-unit mode only, one entry per NEW
+     * apartment; every field inside it is optional except the number, because
+     * a permit with no number is not a permit.
+     *
+     * @return array<string, mixed>
+     */
+    private static function apartmentRules(): array
+    {
+        return [
+            'count' => ['required', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
+            'permits' => ['sometimes', 'array', 'max:'.UnitCloner::MAX_GROUP],
+            'permits.*.apartmentNo' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'permits.*.number' => ['required', 'string', 'max:50'],
+            // Required, not optional: nothing is copied in per-unit mode, so an
+            // apartment arriving without its own file cannot pass the submit
+            // gate — and failing there would roll the whole expansion back
+            // with an error about a row the partner never saw.
+            'permits.*.fileId' => ['required', 'string', 'max:64'],
+            'permits.*.expiresAt' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'permits.*.address' => ['sometimes', 'array'],
+            'permits.*.address.city' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'permits.*.address.district' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'permits.*.address.building' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'permits.*.address.unitNo' => ['sometimes', 'nullable', 'string', 'max:50'],
+        ];
     }
 
     /** @param array<string, mixed> $data */

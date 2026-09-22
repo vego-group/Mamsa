@@ -84,6 +84,10 @@ final class PermitRenewal
             UnitLicense::guardFields($merged['license_type'], $merged['licensed_units_count']);
             UnitLicense::guardChange($unit, $merged['license_type'], $merged['licensed_units_count']);
 
+            // A renewal carrying the same number forward is not a duplicate of
+            // the permit it replaces — that one is excluded by id.
+            PermitUniqueness::guard($merged['number'], $current->scope_type, (string) $current->scope_id, $current->getKey());
+
             if (empty($merged['expires_at'])) {
                 throw LicenseViolation::of(
                     'PERMIT_EXPIRY_REQUIRED',
