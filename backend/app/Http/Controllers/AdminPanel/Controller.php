@@ -113,12 +113,11 @@ abstract class Controller extends BaseController
 
     /**
      * @param  array<string, string>|null  $fields
-     * @param  array<string, mixed>|null  $meta
      * @return never
      */
-    protected function fail(string $code, string $message, int $status = 400, ?array $fields = null, ?array $meta = null): void
+    protected function fail(string $code, string $message, int $status = 400, ?array $fields = null): void
     {
-        throw new AdminPanelException($code, $message, $status, $fields, $meta);
+        throw new AdminPanelException($code, $message, $status, $fields);
     }
 
     /**

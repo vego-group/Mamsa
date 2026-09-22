@@ -8,7 +8,6 @@ use App\Http\Controllers\Controller;
 use App\Models\DashboardUpload;
 use App\Models\Unit;
 use App\Support\Documents\DocumentStorage;
-use App\Support\Permits\PermitWriter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -90,7 +89,7 @@ class UnitDocumentController extends Controller
         // so existing bare paths keep working untouched.
         $upload = $this->record($request, $unit, $data['type'], $request->file('file'));
 
-        $this->write($holder, $column, $upload->id, (int) $request->user()->id);
+        $holder->update([$column => $upload->id]);
 
         // The previous document is finished unless something else still points
         // at it. The old rule — never delete an id — was right when this surface
@@ -155,27 +154,11 @@ class UnitDocumentController extends Controller
         // Clear the column FIRST. forget() only drops an upload nothing points
         // at, so running it while this column still held the id would find its
         // own reference and keep the file forever.
-        $this->write($holder, $column, null, (int) $request->user()->id);
+        $holder->update([$column => null]);
 
         DocumentStorage::forget($value);
 
         return response()->json(['message' => 'تم حذف المستند']);
-    }
-
-    /**
-     * Set a document column. The tourism permit file is the permit's, not the
-     * unit's: it is written through PermitWriter, which mirrors it onto every
-     * apartment the permit covers. The other documents are plain columns.
-     */
-    private function write(Model $holder, string $column, ?string $value, int $actorId): void
-    {
-        if ($holder instanceof Unit && $column === 'tourism_permit_file') {
-            PermitWriter::apply($holder, ['file' => $value], $actorId);
-
-            return;
-        }
-
-        $holder->update([$column => $value]);
     }
 
     /**

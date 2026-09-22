@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Support\Units;
 
 use App\Models\Unit;
-use App\Support\Permits\PermitWriter;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -99,11 +98,6 @@ final class UnitCloner
 
             if (! $source->unit_group_id) {
                 $source->forceFill(['unit_group_id' => $groupId])->save();
-
-                // The source's permit now covers the building. Re-scoped before
-                // the first clone is written, so the clones find a group permit
-                // to mirror rather than each adopting a copy of their own.
-                PermitWriter::joinGroup($source);
             }
 
             $group = Unit::where('unit_group_id', $groupId)->lockForUpdate()->get();

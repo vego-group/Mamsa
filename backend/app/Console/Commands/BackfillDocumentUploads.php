@@ -7,7 +7,6 @@ namespace App\Console\Commands;
 use App\Models\DashboardUpload;
 use App\Models\PartnerDetail;
 use App\Models\Unit;
-use App\Support\Permits\PermitWriter;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -101,15 +100,7 @@ class BackfillDocumentUploads extends Command
                     'status' => 'stored',
                 ]);
 
-                // The permit file is the permit's: written through its writer so
-                // the permit row and every mirrored apartment move together.
-                // A quiet save here would leave permits.file holding the old
-                // bare path while the unit held the id.
-                if ($model instanceof Unit && $column === 'tourism_permit_file') {
-                    PermitWriter::apply($model, ['file' => $id]);
-                } else {
-                    $model->forceFill([$column => $id])->saveQuietly();
-                }
+                $model->forceFill([$column => $id])->saveQuietly();
             });
 
             $done[] = $row + ['id' => $id];

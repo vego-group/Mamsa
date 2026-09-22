@@ -8,7 +8,6 @@ use App\Models\Feature;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
-use App\Support\Permits\PermitWriter;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
@@ -158,28 +157,20 @@ class UnitController extends Controller
             $data['checkout_time'] = Unit::DEFAULT_CHECKOUT_TIME;
         }
 
-        // The permit — number, file, type, count — is one record covering the
-        // whole scope, with exactly one writer. Pulled out of the ordinary
-        // update so no path can set it on a single apartment and leave its
-        // siblings claiming a different permit. This surface accepts the
-        // column names; PermitWriter speaks in its own.
-        $permitFields = [];
+        // Licence columns are group-wide and have exactly one writer. Pulled
+        // out of the ordinary update so no path can set them on a single
+        // apartment and leave its siblings claiming a different permit.
+        $licenseFields = \Arr::only($data, ['license_type', 'licensed_units_count']);
 
-        foreach (self::PERMIT_COLUMNS as $column => $field) {
-            if (array_key_exists($column, $data)) {
-                $permitFields[$field] = $data[$column];
-            }
-        }
-
-        if ($permitFields !== []) {
+        if ($licenseFields !== []) {
             try {
-                PermitWriter::apply($unit, $permitFields, (int) $request->user()->id);
+                UnitLicense::applyToGroup($unit, $licenseFields);
             } catch (LicenseViolation $e) {
                 return $this->licenseRefusal($e);
             }
         }
 
-        $unit->update(\Arr::except($data, array_merge(['features'], array_keys(self::PERMIT_COLUMNS))));
+        $unit->update(\Arr::except($data, ['features', 'license_type', 'licensed_units_count']));
 
         if (array_key_exists('features', $data)) {
             $featureIds = collect($data['features'])->map(function ($name) {
@@ -209,14 +200,6 @@ class UnitController extends Controller
 
         return response()->json(['message' => 'تم الحذف']);
     }
-
-    /** The permit columns this surface accepts, and the PermitWriter field each is. */
-    private const PERMIT_COLUMNS = [
-        'tourism_permit_no' => 'number',
-        'tourism_permit_file' => 'file',
-        'license_type' => 'license_type',
-        'licensed_units_count' => 'licensed_units_count',
-    ];
 
     /** UnitWriter field names → the names this surface accepts. */
     private const SUBMIT_FIELD_MAP = [

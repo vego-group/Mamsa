@@ -10,9 +10,7 @@ declare(strict_types=1);
  * Wrapped in the `dashboard-api` middleware group (bootstrap/app.php).
  */
 
-use App\Http\Controllers\ComplaintAttachmentController;
 use App\Http\Controllers\Dashboard;
-use App\Http\Controllers\DocumentController;
 use Illuminate\Support\Facades\Route;
 
 /* ---- Auth (public) ---- */
@@ -28,37 +26,20 @@ Route::post('auth/logout', [Dashboard\AuthController::class, 'logout'])->name('p
 Route::put('uploads/{upload}', [Dashboard\UploadController::class, 'receive'])
     ->middleware('signed')->name('pd.uploads.receive');
 
-/* ---- Complaint photos ----
- * Signed, not session-authenticated: the same link is rendered in the guest
- * app (Bearer), the admin console and the partner dashboard — three guards on
- * two hosts. A short-lived signature is the one credential all three can hold,
- * and unlike a session it expires on its own if the link is forwarded. */
-/* ---- Compliance documents: signed AND authorised ----
- *
- * Unlike the attachment route above, a signature alone is not enough here. That
- * one is read from three surfaces with three different guards, so a short-lived
- * signature is the only credential all three can carry. These documents —
- * permits, commercial registrations, national IDs — are read by exactly two
- * people, the reviewer and the owner, and both have sessions. Identity is
- * available, so it is required: the controller checks both cookie guards.
- *
- * Sits in this group for EncryptCookies + StartSession; DashboardApi only
- * gates unsafe methods, so a GET passes through it untouched. */
-Route::get('documents/{upload}', DocumentController::class)
-    ->middleware('signed')->name('documents.show');
-
-Route::get('complaints/attachments/{attachment}', ComplaintAttachmentController::class)
-    ->middleware('signed')->name('complaints.attachment');
-
 /* ---- Moyasar webhook (secret-token verified in controller) ---- */
 Route::post('webhooks/moyasar', [Dashboard\WebhookController::class, 'moyasar'])->name('pd.webhook.moyasar');
 
 /* ---- Authenticated partner session ---- */
-Route::middleware(['auth:dashboard', 'throttle:120,1'])->group(function () {
+/* ---- Compliance documents: signed AND authorised ----
+ * A signature alone is not enough here: these are permits, commercial
+ * registrations and national IDs, read by exactly two people — the reviewer
+ * and the owner — and both have sessions. The controller checks both cookie
+ * guards. Sits outside the auth group on purpose (either guard may be the one
+ * populated); it is not unauthenticated. */
+Route::get('documents/{upload}', \App\Http\Controllers\DocumentController::class)
+    ->middleware('signed')->name('documents.show');
 
-    /* Complaints against this partner's units — read-only (spec §5.3) */
-    Route::get('me/complaints', [Dashboard\ComplaintController::class, 'index'])->name('pd.complaints.index');
-    Route::get('me/complaints/{id}', [Dashboard\ComplaintController::class, 'show'])->name('pd.complaints.show');
+Route::middleware(['auth:dashboard', 'throttle:120,1'])->group(function () {
 
     /* Profile */
     Route::get('me', [Dashboard\ProfileController::class, 'show'])->name('pd.me');

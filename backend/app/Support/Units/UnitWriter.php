@@ -130,54 +130,15 @@ final class UnitWriter
     }
 
     /**
-     * The contract keys that describe the PERMIT rather than the unit, and the
-     * PermitWriter field each one is.
-     *
-     * toColumns() never maps these — not on update, and not on create either.
-     * Creating the row with them set writes a licence that has passed no rule:
-     * `tourist_facility` with no count satisfies no guard and violates the DB
-     * CHECK, so the partner gets a 500 from the insert instead of the 422 that
-     * names the missing number. The caller hands {@see permitChanges()} to
-     * PermitWriter::apply() after the row exists, and the guards run there.
-     */
-    public const PERMIT_KEYS = [
-        'tourismLicenseNumber' => 'number',
-        'tourismLicenseFileId' => 'file',
-        'licenseType' => 'license_type',
-        'licensedUnitsCount' => 'licensed_units_count',
-    ];
-
-    /**
-     * The permit fields present in a request body, in PermitWriter's terms.
-     *
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    public static function permitChanges(array $data): array
-    {
-        $changes = [];
-
-        foreach (self::PERMIT_KEYS as $key => $field) {
-            if (array_key_exists($key, $data)) {
-                $changes[$field] = $data[$key];
-            }
-        }
-
-        return $changes;
-    }
-
-    /**
      * Map contract keys → DB columns, sanitising free text.
      *
      * Only keys actually present are mapped, so a partial body updates exactly
      * what it names.
      *
      * @param  array<string, mixed>  $data
-     * @param  bool  $withPermit  kept for the one caller that wants the raw
-     *                            mapping; every controller leaves it false
      * @return array<string, mixed>
      */
-    public static function toColumns(array $data, bool $withPermit = false): array
+    public static function toColumns(array $data): array
     {
         $map = [
             // Stored verbatim, like `description` below and for the same reason:
@@ -232,9 +193,6 @@ final class UnitWriter
 
         $columns = [];
         foreach ($map as $key => $fn) {
-            if (! $withPermit && array_key_exists($key, self::PERMIT_KEYS)) {
-                continue;
-            }
             if (array_key_exists($key, $data)) {
                 $columns = array_merge($columns, $fn($data[$key]));
             }

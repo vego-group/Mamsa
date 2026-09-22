@@ -8,26 +8,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A refund/void executed against Moyasar — SRS 2.3, extended 2026-09-06 to
- * carry complaint refunds too (complaints/refunds spec v1.0).
- *
- * One table for every way money goes back to a guest, so "how much of this
- * booking has already been returned" has a single answer. `reason` says which
- * path created the row; the split columns are populated only on rows written
- * after 2026-09-06 and are NULL on the historical cancellation refunds.
+ * A refund/void executed against Moyasar for a cancelled booking — SRS 2.3.
  */
 class Refund extends Model
 {
     public const TYPE_REFUND = 'refund';
     public const TYPE_VOID   = 'void';
-
-    public const STATUS_PENDING   = 'pending';
-    public const STATUS_SUCCEEDED = 'succeeded';
-    public const STATUS_FAILED    = 'failed';
-
-    public const REASON_COMPLAINT        = 'complaint';
-    public const REASON_HOST_CANCELLATION = 'host_cancellation';
-    public const REASON_OTHER            = 'other';
 
     protected $fillable = [
         'booking_id',
@@ -39,60 +25,13 @@ class Refund extends Model
         'status',
         'moyasar_refund_id',
         'moyasar_response',
-
-        // Complaint refunds (spec v1.0 §4.3).
-        'complaint_id',
-        'reason',
-        'amount_vat',
-        'amount_commission',
-        'amount_partner',
-        'idempotency_key',
-        'failure_reason',
-        'initiated_by',
-        'manual_transfer_reference',
-        'credit_note_number',
-        'credit_note_qr',
     ];
 
     protected $casts = [
-        'amount'            => 'float',
-        'refund_percent'    => 'float',
-        'moyasar_response'  => 'array',
-        'amount_vat'        => 'float',
-        'amount_commission' => 'float',
-        'amount_partner'    => 'float',
+        'amount'           => 'float',
+        'refund_percent'   => 'float',
+        'moyasar_response' => 'array',
     ];
-
-    /**
-     * The split adds up to the refunded total — the same invariant the booking
-     * itself holds. Checked before the row is written, not after: a row that
-     * fails this has already told the partner a wrong number.
-     */
-    public function splitIsBalanced(): bool
-    {
-        if ($this->amount_commission === null) {
-            return true; // historical row, written before the split existed
-        }
-
-        return round($this->amount_commission + $this->amount_partner + $this->amount_vat, 2)
-            === round((float) $this->amount, 2);
-    }
-
-    /**
-     * What `moyasar_refund_id` actually holds: the PAYMENT id.
-     *
-     * Moyasar has no refund object. `POST /payments/{id}/refund` returns the
-     * updated payment, and the column has stored that payment's id since the
-     * cancellation engine shipped. Read it through this accessor so the name at
-     * the call site says what the value is.
-     *
-     * It is NOT unique: every refund against the same payment carries the same
-     * value. Never match a single refund on it.
-     */
-    public function gatewayPaymentId(): ?string
-    {
-        return $this->moyasar_refund_id;
-    }
 
     public function booking(): BelongsTo
     {
@@ -102,17 +41,5 @@ class Refund extends Model
     public function payment(): BelongsTo
     {
         return $this->belongsTo(Payment::class);
-    }
-
-    /** Null when the refund came from cancellation rather than a complaint. */
-    public function complaint(): BelongsTo
-    {
-        return $this->belongsTo(BookingComplaint::class, 'complaint_id');
-    }
-
-    /** The admin who executed it. Null on rows written by the cancellation engine. */
-    public function initiator(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'initiated_by');
     }
 }
