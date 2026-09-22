@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dashboard;
 
+use App\Models\Permit;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
 use App\Support\Dashboard\UnitPresenter;
+use App\Support\Permits\PermitRenewal;
 use App\Support\Permits\PermitWriter;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
@@ -287,6 +289,86 @@ class UnitController extends DashboardController
                 ? 'تمت إضافة '.($group->count() - $before).' وحدة وهي قيد المراجعة. مبناك الحالي يستمر في استقبال الحجوزات.'
                 : 'المبنى يحتوي بالفعل على هذا العدد',
         ]);
+    }
+
+    /**
+     * POST /units/:id/permit-renewals — file a new permit without taking the
+     * listing down.
+     *
+     * The listing keeps selling on the permit in force, and its
+     * `approval_status` is untouched: a renewal is one document being reviewed,
+     * not the listing being reviewed again. {@see PermitRenewal}
+     */
+    public function renewPermit(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->ownUnit($request, self::rawId($id));
+
+        $data = $this->validated($request, [
+            'permitExpiresAt' => ['required', 'date_format:Y-m-d'],
+            'tourismLicenseNumber' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'tourismLicenseFileId' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'permitAddress' => ['sometimes', 'array'],
+            'permitAddress.city' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'permitAddress.district' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'permitAddress.building' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'permitAddress.unitNo' => ['sometimes', 'nullable', 'string', 'max:50'],
+        ], [
+            'permitExpiresAt.required' => 'تاريخ انتهاء التصريح الجديد مطلوب',
+            'permitExpiresAt.date_format' => 'صيغة التاريخ يجب أن تكون YYYY-MM-DD',
+        ]);
+
+        // A file must be the partner's own, stored, and of the licence kind —
+        // the same check every other attachment passes.
+        if (array_key_exists('tourismLicenseFileId', $data) && filled($data['tourismLicenseFileId'])
+            && ($errors = UnitWriter::fileErrors((int) $request->user()->id, ['tourismLicenseFileId' => $data['tourismLicenseFileId']]))) {
+            $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $errors);
+        }
+
+        $fields = array_filter([
+            'expires_at' => $data['permitExpiresAt'],
+            'number' => $data['tourismLicenseNumber'] ?? null,
+            'file' => $data['tourismLicenseFileId'] ?? null,
+            'addr_city' => $data['permitAddress']['city'] ?? null,
+            'addr_district' => $data['permitAddress']['district'] ?? null,
+            'addr_building' => $data['permitAddress']['building'] ?? null,
+            'addr_unit_no' => $data['permitAddress']['unitNo'] ?? null,
+        ], fn ($v) => $v !== null);
+
+        try {
+            $renewal = PermitRenewal::open($unit, $fields, (int) $request->user()->id);
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
+
+        return $this->ok($this->renewalShape($renewal), 201);
+    }
+
+    /** GET /units/:id/permit-renewals — what this listing has filed, newest first. */
+    public function permitRenewals(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->ownUnit($request, self::rawId($id));
+
+        $rows = Permit::query()->forUnit($unit)
+            ->whereIn('status', [Permit::STATUS_PENDING, Permit::STATUS_REJECTED, Permit::STATUS_SUPERSEDED])
+            ->orderByDesc('id')->get();
+
+        return $this->ok($rows->map(fn (Permit $p) => $this->renewalShape($p))->values()->all());
+    }
+
+    /** @return array<string, mixed> */
+    private function renewalShape(Permit $permit): array
+    {
+        return [
+            'id' => (string) $permit->id,
+            'status' => $permit->status,
+            'permitExpiresAt' => $permit->expires_at?->toDateString(),
+            'tourismLicenseNumber' => $permit->number,
+            'tourismLicenseFileId' => $permit->file,
+            'submittedAt' => $permit->created_at?->toIso8601ZuluString(),
+            'reviewedAt' => $permit->reviewed_at?->toIso8601ZuluString(),
+            // The reason is the partner's; the reviewer's notes are internal.
+            'rejectionReason' => $permit->rejection_reason,
+        ];
     }
 
     public function submit(Request $request, string $id): JsonResponse

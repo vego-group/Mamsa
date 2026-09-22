@@ -181,6 +181,12 @@ class UnitPresenter
             // was valid on review day runs out on its own.
             'permitExpiresAt' => \App\Support\Permits\PermitExpiry::on($u)?->toDateString(),
             'permitStatus' => \App\Support\Permits\PermitExpiry::status($u),
+            // A renewal already waiting changes what "expired" means on this
+            // screen: the listing is quiet, but somebody has already acted and
+            // the remedy is in the reviewer's own queue.
+            'pendingRenewalId' => \App\Support\Permits\PermitRenewal::pendingFor($u)?->id
+                ? (string) \App\Support\Permits\PermitRenewal::pendingFor($u)->id
+                : null,
             'groupSize' => UnitLicense::groupSize($u),
             // Proof of the right to list. Same resolver: the column holds
             // either an upload id or a storage path depending on which
