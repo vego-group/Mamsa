@@ -48,8 +48,12 @@ return new class extends Migration
             // refunds; 'other' is the honest label for them — the table does
             // not record whether the guest or the host cancelled, and guessing
             // would put a wrong reason on real financial history.
-            $table->enum('reason', ['complaint', 'host_cancellation', 'other'])
-                ->default('other');
+            // Guarded because 2026_09_22_000003 adds this one on its own for
+            // the late-payment path, on servers that never got complaints.
+            if (! Schema::hasColumn('refunds', 'reason')) {
+                $table->enum('reason', ['complaint', 'host_cancellation', 'other'])
+                    ->default('other');
+            }
 
             // The split, frozen at execution. decimal(10,2) matches `amount`.
             // Invariant, asserted in code and in the regression test:
@@ -61,9 +65,13 @@ return new class extends Migration
             // Unique, nullable: both MySQL and SQLite allow repeated NULLs in a
             // unique index, so historical rows without a key stay legal while
             // no two new refunds can share one.
-            $table->string('idempotency_key', 64)->nullable()->unique();
+            if (! Schema::hasColumn('refunds', 'idempotency_key')) {
+                $table->string('idempotency_key', 64)->nullable()->unique();
+            }
 
-            $table->text('failure_reason')->nullable();
+            if (! Schema::hasColumn('refunds', 'failure_reason')) {
+                $table->text('failure_reason')->nullable();
+            }
 
             $table->foreignId('initiated_by')->nullable()->constrained('users')->nullOnDelete();
 
