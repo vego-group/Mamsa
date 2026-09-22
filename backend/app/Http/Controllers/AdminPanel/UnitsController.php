@@ -11,7 +11,9 @@ use App\Support\AdminPanel\UnitPresenter;
 use App\Support\City;
 use App\Support\Pricing;
 use App\Exceptions\AdminPanelException;
+use App\Support\Permits\PermitMode;
 use App\Support\Permits\PermitWriter;
+use App\Support\Units\ApartmentExpansion;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
@@ -352,14 +354,51 @@ class UnitsController extends Controller
 
         $data = $this->validate($request, [
             'count' => ['required', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
+            // Per-unit mode: one permit per NEW apartment. See PermitMode.
+            'permits' => ['sometimes', 'array', 'max:'.UnitCloner::MAX_GROUP],
+            'permits.*.apartmentNo' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'permits.*.number' => ['required', 'string', 'max:50'],
+            // Required, not optional: nothing is copied in per-unit mode, so an
+            // apartment arriving without its own file cannot pass the submit
+            // gate — and failing there would roll the whole expansion back
+            // with an error about a row the partner never saw.
+            'permits.*.fileId' => ['required', 'string', 'max:64'],
+            'permits.*.expiresAt' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'permits.*.address' => ['sometimes', 'array'],
+            'permits.*.address.city' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'permits.*.address.district' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'permits.*.address.building' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'permits.*.address.unitNo' => ['sometimes', 'nullable', 'string', 'max:50'],
         ], [
             'count.required' => 'عدد الوحدات مطلوب',
             'count.integer' => 'عدد الوحدات يجب أن يكون رقماً صحيحاً',
             'count.min' => 'عدد الوحدات يجب أن يكون 1 على الأقل',
             'count.max' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد',
+            'permits.*.number.required' => 'رقم التصريح مطلوب لكل وحدة',
         ]);
 
         $count = (int) $data['count'];
+        $permits = $data['permits'] ?? [];
+
+        try {
+            PermitMode::guardShape($unit, array_key_exists('permits', $data));
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
+
+        // Each apartment's licence file, checked against the acting admin the
+        // way every other attachment on this surface is.
+        $fileErrors = [];
+
+        foreach ($permits as $i => $permit) {
+            if ($errors = UnitWriter::fileErrors((int) $request->user()->id, ['tourismLicenseFileId' => $permit['fileId'] ?? null])) {
+                $fileErrors["permits.{$i}.fileId"] = reset($errors);
+            }
+        }
+
+        if ($fileErrors !== []) {
+            $this->fail('VALIDATION_ERROR', 'ملفات غير صالحة', 422, $fileErrors);
+        }
 
         // The permit is checked BEFORE anything is written — a refused
         // expansion must not leave approved apartments behind.
@@ -385,50 +424,50 @@ class UnitsController extends Controller
             );
         }
 
-        $before = UnitLicense::groupSize($unit);
-
         // Create and file in one transaction, as the partner surface does: a
         // failure halfway must not leave apartments on nobody's screen.
-        // Documents travel with the apartments — expansion requires a facility
-        // permit, and a facility permit is issued to the property, so it covers
-        // every door in it.
-        $group = DB::transaction(function () use ($unit, $count) {
-            $group = UnitCloner::ensureTotal($unit, $count, copyDocuments: true);
+        // Whether the documents travel with the clones is the licence mode's
+        // decision, not this method's — {@see ApartmentExpansion}.
+        try {
+            $result = DB::transaction(function () use ($unit, $count, $permits, $request) {
+                $result = ApartmentExpansion::run($unit, $count, $permits, (int) $request->user()->id);
 
-            foreach ($group as $member) {
-                if ($member->approval_status !== 'draft') {
-                    continue; // the source, or an apartment from an earlier expansion
+                foreach ($result['added'] as $member) {
+                    if ($member->approval_status !== 'draft') {
+                        continue; // an apartment from an earlier expansion
+                    }
+
+                    // Each copy meets the same gate a manual submit passes — a
+                    // source that passed it a moment ago produces copies that
+                    // pass it too, but "should" is not a reason to skip the
+                    // check. A failure rolls the whole expansion back.
+                    if ($errors = UnitWriter::submitErrors($member->fresh())) {
+                        throw new AdminPanelException(
+                            'APARTMENT_INCOMPLETE',
+                            'تعذّر إنشاء الوحدات — إحدى النسخ غير مكتملة',
+                            422,
+                            $errors,
+                            ['apartmentNo' => $member->apartment_no],
+                        );
+                    }
+
+                    $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
                 }
 
-                // Each copy meets the same gate a manual submit passes — a
-                // source that passed it a moment ago produces copies that
-                // pass it too, but "should" is not a reason to skip the
-                // check. A failure rolls the whole expansion back.
-                if ($errors = UnitWriter::submitErrors($member)) {
-                    throw new AdminPanelException(
-                        'APARTMENT_INCOMPLETE',
-                        'تعذّر إنشاء الوحدات — إحدى النسخ غير مكتملة',
-                        422,
-                        $errors,
-                        ['apartmentNo' => $member->apartment_no],
-                    );
-                }
+                return $result;
+            });
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
 
-                // `submitted_at` and the reviewer's feed entry come from
-                // UnitApprovalObserver on the way into `pending`, the same as
-                // every other path that files a unit.
-                $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
-            }
-
-            return $group;
-        });
+        $group = $result['group'];
 
         // Reload so the response reports the state AFTER filing.
         if ($groupId = $unit->fresh()->unit_group_id) {
             $group = Unit::where('unit_group_id', $groupId)->orderBy('apartment_no')->get();
         }
 
-        $added = max(0, $group->count() - $before);
+        $added = max(0, $group->count() - $result['before']);
 
         return response()->json([
             'groupId' => $unit->fresh()->unit_group_id,

@@ -8,6 +8,7 @@ use App\Models\Feature;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
+use App\Support\Permits\PermitMode;
 use App\Support\Permits\PermitWriter;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
@@ -322,6 +323,11 @@ class UnitController extends Controller
             // halfway through leaves apartments behind that nobody meant to
             // create — and that an admin then has to review.
             try {
+                // This surface has no way to carry a permit per apartment, so
+                // it cannot expand a per-unit building — PermitMode says so in
+                // the same words the live surfaces use. It is retired anyway;
+                // the guard is here so the revert path is not a hole.
+                PermitMode::guardShape($unit, false);
                 UnitLicense::guardGroupSize($unit, (int) $data['count']);
             } catch (LicenseViolation $e) {
                 return $this->licenseRefusal($e);
@@ -342,6 +348,7 @@ class UnitController extends Controller
         }
 
         try {
+            PermitMode::guardShape($unit, false);
             UnitLicense::guardGroupSize($unit, $size);
         } catch (LicenseViolation $e) {
             return $this->licenseRefusal($e);
