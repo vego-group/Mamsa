@@ -36,6 +36,11 @@ $ORPHAN_UPLOADS = ['file_01m2mp05902j81zap1vnpq0ef8', 'file_01m2v7jnvaevethykfyk
 $counts = [];
 $count = function (string $table, int $n) use (&$counts) { $counts[$table] = ($counts[$table] ?? 0) + $n; };
 
+// Uploads removed, tallied by the account that owned them — asked for in the
+// go-ahead, and only knowable while the rows still exist.
+$uploadsByOwner = [];
+$tallyUpload = function (int $ownerId) use (&$uploadsByOwner) { $uploadsByOwner[$ownerId] = ($uploadsByOwner[$ownerId] ?? 0) + 1; };
+
 $public = Storage::disk('public');
 
 /**
@@ -153,6 +158,7 @@ try {
             }
         }
 
+        $tallyUpload((int) $up->user_id);
         $count('dashboard_uploads', (int) $up->delete());
     }
 
@@ -202,6 +208,7 @@ try {
                 }
             }
 
+            $tallyUpload((int) $up->user_id);
             $count('dashboard_uploads', (int) $up->delete());
         }
 
@@ -231,6 +238,11 @@ try {
 
     echo PHP_EOL.($EXECUTE ? 'EXECUTED' : 'DRY RUN — rolled back').PHP_EOL;
     foreach ($counts as $t => $n) { printf("  %-22s %d\n", $t, $n); }
+
+    echo '  uploads by owner: ';
+    ksort($uploadsByOwner);
+    foreach ($uploadsByOwner as $owner => $n) { echo "#$owner=$n  "; }
+    echo '(total '.array_sum($uploadsByOwner).')'.PHP_EOL;
     echo "  files ".($EXECUTE ? 'deleted' : 'that would be deleted').": ".count($files).PHP_EOL;
     foreach ($files as $f) { echo "    $f".PHP_EOL; }
 
