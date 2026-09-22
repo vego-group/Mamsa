@@ -10,6 +10,7 @@ use App\Models\Unit;
 use App\Services\CancellationPolicyService;
 use App\Support\Booking\Availability;
 use App\Support\Booking\UnitUnavailable;
+use App\Support\Permits\PermitExpiry;
 use App\Support\Pricing;
 use App\Traits\ApiResponse;
 use Illuminate\Database\QueryException;
@@ -177,6 +178,25 @@ class BookingController extends Controller
             ->where('status', 'available')
             ->firstOrFail();
 
+        // The permit caps the calendar. Answered before any lock is taken —
+        // and again per apartment inside the allocator, because in a building
+        // each door may hold its own permit. Returned directly rather than
+        // thrown: the UnitUnavailable handler lives around the transaction
+        // below, and a throw from up here would leave as a 500.
+        if (! PermitExpiry::anyCovers($unit, $data['end_date'])) {
+            $e = UnitUnavailable::permitExpired([
+                'permit_expires_at' => PermitExpiry::on($unit)?->toDateString(),
+                'end_date' => $data['end_date'],
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'code' => $e->reason,
+                'meta' => $e->meta,
+            ], 409);
+        }
+
         $nights = (int) now()->parse($data['start_date'])->diffInDays($data['end_date']);
 
         /*
@@ -223,8 +243,19 @@ class BookingController extends Controller
 
                 $booked = false;
                 $blocked = false;
+                $permitBarred = false;
 
                 foreach ($candidates as $candidate) {
+                    // Per apartment, not per building: in a building where each
+                    // door carries its own permit, one apartment's permit may
+                    // have run out while its neighbours' have not. Allocating
+                    // that door would sell a stay it cannot legally host.
+                    if (! PermitExpiry::coversStay($candidate, $data['end_date'])) {
+                        $permitBarred = true;
+
+                        continue;
+                    }
+
                     if (Availability::conflictingBookings((int) $candidate->id, $data['start_date'], $data['end_date'])->exists()) {
                         $booked = true;
 
@@ -254,6 +285,15 @@ class BookingController extends Controller
                     'start_date' => $data['start_date'],
                     'end_date' => $data['end_date'],
                 ];
+
+                // A building where every free apartment is out of permit is not
+                // "fully booked" — saying so would send the guest to look for
+                // other dates that do not exist either.
+                if ($permitBarred && ! $booked && ! $blocked) {
+                    throw UnitUnavailable::permitExpired($meta + [
+                        'permit_expires_at' => PermitExpiry::on($unit)?->toDateString(),
+                    ]);
+                }
 
                 throw $booked || ! $blocked
                     ? UnitUnavailable::taken($meta)

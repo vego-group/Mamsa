@@ -23,6 +23,14 @@ final class UnitUnavailable extends \RuntimeException
     public const BLOCKED = 'UNIT_BLOCKED';
 
     /**
+     * The listing may not host a stay ending this late — its tourism permit
+     * runs out first. A third outcome beside taken and blocked, because the
+     * remedy is different: different dates may work, different apartments
+     * will not.
+     */
+    public const PERMIT = 'BOOKING_EXCEEDS_PERMIT_VALIDITY';
+
+    /**
      * @param  array<string, mixed>  $meta
      *
      * Named `reason`, not `code`: \Exception already has a non-readonly $code,
@@ -40,6 +48,12 @@ final class UnitUnavailable extends \RuntimeException
     public static function taken(array $meta = []): self
     {
         return new self(self::TAKEN, 'الوحدة محجوزة في هذه الفترة', $meta);
+    }
+
+    /** @param array<string, mixed> $meta */
+    public static function permitExpired(array $meta = []): self
+    {
+        return new self(self::PERMIT, 'تصريح هذه الوحدة لا يغطي هذه التواريخ', $meta);
     }
 
     /** @param array<string, mixed> $meta */

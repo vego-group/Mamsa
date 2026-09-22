@@ -55,6 +55,12 @@ class UnitPresenter
             'address' => $unit->address,
             'tourismLicenseNumber' => $unit->tourism_permit_no,
             'tourismLicenseFileId' => $unit->tourism_permit_file,
+            // The permit's own dates. `permitStatus` is derived — valid ·
+            // expiring · expired · unknown — so the dashboard renders the
+            // banner without doing date arithmetic, and the two surfaces
+            // cannot disagree about what "expiring" means.
+            'permitExpiresAt' => \App\Support\Permits\PermitExpiry::on($unit)?->toDateString(),
+            'permitStatus' => \App\Support\Permits\PermitExpiry::status($unit),
             // The reviewer's job on a building is to check the number the
             // partner TYPED against the number written on the permit they
             // uploaded. The system already refuses a group larger than the

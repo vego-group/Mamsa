@@ -176,6 +176,11 @@ class UnitPresenter
             // the screen never branches between "one" and "no value".
             'licenseType' => $u->license_type,
             'licensedUnitsCount' => $u->licensed_units_count !== null ? (int) $u->licensed_units_count : null,
+            // The fourth thing the reviewer compares against the document, and
+            // the only one that keeps mattering after approval: a permit that
+            // was valid on review day runs out on its own.
+            'permitExpiresAt' => \App\Support\Permits\PermitExpiry::on($u)?->toDateString(),
+            'permitStatus' => \App\Support\Permits\PermitExpiry::status($u),
             'groupSize' => UnitLicense::groupSize($u),
             // Proof of the right to list. Same resolver: the column holds
             // either an upload id or a storage path depending on which
