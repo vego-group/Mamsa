@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Support\Units\UnitLicense;
+use App\Support\Permits\PermitWriter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -38,39 +38,71 @@ class Unit extends Model
         // from its source — but a seeder, a console command, or a path written
         // six months from now could, and the daily check would only notice the
         // next morning. This turns "caught within a day" into "cannot happen".
+        //
+        // The check is against the group's PERMIT, not a sibling row: the
+        // permit is the fact, the siblings are its copies. A new row may carry
+        // nothing (it will be made to mirror the permit on `created`) or the
+        // same values; anything else is a second permit sneaking into a scope
+        // that holds one.
         static::creating(function (self $unit) {
-            if (UnitLicense::isWriting() || ! $unit->unit_group_id) {
+            if (PermitWriter::isWriting() || ! $unit->unit_group_id) {
                 return;
             }
 
-            $sibling = self::where('unit_group_id', $unit->unit_group_id)
-                ->first(['license_type', 'licensed_units_count']);
+            $permit = Permit::currentFor($unit);
 
-            if ($sibling === null) {
+            if ($permit === null) {
                 return; // first row of a new group — it sets the value
             }
 
-            $differs = $sibling->license_type !== $unit->license_type
-                || (int) $sibling->licensed_units_count !== (int) $unit->licensed_units_count;
+            foreach (Permit::MIRROR as $own => $column) {
+                $incoming = $unit->{$column};
 
-            if ($differs) {
-                throw new \LogicException(
-                    'A new apartment must carry its group\'s licence — write it through UnitLicense::applyToGroup().'
-                );
+                if ($incoming !== null && (string) $incoming !== (string) $permit->{$own}) {
+                    throw new \LogicException(
+                        "A new apartment must carry its group's permit ({$column}) — write it through PermitWriter."
+                    );
+                }
             }
         });
 
-        static::updating(function (self $unit) {
-            if (UnitLicense::isWriting()) {
+        // A unit created with its permit columns set has just described a
+        // permit; give that permit its row. A unit created into a scope that
+        // already has one is made to mirror it. Either way, after `created`
+        // the units table and the permits table agree.
+        static::created(function (self $unit) {
+            if (PermitWriter::isWriting()) {
                 return;
             }
 
-            if ($unit->isDirty(['license_type', 'licensed_units_count'])) {
+            PermitWriter::adopt($unit);
+        });
+
+        // The four permit columns have one writer. `$unit->update([...])` from
+        // any controller that touches them fails loudly instead of leaving one
+        // apartment claiming a permit its siblings — and its permit row — do
+        // not have.
+        //
+        // This cannot see query-builder updates — `Unit::where(...)->update(...)`
+        // fires no model events. That is precisely why the daily consistency
+        // check exists as well; the two guards catch different mistakes.
+        static::updating(function (self $unit) {
+            if (PermitWriter::isWriting()) {
+                return;
+            }
+
+            if ($unit->isDirty(array_values(Permit::MIRROR))) {
                 throw new \LogicException(
-                    'license_type/licensed_units_count are group-wide — write them through UnitLicense::applyToGroup().'
+                    'tourism_permit_no / tourism_permit_file / license_type / licensed_units_count are the permit\'s — write them through PermitWriter::apply().'
                 );
             }
         });
+    }
+
+    /** The permit this unit trades under right now, or null. */
+    public function currentPermit(): ?Permit
+    {
+        return Permit::currentFor($this);
     }
 
     /**

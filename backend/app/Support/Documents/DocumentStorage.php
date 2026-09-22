@@ -6,6 +6,7 @@ namespace App\Support\Documents;
 
 use App\Models\DashboardUpload;
 use App\Models\PartnerDetail;
+use App\Models\Permit;
 use App\Models\Unit;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Collection;
@@ -192,6 +193,11 @@ final class DocumentStorage
         foreach (['tourism_permit_file', 'ownership_doc_file'] as $column) {
             $values = $values->merge(Unit::whereNotNull($column)->pluck($column));
         }
+
+        // A permit's file is referenced by the permit row as well as by the
+        // units that mirror it — and, once renewals exist, by pending and
+        // superseded permits that no unit mirrors at all.
+        $values = $values->merge(Permit::whereNotNull('file')->pluck('file'));
 
         foreach ((new PartnerDetail)->getFillable() as $column) {
             if (str_contains($column, 'file')) {
