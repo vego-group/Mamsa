@@ -227,49 +227,64 @@ class BookingPaymentSettler
     /**
      * The guest paid for nights the platform can no longer give them.
      *
-     * Refund in full and tell a human. Automatic money back is the correct
-     * first move, but it is not the whole remedy: this guest was told their
-     * booking was cancelled and then watched a charge appear, so somebody has
-     * to contact them. That is what the alert is for.
+     * Two obligations, and only one of them is money. The platform owes the
+     * refund, and it owes the guest a human being: they were told their
+     * booking was cancelled and then watched a charge appear, and no automatic
+     * transfer answers that. So the ALERT GOES FIRST and depends on nothing —
+     * it is raised before the refund is attempted, and a failure anywhere
+     * below cannot swallow it.
      *
-     * Idempotent on `idempotency_key`, because the webhook and the browser
-     * redirect both reach this and a double refund is worse than none.
+     * That ordering was not always so. This method used to open with an
+     * idempotency lookup against a column that did not exist on production
+     * (`refunds.idempotency_key` arrived with the complaints work, which was
+     * never deployed), and that lookup sat OUTSIDE the try. So the first
+     * statement threw, the refund never ran, the alert never fired, and the
+     * payment callback returned 500 — the two safeguards failing together, in
+     * silence. The column is added by 2026_09_22_000003; the shape below is
+     * what stops a missing column from ever costing the alert again.
      */
     private function refundUnrecoverable(Booking $booking): void
     {
-        $key = 'late-payment:'.$booking->id;
-
-        if (Refund::where('idempotency_key', $key)->exists()) {
-            return;
-        }
-
         $booking->loadMissing('payment', 'user', 'unit');
 
         $payment = $booking->payment;
         $amount = (float) $booking->total_amount;
-        $gateway = null;
+
+        // FIRST, and outside everything: a person has to know.
+        $this->alertPaymentAfterCancellation($booking, $amount, 'attempting');
+
         $outcome = 'simulated';
 
-        if ($payment?->moyasar_id) {
-            try {
-                $gateway = $this->moyasar->refund($payment->moyasar_id, (int) round($amount * 100));
-                $outcome = 'gateway';
-            } catch (\Throwable $e) {
-                // Do NOT rethrow: the booking stays cancelled either way, and
-                // losing the alert would leave a charged guest with nobody
-                // knowing. The failed row plus the alert IS the handling.
-                $outcome = 'failed';
-
-                Log::critical('Late payment: automatic refund failed at the gateway — REFUND BY HAND', [
-                    'booking_id' => $booking->id,
-                    'payment_id' => $payment->id,
-                    'amount' => $amount,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
         try {
+            // Inside the try, deliberately. It reads a column, and a read can
+            // fail; when it does, the failure belongs to the refund, not to
+            // the alert that has already gone out.
+            $key = 'late-payment:'.$booking->id;
+
+            if (Refund::where('idempotency_key', $key)->exists()) {
+                return; // already refunded — the webhook and the redirect both reach here
+            }
+
+            $gateway = null;
+
+            if ($payment?->moyasar_id) {
+                try {
+                    $gateway = $this->moyasar->refund($payment->moyasar_id, (int) round($amount * 100));
+                    $outcome = 'gateway';
+                } catch (\Throwable $e) {
+                    // Do NOT rethrow: the booking stays cancelled either way,
+                    // and the row below still records what was owed.
+                    $outcome = 'failed';
+
+                    Log::critical('Late payment: automatic refund failed at the gateway — REFUND BY HAND', [
+                        'booking_id' => $booking->id,
+                        'payment_id' => $payment->id,
+                        'amount' => $amount,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
             $refund = $booking->refunds()->create([
                 'payment_id' => $payment?->id,
                 'type' => Refund::TYPE_REFUND,
@@ -309,8 +324,36 @@ class BookingPaymentSettler
             }
         } catch (\Throwable $e) {
             report($e);
+
+            Log::critical('Late payment: the refund could not be recorded — REFUND BY HAND', [
+                'booking_id' => $booking->id,
+                'amount' => $amount,
+                'error' => $e->getMessage(),
+            ]);
+
+            $outcome = 'failed';
         }
 
-        OpsAlert::raise(new PaymentAfterCancellation($booking, $amount, $outcome));
+        // Only on failure. The first alert already said this happened; this one
+        // says the money did not go back by itself.
+        if ($outcome === 'failed') {
+            $this->alertPaymentAfterCancellation($booking, $amount, 'failed');
+        }
+    }
+
+    /**
+     * Raise the alert, and never let raising it break the caller.
+     *
+     * A mail provider having a bad minute must not turn a recorded refund into
+     * a 500 on the payment callback — and must not stop the refund that has
+     * not run yet.
+     */
+    private function alertPaymentAfterCancellation(Booking $booking, float $amount, string $outcome): void
+    {
+        try {
+            OpsAlert::raise(new PaymentAfterCancellation($booking, $amount, $outcome));
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }

@@ -14,6 +14,7 @@ use App\Notifications\PaymentAfterCancellation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -163,6 +164,69 @@ class LatePaymentTest extends TestCase
         // The money did not move, so the guest must not be told it did.
         $this->assertSame(0.0, (float) $payment->refresh()->refunded_amount);
         Notification::assertSentOnDemand(PaymentAfterCancellation::class);
+    }
+
+    /* ---------- the alert must survive the refund failing ---------- */
+
+    public function test_the_alert_goes_out_even_when_the_refund_cannot_be_recorded(): void
+    {
+        // The shape that failed on production: the refund path threw on its
+        // first statement — a lookup against a column that did not exist —
+        // and took the alert down with it, because the alert came last. The
+        // guest was charged, the money stayed, and nobody was told.
+        //
+        // Simulated here by making the refunds table unwritable, which is the
+        // same class of failure from this method's point of view.
+        Notification::fake();
+
+        [$booking, $payment] = $this->timedOutBooking();
+        $this->bookingOn($booking->unit, 10, 15, Booking::STATUS_CONFIRMED);
+        $this->fakeGateway($payment);
+
+        Schema::drop('refunds');
+
+        $this->webhook($payment)->assertOk();
+
+        // No refund row — the table is gone. But the human was told, twice:
+        // once because it happened, once because the money did not go back.
+        Notification::assertSentOnDemandTimes(PaymentAfterCancellation::class, 2);
+        $this->assertSame(Booking::STATUS_CANCELLED, $booking->refresh()->status);
+    }
+
+    public function test_the_first_alert_does_not_wait_for_the_refund_to_finish(): void
+    {
+        Notification::fake();
+
+        [$booking, $payment] = $this->timedOutBooking();
+        $this->bookingOn($booking->unit, 10, 15, Booking::STATUS_CONFIRMED);
+        $this->fakeGateway($payment);
+
+        $this->webhook($payment)->assertOk();
+
+        // One alert, raised before the attempt, carrying `attempting` — not a
+        // verdict it could not have had yet.
+        Notification::assertSentOnDemandTimes(PaymentAfterCancellation::class, 1);
+        Notification::assertSentOnDemand(
+            PaymentAfterCancellation::class,
+            fn (PaymentAfterCancellation $n) => $n->refundOutcome === 'attempting',
+        );
+    }
+
+    public function test_a_gateway_failure_raises_a_second_alert_that_names_it(): void
+    {
+        Notification::fake();
+
+        [$booking, $payment] = $this->timedOutBooking();
+        $this->bookingOn($booking->unit, 10, 15, Booking::STATUS_CONFIRMED);
+        $this->fakeGateway($payment, refund: 'rejected');
+
+        $this->webhook($payment)->assertOk();
+
+        Notification::assertSentOnDemandTimes(PaymentAfterCancellation::class, 2);
+        Notification::assertSentOnDemand(
+            PaymentAfterCancellation::class,
+            fn (PaymentAfterCancellation $n) => $n->refundOutcome === 'failed',
+        );
     }
 
     /* ---------- fixtures ---------- */
