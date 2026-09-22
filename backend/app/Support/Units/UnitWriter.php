@@ -112,6 +112,10 @@ final class UnitWriter
              */
             'licenseType'          => ['sometimes', 'nullable', 'in:'.implode(',', \App\Support\Units\UnitLicense::TYPES)],
             'licensedUnitsCount'   => ['sometimes', 'nullable', 'integer', 'min:1', 'max:'.\App\Support\Units\UnitCloner::MAX_GROUP],
+            // Gregorian, as the column is. Permits are printed in Hijri and the
+            // consoles convert — a date arriving here has already been read by
+            // a human off the document.
+            'permitExpiresAt'      => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'tourismLicenseFileId' => ['sometimes', 'nullable', 'string'],
             'photoFileIds'         => ['sometimes', 'nullable', 'array', 'max:'.self::MAX_PHOTOS],
             'photoFileIds.*'       => ['string'],
@@ -145,6 +149,7 @@ final class UnitWriter
         'tourismLicenseFileId' => 'file',
         'licenseType' => 'license_type',
         'licensedUnitsCount' => 'licensed_units_count',
+        'permitExpiresAt' => 'expires_at',
     ];
 
     /**
@@ -426,6 +431,21 @@ final class UnitWriter
         }
         if (blank($unit->tourism_permit_no))                           $fields['tourismLicenseNumber'] = 'رقم رخصة السياحة مطلوب';
         if (blank($unit->tourism_permit_file))                         $fields['tourismLicenseFileId'] = 'ملف الرخصة مطلوب';
+
+        // The permit's expiry date, once the platform requires it. Off until
+        // an admin has filled the dates in for the listings that already
+        // exist — an approved listing returns to `pending` on any edit, so
+        // switching this on early would refuse a price change on an old
+        // listing until someone found its permit. A date already in the past
+        // is refused whether or not the flag is on: submitting a listing under
+        // a lapsed permit is the thing this whole phase exists to stop.
+        $expiry = \App\Support\Permits\PermitExpiry::on($unit);
+
+        if ($expiry === null && config('permits.expiry_required')) {
+            $fields['permitExpiresAt'] = 'تاريخ انتهاء التصريح مطلوب';
+        } elseif ($expiry !== null && $expiry->lessThan(now()->startOfDay())) {
+            $fields['permitExpiresAt'] = 'تصريح الوحدة منتهي — جدّده قبل الإرسال للمراجعة';
+        }
         // REAL photos, not rows: a placeholder row pointing at the shared
         // default image satisfied a bare count, which would let a listing reach
         // review with nothing to look at.
