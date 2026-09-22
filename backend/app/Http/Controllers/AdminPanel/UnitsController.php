@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Support\AdminPanel\UnitPresenter;
 use App\Support\City;
 use App\Support\Pricing;
+use App\Support\Permits\PermitWriter;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitLicense;
 use App\Support\Units\UnitWriter;
@@ -121,21 +122,14 @@ class UnitsController extends Controller
         UnitWriter::syncAmenities($unit, $data);
         UnitWriter::syncPhotos((int) $request->user()->id, $unit, $data);
 
-        // Same as update(): the licence goes through its single writer rather
-        // than being silently discarded by toColumns().
-        $license = [];
-
-        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
-            if (array_key_exists($input, $data)) {
-                $license[$column] = $data[$input];
-            }
-        }
-
-        if ($license !== []) {
+        // The permit is written after the row exists, by its own writer, so
+        // the licence rules run and a bad pair is a named 422 rather than a
+        // CHECK violation from the insert.
+        if ($permit = UnitWriter::permitChanges($data)) {
             try {
-                UnitLicense::applyToGroup($unit, $license);
+                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
             } catch (LicenseViolation $e) {
-                $this->fail($e->reason, $e->getMessage(), 422);
+                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
             }
         }
 
@@ -158,30 +152,21 @@ class UnitsController extends Controller
 
         $data = $this->validateUnit($request, required: false);
 
-        // Licence columns have one writer and are group-wide. Until this, the
-        // admin console ACCEPTED licenseType/licensedUnitsCount (the shared
-        // rules validate them) and then dropped them, because toColumns()
-        // deliberately does not map them — a 200 with nothing saved. For a
-        // Mamsa-owned listing this was the only surface that could ever set a
-        // licence at all, so no platform building could be classified.
-        $license = [];
-
-        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
-            if (array_key_exists($input, $data)) {
-                $license[$column] = $data[$input];
-            }
-        }
-
-        if ($license !== []) {
-            try {
-                UnitLicense::applyToGroup($unit, $license);
-            } catch (LicenseViolation $e) {
-                $this->fail($e->reason, $e->getMessage(), 422);
-            }
-        }
         $this->assertFilesOwned($request, $data);
 
-        $columns = UnitWriter::toColumns($data);
+        // The permit (number, file, type, count, expiry) has one writer and
+        // covers the whole scope. Until 16/09 this console ACCEPTED
+        // licenseType and licensedUnitsCount and then dropped them — a 200
+        // with nothing saved. Now all of them go through PermitWriter.
+        if ($permit = UnitWriter::permitChanges($data)) {
+            try {
+                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
+            } catch (LicenseViolation $e) {
+                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+            }
+        }
+
+        $columns = UnitWriter::toColumns($data, withPermit: false);
 
         // An edited approved unit goes back for review and leaves the public
         // site — the same rule partner units follow, for the same reason: what

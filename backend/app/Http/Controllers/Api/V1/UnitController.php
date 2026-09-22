@@ -7,6 +7,7 @@ use App\Http\Resources\UnitResource;
 use App\Models\Booking;
 use App\Models\Unit;
 use App\Support\Booking\Availability;
+use App\Support\Permits\PermitExpiry;
 use App\Support\Pricing;
 use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
@@ -140,6 +141,13 @@ class UnitController extends Controller
             'start_date' => ['nullable', 'required_with:end_date', 'date'],
             'end_date'   => ['nullable', 'required_with:start_date', 'date', 'after:start_date'],
         ]);
+
+        // A listing whose permit has run out is not on the storefront, and one
+        // whose permit ends before the requested check-out is not offered for
+        // those dates. Computed from the permit — nothing has to run at
+        // midnight for it to hold — and applied whether or not dates were
+        // given, because a lapsed permit hides the listing either way.
+        PermitExpiry::covering($query, $dates['end_date'] ?? null);
 
         if (isset($dates['start_date'], $dates['end_date'])) {
             Availability::onlyFree($query, $dates['start_date'], $dates['end_date']);
@@ -311,7 +319,10 @@ class UnitController extends Controller
     {
         if (! in_array($unit->unit_type, Unit::SUPPORTED_TYPES, true)
             || $unit->approval_status !== 'approved'
-            || $unit->status !== 'available') {
+            || $unit->status !== 'available'
+            // Same answer as an unapproved listing, and for the same reason:
+            // it may not be sold, so it may not be opened.
+            || PermitExpiry::lapsed($unit)) {
             return response()->json(['message' => 'الوحدة غير متاحة'], 404);
         }
 
@@ -350,6 +361,18 @@ class UnitController extends Controller
         // a probe answering for one unit told a guest the whole building was
         // full while four of five apartments sat free — and the create endpoint
         // would then have accepted the booking it had just refused.
+        // The permit caps the calendar: a stay that ends after the permit does
+        // is refused by the create, so the probe must say so too rather than
+        // promising a booking that is about to be turned down.
+        if (! PermitExpiry::anyCovers($unit, $request->end_date)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'تصريح هذه الوحدة لا يغطي هذه التواريخ',
+                'code' => PermitExpiry::CODE,
+                'meta' => ['permit_expires_at' => PermitExpiry::on($unit)?->toDateString()],
+            ], 409);
+        }
+
         $free      = Availability::freeCount($unit, $request->start_date, $request->end_date);
         $available = $free > 0;
         $payload   = ['available' => $available, 'available_count' => $free];
@@ -447,10 +470,19 @@ class UnitController extends Controller
 
         // Flat, like the sibling /availability endpoint — two envelopes on
         // adjacent routes is a needless branch on the client.
+        $blocked = Availability::blockedRanges($unit, $from->toDateString(), $to->toDateString());
+
+        // The days after the permit runs out are closed like any other closed
+        // days, carrying a reason so a client can say WHY if it wants to. The
+        // picker needs no change to honour it.
+        if ($expired = PermitExpiry::blockedRange($unit, $from->toDateString(), $to->toDateString())) {
+            $blocked[] = $expired;
+        }
+
         return response()->json([
             'from'    => $from->toDateString(),
             'to'      => $to->toDateString(),
-            'blocked' => Availability::blockedRanges($unit, $from->toDateString(), $to->toDateString()),
+            'blocked' => $blocked,
         ]);
     }
 

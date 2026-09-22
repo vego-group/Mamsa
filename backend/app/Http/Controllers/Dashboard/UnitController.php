@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dashboard;
 
+use App\Models\Permit;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
 use App\Support\Dashboard\UnitPresenter;
+use App\Support\Permits\PermitRenewal;
+use App\Support\Permits\PermitWriter;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
@@ -71,6 +74,19 @@ class UnitController extends DashboardController
             ],
         ));
 
+        // The permit is written after the row exists, by its own writer: the
+        // licence rules run there, so `tourist_facility` with no count is a
+        // named 422 instead of the CHECK violation the insert would raise.
+        if ($permit = UnitWriter::permitChanges($data)) {
+            try {
+                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
+            } catch (LicenseViolation $e) {
+                $unit->delete(); // the draft never existed as far as the partner is concerned
+
+                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+            }
+        }
+
         UnitWriter::syncAmenities($unit, $data);
         $this->syncPhotos($request, $unit, $data);
 
@@ -89,28 +105,20 @@ class UnitController extends DashboardController
         $data = $this->validateUnit($request, required: false);
         $this->assertFilesOwned($request, $data);
 
-        // Licence columns are group-wide with a single writer, so they are
-        // pulled out before the ordinary update — sending them through it would
-        // hit the model guard. This is also the ONLY way a partner classifies a
-        // listing from this surface, and without a classification no building
-        // can ever be expanded.
-        $license = [];
-
-        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
-            if (array_key_exists($input, $data)) {
-                $license[$column] = $data[$input];
-            }
-        }
-
-        if ($license !== []) {
+        // The permit (number, file, type, count) is one record covering the
+        // whole scope, with a single writer — sending its fields through the
+        // ordinary update would hit the model guard. This is also the ONLY way
+        // a partner classifies a listing from this surface, and without a
+        // classification no building can ever be expanded.
+        if ($permit = UnitWriter::permitChanges($data)) {
             try {
-                UnitLicense::applyToGroup($unit, $license);
+                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
             } catch (LicenseViolation $e) {
                 $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
             }
         }
 
-        $columns = $this->toColumns($data);
+        $columns = UnitWriter::toColumns($data, withPermit: false);
 
         // §4 — an approved unit edited → back to pending + hidden from the site.
         $wasApproved = $unit->approval_status === 'approved';
@@ -281,6 +289,86 @@ class UnitController extends DashboardController
                 ? 'تمت إضافة '.($group->count() - $before).' وحدة وهي قيد المراجعة. مبناك الحالي يستمر في استقبال الحجوزات.'
                 : 'المبنى يحتوي بالفعل على هذا العدد',
         ]);
+    }
+
+    /**
+     * POST /units/:id/permit-renewals — file a new permit without taking the
+     * listing down.
+     *
+     * The listing keeps selling on the permit in force, and its
+     * `approval_status` is untouched: a renewal is one document being reviewed,
+     * not the listing being reviewed again. {@see PermitRenewal}
+     */
+    public function renewPermit(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->ownUnit($request, self::rawId($id));
+
+        $data = $this->validated($request, [
+            'permitExpiresAt' => ['required', 'date_format:Y-m-d'],
+            'tourismLicenseNumber' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'tourismLicenseFileId' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'permitAddress' => ['sometimes', 'array'],
+            'permitAddress.city' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'permitAddress.district' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'permitAddress.building' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'permitAddress.unitNo' => ['sometimes', 'nullable', 'string', 'max:50'],
+        ], [
+            'permitExpiresAt.required' => 'تاريخ انتهاء التصريح الجديد مطلوب',
+            'permitExpiresAt.date_format' => 'صيغة التاريخ يجب أن تكون YYYY-MM-DD',
+        ]);
+
+        // A file must be the partner's own, stored, and of the licence kind —
+        // the same check every other attachment passes.
+        if (array_key_exists('tourismLicenseFileId', $data) && filled($data['tourismLicenseFileId'])
+            && ($errors = UnitWriter::fileErrors((int) $request->user()->id, ['tourismLicenseFileId' => $data['tourismLicenseFileId']]))) {
+            $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $errors);
+        }
+
+        $fields = array_filter([
+            'expires_at' => $data['permitExpiresAt'],
+            'number' => $data['tourismLicenseNumber'] ?? null,
+            'file' => $data['tourismLicenseFileId'] ?? null,
+            'addr_city' => $data['permitAddress']['city'] ?? null,
+            'addr_district' => $data['permitAddress']['district'] ?? null,
+            'addr_building' => $data['permitAddress']['building'] ?? null,
+            'addr_unit_no' => $data['permitAddress']['unitNo'] ?? null,
+        ], fn ($v) => $v !== null);
+
+        try {
+            $renewal = PermitRenewal::open($unit, $fields, (int) $request->user()->id);
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
+
+        return $this->ok($this->renewalShape($renewal), 201);
+    }
+
+    /** GET /units/:id/permit-renewals — what this listing has filed, newest first. */
+    public function permitRenewals(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->ownUnit($request, self::rawId($id));
+
+        $rows = Permit::query()->forUnit($unit)
+            ->whereIn('status', [Permit::STATUS_PENDING, Permit::STATUS_REJECTED, Permit::STATUS_SUPERSEDED])
+            ->orderByDesc('id')->get();
+
+        return $this->ok($rows->map(fn (Permit $p) => $this->renewalShape($p))->values()->all());
+    }
+
+    /** @return array<string, mixed> */
+    private function renewalShape(Permit $permit): array
+    {
+        return [
+            'id' => (string) $permit->id,
+            'status' => $permit->status,
+            'permitExpiresAt' => $permit->expires_at?->toDateString(),
+            'tourismLicenseNumber' => $permit->number,
+            'tourismLicenseFileId' => $permit->file,
+            'submittedAt' => $permit->created_at?->toIso8601ZuluString(),
+            'reviewedAt' => $permit->reviewed_at?->toIso8601ZuluString(),
+            // The reason is the partner's; the reviewer's notes are internal.
+            'rejectionReason' => $permit->rejection_reason,
+        ];
     }
 
     public function submit(Request $request, string $id): JsonResponse

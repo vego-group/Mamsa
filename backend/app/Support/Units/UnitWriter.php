@@ -112,6 +112,10 @@ final class UnitWriter
              */
             'licenseType'          => ['sometimes', 'nullable', 'in:'.implode(',', \App\Support\Units\UnitLicense::TYPES)],
             'licensedUnitsCount'   => ['sometimes', 'nullable', 'integer', 'min:1', 'max:'.\App\Support\Units\UnitCloner::MAX_GROUP],
+            // Gregorian, as the column is. Permits are printed in Hijri and the
+            // consoles convert — a date arriving here has already been read by
+            // a human off the document.
+            'permitExpiresAt'      => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'tourismLicenseFileId' => ['sometimes', 'nullable', 'string'],
             'photoFileIds'         => ['sometimes', 'nullable', 'array', 'max:'.self::MAX_PHOTOS],
             'photoFileIds.*'       => ['string'],
@@ -130,15 +134,55 @@ final class UnitWriter
     }
 
     /**
+     * The contract keys that describe the PERMIT rather than the unit, and the
+     * PermitWriter field each one is.
+     *
+     * toColumns() never maps these — not on update, and not on create either.
+     * Creating the row with them set writes a licence that has passed no rule:
+     * `tourist_facility` with no count satisfies no guard and violates the DB
+     * CHECK, so the partner gets a 500 from the insert instead of the 422 that
+     * names the missing number. The caller hands {@see permitChanges()} to
+     * PermitWriter::apply() after the row exists, and the guards run there.
+     */
+    public const PERMIT_KEYS = [
+        'tourismLicenseNumber' => 'number',
+        'tourismLicenseFileId' => 'file',
+        'licenseType' => 'license_type',
+        'licensedUnitsCount' => 'licensed_units_count',
+        'permitExpiresAt' => 'expires_at',
+    ];
+
+    /**
+     * The permit fields present in a request body, in PermitWriter's terms.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function permitChanges(array $data): array
+    {
+        $changes = [];
+
+        foreach (self::PERMIT_KEYS as $key => $field) {
+            if (array_key_exists($key, $data)) {
+                $changes[$field] = $data[$key];
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
      * Map contract keys → DB columns, sanitising free text.
      *
      * Only keys actually present are mapped, so a partial body updates exactly
      * what it names.
      *
      * @param  array<string, mixed>  $data
+     * @param  bool  $withPermit  kept for the one caller that wants the raw
+     *                            mapping; every controller leaves it false
      * @return array<string, mixed>
      */
-    public static function toColumns(array $data): array
+    public static function toColumns(array $data, bool $withPermit = false): array
     {
         $map = [
             // Stored verbatim, like `description` below and for the same reason:
@@ -193,6 +237,9 @@ final class UnitWriter
 
         $columns = [];
         foreach ($map as $key => $fn) {
+            if (! $withPermit && array_key_exists($key, self::PERMIT_KEYS)) {
+                continue;
+            }
             if (array_key_exists($key, $data)) {
                 $columns = array_merge($columns, $fn($data[$key]));
             }
@@ -384,6 +431,21 @@ final class UnitWriter
         }
         if (blank($unit->tourism_permit_no))                           $fields['tourismLicenseNumber'] = 'رقم رخصة السياحة مطلوب';
         if (blank($unit->tourism_permit_file))                         $fields['tourismLicenseFileId'] = 'ملف الرخصة مطلوب';
+
+        // The permit's expiry date, once the platform requires it. Off until
+        // an admin has filled the dates in for the listings that already
+        // exist — an approved listing returns to `pending` on any edit, so
+        // switching this on early would refuse a price change on an old
+        // listing until someone found its permit. A date already in the past
+        // is refused whether or not the flag is on: submitting a listing under
+        // a lapsed permit is the thing this whole phase exists to stop.
+        $expiry = \App\Support\Permits\PermitExpiry::on($unit);
+
+        if ($expiry === null && config('permits.expiry_required')) {
+            $fields['permitExpiresAt'] = 'تاريخ انتهاء التصريح مطلوب';
+        } elseif ($expiry !== null && $expiry->lessThan(now()->startOfDay())) {
+            $fields['permitExpiresAt'] = 'تصريح الوحدة منتهي — جدّده قبل الإرسال للمراجعة';
+        }
         // REAL photos, not rows: a placeholder row pointing at the shared
         // default image satisfied a bare count, which would let a listing reach
         // review with nothing to look at.

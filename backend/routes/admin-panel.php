@@ -81,6 +81,15 @@ Route::prefix('admin')->group(function () {
         Route::post('units/{id}/submit', [AdminPanel\UnitsController::class, 'submit'])->middleware('admin.can:units.manage')->name('ap.units.submit');
         Route::post('units/{id}/unpublish', [AdminPanel\UnitsController::class, 'unpublish'])->middleware('admin.can:units.manage')->name('ap.units.unpublish');
 
+        /* Permits — what is about to lapse, and the renewals awaiting a
+         * decision. A queue of their own rather than rows in /admin/approvals:
+         * that list is a list of LISTINGS, and a document review is a
+         * different question with different columns. */
+        Route::get('permits', [AdminPanel\PermitsController::class, 'index'])->middleware('admin.can:units.view')->name('ap.permits.index');
+        Route::get('permit-renewals', [AdminPanel\PermitsController::class, 'renewals'])->middleware('admin.can:approvals.view')->name('ap.permits.renewals');
+        Route::post('permit-renewals/{id}/approve', [AdminPanel\PermitsController::class, 'approve'])->middleware('admin.can:approvals.manage')->name('ap.permits.renewals.approve');
+        Route::post('permit-renewals/{id}/reject', [AdminPanel\PermitsController::class, 'reject'])->middleware('admin.can:approvals.manage')->name('ap.permits.renewals.reject');
+
         /* Uploads (presign → signed PUT) — the partner flow on an admin session */
         Route::post('uploads/presign', [AdminPanel\UploadsController::class, 'presign'])->middleware('admin.can:units.manage')->name('ap.uploads.presign');
 

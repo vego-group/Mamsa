@@ -27,6 +27,24 @@ final class Sql
     }
 
     /**
+     * A textual id column compared against a numeric one.
+     *
+     * `permits.scope_id` holds either a unit id or a group ULID, so it is a
+     * string column — and MySQL happily compares it to `units.id` by coercing,
+     * while **sqlite does not**: TEXT and INTEGER are different storage classes
+     * and a cross-class comparison is simply false. A query written and passing
+     * against MySQL therefore returns nothing under test, and one written for
+     * sqlite silently scans in production. Casting on the text side settles it
+     * both ways, and keeps the numeric side indexable.
+     */
+    public static function asInt(string $textCol): string
+    {
+        return self::isSqlite()
+            ? "CAST({$textCol} AS INTEGER)"
+            : "CAST({$textCol} AS UNSIGNED)";
+    }
+
+    /**
      * The key that makes a multi-unit building ONE row.
      *
      * `COALESCE(unit_group_id, id)` is the obvious form and it is wrong twice:
