@@ -36,6 +36,12 @@ class UnitLicenseTest extends TestCase
     {
         parent::setUp();
 
+        // This file exercises the legacy Bearer controllers, which are retired
+        // behind a flag (config/units.php) rather than deleted — so the revert
+        // path stays covered instead of becoming untested code the day it is
+        // needed. Retirement itself is proven in RetiredEndpointsTest.
+        config()->set('units.legacy_unit_writes', true);
+
         foreach (['Individual', 'Admin', 'SuperAdmin', 'User'] as $r) {
             Role::findOrCreate($r, 'web');
         }

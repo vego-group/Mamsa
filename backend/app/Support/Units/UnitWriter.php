@@ -133,11 +133,12 @@ final class UnitWriter
      * The contract keys that describe the PERMIT rather than the unit, and the
      * PermitWriter field each one is.
      *
-     * These have one writer. On create they may ride along in toColumns() —
-     * a new row's columns seed its permit (Unit::created adopts them). On
-     * update they must not: the caller strips them with `withPermit: false`
-     * and hands {@see permitChanges()} to PermitWriter::apply(), which writes
-     * the permit row and mirrors it onto every unit in the scope.
+     * toColumns() never maps these — not on update, and not on create either.
+     * Creating the row with them set writes a licence that has passed no rule:
+     * `tourist_facility` with no count satisfies no guard and violates the DB
+     * CHECK, so the partner gets a 500 from the insert instead of the 422 that
+     * names the missing number. The caller hands {@see permitChanges()} to
+     * PermitWriter::apply() after the row exists, and the guards run there.
      */
     public const PERMIT_KEYS = [
         'tourismLicenseNumber' => 'number',
@@ -172,11 +173,11 @@ final class UnitWriter
      * what it names.
      *
      * @param  array<string, mixed>  $data
-     * @param  bool  $withPermit  include the permit columns (create) or leave
-     *                            them to PermitWriter (update)
+     * @param  bool  $withPermit  kept for the one caller that wants the raw
+     *                            mapping; every controller leaves it false
      * @return array<string, mixed>
      */
-    public static function toColumns(array $data, bool $withPermit = true): array
+    public static function toColumns(array $data, bool $withPermit = false): array
     {
         $map = [
             // Stored verbatim, like `description` below and for the same reason:

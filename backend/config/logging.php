@@ -50,7 +50,22 @@ return [
     |
     */
 
+    /*
+     * Where RetiredEndpoint writes. A channel of its own so the evidence that
+     * decides whether a closed endpoint had real users is not buried in the
+     * application log — and so it can be read, or shipped, on its own.
+     */
+    'retired_channel' => env('LOG_RETIRED_CHANNEL', 'retired'),
+
     'channels' => [
+
+        'retired' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/retired.log'),
+            'level' => 'debug',
+            'days' => 90,
+            'replace_placeholders' => true,
+        ],
 
         'stack' => [
             'driver' => 'stack',

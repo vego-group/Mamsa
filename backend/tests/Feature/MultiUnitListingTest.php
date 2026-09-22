@@ -32,6 +32,12 @@ class MultiUnitListingTest extends TestCase
     {
         parent::setUp();
 
+        // This file exercises the legacy Bearer controllers, which are retired
+        // behind a flag (config/units.php) rather than deleted — so the revert
+        // path stays covered instead of becoming untested code the day it is
+        // needed. Retirement itself is proven in RetiredEndpointsTest.
+        config()->set('units.legacy_unit_writes', true);
+
         // The dates below are literal on purpose: 31 Aug → 3 Sep crosses a month
         // boundary, which is exactly where night arithmetic goes wrong. Written
         // against the real clock they were valid for one day — `after_or_equal:

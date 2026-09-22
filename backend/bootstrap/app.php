@@ -6,6 +6,7 @@ use App\Exceptions\OtpException;
 use App\Http\Middleware\AdminPanelApi;
 use App\Http\Middleware\DashboardApi;
 use App\Http\Middleware\EnsureAdminPermission;
+use App\Http\Middleware\RetiredEndpoint;
 use App\Http\Middleware\ForceJsonResponse;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -95,6 +96,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             // Per-endpoint authz for the admin-panel BFF (contract §4.3).
             'admin.can' => EnsureAdminPermission::class,
+            // Closed but still listening — see RetiredEndpoint.
+            'retired' => RetiredEndpoint::class,
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
