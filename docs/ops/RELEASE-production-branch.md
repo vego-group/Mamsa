@@ -64,6 +64,22 @@ diff <(sort /tmp/branch.md5) <(sort /tmp/prod.md5 | grep -v bootstrap/cache)
    شكاوى — مفيش حاجة تتشال بالإيد وقت النشر.
 3. **الـ migrations بتتنشر مع الكود اللي بيحتاجها، في نفس النشرة.** الخلل بتاع
    `refunds` حصل لأن الكود سبق الأعمدة بتاعته.
-4. **`bootstrap/cache` مش في git** — بتتولد بـ`config:cache` و`route:cache`.
-5. **الاختبارات مش على الفرع ده كمرجع** — الإنتاج ما فيهوش حزمة اختبارات. الفرع
+4. 🔴 **قبل أي نشرة: افحص كل ملف داخل فيها على الأعمدة والجداول اللي الإنتاج ما
+   عندهوش — مش على الكلاسات بس.** القائمة بتتبني من `migrate:status` بتاع الإنتاج
+   نفسه: أي migration مش متشغّلة = أعمدة وجداول ممنوع أي كود منشور يلمسها.
+
+   ```bash
+   ssh mamsa 'cd ~/domains/api.mamsaa.com/app_core && php84 artisan migrate:status' | grep -i pending
+   # لكل واحدة، استخرج الأعمدة/الجداول اللي بتضيفها، وبعدين افحص الشجرة اللي هتتنشر:
+   grep -rn "<column_or_table>" backend/app backend/routes --include=*.php
+   ```
+
+   **حصل فعلاً (22/09/2026):** نشرة التصاريح شحنت `BookingController.php` من الفرع
+   وهو بيكتب `bookings.hold_expires_at` من migration ما اتنشرتش — فكل حجز ضيف كان
+   هيفشل عند الـINSERT. الفحص وقتها كان على الكلاسات والمزايا المحجوزة مش على
+   الأعمدة، رغم إن تقرير المطابقة نفس اليوم كان مسمّي الـmigration دي كواحدة مش
+   متشغّلة. التفاصيل في
+   `docs/frontend/MAMSA-REPLY-TO-BACKEND-refunds-deployed.md` قسم ٥.
+5. **`bootstrap/cache` مش في git** — بتتولد بـ`config:cache` و`route:cache`.
+6. **الاختبارات مش على الفرع ده كمرجع** — الإنتاج ما فيهوش حزمة اختبارات. الفرع
    بيحمل نسخة من فرع الميزة لكنها مش authoritative.
