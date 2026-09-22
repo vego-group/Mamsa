@@ -61,6 +61,18 @@ Schedule::command('units:check-licenses --alert')
     ->withoutOverlapping()->appendOutputTo($scheduleLog);
 
 /*
+ * Permit expiry warnings — 60/30/14/7/1 days out, and the day itself.
+ *
+ * Morning local time, because these ask the partner to go and find a document.
+ * Missing a day costs nothing: the next run picks up whatever it finds, and
+ * the ledger makes a repeat impossible rather than unlikely. What protects the
+ * platform is the calendar cap, which needs no job at all.
+ */
+Schedule::command('permits:check-expiry')
+    ->dailyAt('09:00')->timezone('Asia/Riyadh')
+    ->withoutOverlapping()->appendOutputTo($scheduleLog);
+
+/*
  * A payment webhook that never arrives used to be recovered only by the guest
  * returning to the page. One who paid and closed the tab had no server-side
  * path at all — and bookings:expire-pending reads the local row, not the

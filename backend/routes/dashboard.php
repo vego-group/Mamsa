@@ -90,6 +90,11 @@ Route::middleware(['auth:dashboard', 'throttle:120,1'])->group(function () {
      */
     Route::post('units/{id}/apartments', [Dashboard\UnitController::class, 'apartments'])->name('pd.units.apartments');
 
+    // Permit renewal — a new document reviewed on its own, while the listing
+    // keeps selling on the permit in force.
+    Route::get('units/{id}/permit-renewals', [Dashboard\UnitController::class, 'permitRenewals'])->name('pd.units.renewals.index');
+    Route::post('units/{id}/permit-renewals', [Dashboard\UnitController::class, 'renewPermit'])->name('pd.units.renewals.store');
+
     /* Calendar & availability */
     Route::get('units/{id}/calendar', [Dashboard\CalendarController::class, 'month'])->name('pd.calendar');
     Route::post('units/{id}/calendar/block', [Dashboard\CalendarController::class, 'block'])->name('pd.calendar.block');
