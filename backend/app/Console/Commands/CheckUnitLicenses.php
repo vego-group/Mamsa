@@ -31,10 +31,9 @@ class CheckUnitLicenses extends Command
     public function handle(): int
     {
         $groups = UnitLicense::inconsistentGroups();
-        $mismatches = UnitLicense::mirrorMismatches();
 
-        if ($groups === [] && $mismatches === []) {
-            $this->info('Every building agrees with itself, and every unit with its permit.');
+        if ($groups === []) {
+            $this->info('Every building agrees with itself.');
 
             return self::SUCCESS;
         }
@@ -46,14 +45,7 @@ class CheckUnitLicenses extends Command
             ));
         }
 
-        foreach ($mismatches as $m) {
-            $this->error(sprintf(
-                'unit %d mirrors %s=%s but its permit #%d says %s',
-                $m->unit_id, $m->column, $m->unit_value ?? 'NULL', $m->permit_id, $m->permit_value ?? 'NULL',
-            ));
-        }
-
-        if ($this->option('alert') && $groups !== []) {
+        if ($this->option('alert')) {
             OpsAlert::raise(new LicenseGroupInconsistent($groups));
         }
 

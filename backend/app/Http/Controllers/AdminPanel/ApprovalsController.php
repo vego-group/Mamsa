@@ -167,16 +167,10 @@ class ApprovalsController extends Controller
         // covers one, is a unit trading illegally — and the reviewer clicking
         // approve is exactly the person who might do it by mistake, because
         // the offending fact is on a sibling row rather than this one.
-        //
-        // The permit, not the rollout flag: this apartment already exists, so
-        // approving it expands nothing. With the flag in the check, an edit to
-        // one apartment of a live building (edit → pending) could never be
-        // re-approved while partner expansion was switched off — the row sat
-        // off the storefront for a reason that had nothing to do with it.
         try {
-            UnitLicense::guardLicenceCovers($unit, UnitLicense::groupSize($unit));
+            UnitLicense::guardGroupSize($unit, UnitLicense::groupSize($unit));
         } catch (LicenseViolation $e) {
-            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+            $this->fail($e->reason, $e->getMessage(), 422);
         }
 
         $unit->update(['approval_status' => 'approved', 'rejection_reason' => null]);

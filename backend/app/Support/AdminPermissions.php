@@ -14,23 +14,7 @@ namespace App\Support;
  */
 final class AdminPermissions
 {
-    /**
-     * The superadmin set — every permission literal in the matrix.
-     *
-     * `complaints.execute_refund` is here as well as in FINANCE, and that is
-     * deliberate (v1.4 §4). The security property the split exists for is that
-     * FINANCE cannot set an arbitrary amount, and it is untouched: finance does
-     * not hold `complaints.approve` and executes a figure checked for exact
-     * equality. Withholding execution from superadmin would add no property —
-     * superadmin is already the highest authority — while creating a real
-     * operational deadlock, where one absent finance account halts every refund
-     * on a platform holding guests' money.
-     *
-     * Two people on two accounts remains the intended path. This is the visible
-     * emergency exit, and an execution where approver and executor are the same
-     * person is stamped `single_actor` in the audit trail so a later review can
-     * find those cases without comparing columns by hand.
-     */
+    /** Every permission literal in the matrix (the superadmin set). */
     public const ALL = [
         'dashboard.view',
         'users.view', 'users.manage',
@@ -42,8 +26,6 @@ final class AdminPermissions
         'wallets.view', 'wallets.adjust',
         'payouts.view', 'payouts.execute', 'payouts.reverse', 'payouts.manage',
         'reports.financial', 'reports.operational',
-        'complaints.view', 'complaints.review', 'complaints.approve',
-        'complaints.execute_refund',
         'notifications.view', 'profile.view',
     ];
 
@@ -55,15 +37,6 @@ final class AdminPermissions
         'wallets.view',
         'payouts.view', 'payouts.execute',
         'reports.financial',
-
-        // Finance executes a refund but cannot decide its size: the amount is
-        // fixed beforehand by a superadmin and checked for exact equality at
-        // execution. That is what keeps this from amounting to `wallets.adjust`,
-        // which finance deliberately does not hold — a complaint refund debits
-        // a partner wallet, so an unbounded version of this would be that
-        // permission by another name.
-        'complaints.view', 'complaints.execute_refund',
-
         'notifications.view', 'profile.view',
     ];
 

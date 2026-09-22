@@ -8,7 +8,6 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
 use App\Support\Dashboard\UnitPresenter;
-use App\Support\Permits\PermitWriter;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
@@ -72,19 +71,6 @@ class UnitController extends DashboardController
             ],
         ));
 
-        // The permit is written after the row exists, by its own writer: the
-        // licence rules run there, so `tourist_facility` with no count is a
-        // named 422 instead of the CHECK violation the insert would raise.
-        if ($permit = UnitWriter::permitChanges($data)) {
-            try {
-                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
-            } catch (LicenseViolation $e) {
-                $unit->delete(); // the draft never existed as far as the partner is concerned
-
-                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
-            }
-        }
-
         UnitWriter::syncAmenities($unit, $data);
         $this->syncPhotos($request, $unit, $data);
 
@@ -103,20 +89,28 @@ class UnitController extends DashboardController
         $data = $this->validateUnit($request, required: false);
         $this->assertFilesOwned($request, $data);
 
-        // The permit (number, file, type, count) is one record covering the
-        // whole scope, with a single writer — sending its fields through the
-        // ordinary update would hit the model guard. This is also the ONLY way
-        // a partner classifies a listing from this surface, and without a
-        // classification no building can ever be expanded.
-        if ($permit = UnitWriter::permitChanges($data)) {
+        // Licence columns are group-wide with a single writer, so they are
+        // pulled out before the ordinary update — sending them through it would
+        // hit the model guard. This is also the ONLY way a partner classifies a
+        // listing from this surface, and without a classification no building
+        // can ever be expanded.
+        $license = [];
+
+        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
+            if (array_key_exists($input, $data)) {
+                $license[$column] = $data[$input];
+            }
+        }
+
+        if ($license !== []) {
             try {
-                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
+                UnitLicense::applyToGroup($unit, $license);
             } catch (LicenseViolation $e) {
                 $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
             }
         }
 
-        $columns = UnitWriter::toColumns($data, withPermit: false);
+        $columns = $this->toColumns($data);
 
         // §4 — an approved unit edited → back to pending + hidden from the site.
         $wasApproved = $unit->approval_status === 'approved';

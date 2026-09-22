@@ -10,15 +10,11 @@ use App\Models\User;
 use App\Support\AdminPanel\UnitPresenter;
 use App\Support\City;
 use App\Support\Pricing;
-use App\Exceptions\AdminPanelException;
-use App\Support\Permits\PermitWriter;
 use App\Support\Units\LicenseViolation;
-use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
 use App\Support\Units\UnitWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -125,14 +121,21 @@ class UnitsController extends Controller
         UnitWriter::syncAmenities($unit, $data);
         UnitWriter::syncPhotos((int) $request->user()->id, $unit, $data);
 
-        // The permit is written after the row exists, by its own writer, so
-        // the licence rules run and a bad pair is a named 422 rather than a
-        // CHECK violation from the insert.
-        if ($permit = UnitWriter::permitChanges($data)) {
+        // Same as update(): the licence goes through its single writer rather
+        // than being silently discarded by toColumns().
+        $license = [];
+
+        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
+            if (array_key_exists($input, $data)) {
+                $license[$column] = $data[$input];
+            }
+        }
+
+        if ($license !== []) {
             try {
-                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
+                UnitLicense::applyToGroup($unit, $license);
             } catch (LicenseViolation $e) {
-                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+                $this->fail($e->reason, $e->getMessage(), 422);
             }
         }
 
@@ -155,22 +158,30 @@ class UnitsController extends Controller
 
         $data = $this->validateUnit($request, required: false);
 
-        $this->assertFilesOwned($request, $data);
+        // Licence columns have one writer and are group-wide. Until this, the
+        // admin console ACCEPTED licenseType/licensedUnitsCount (the shared
+        // rules validate them) and then dropped them, because toColumns()
+        // deliberately does not map them — a 200 with nothing saved. For a
+        // Mamsa-owned listing this was the only surface that could ever set a
+        // licence at all, so no platform building could be classified.
+        $license = [];
 
-        // The permit (number, file, type, count) has one writer and covers the
-        // whole scope. Until 16/09 this console ACCEPTED licenseType and
-        // licensedUnitsCount and then dropped them — a 200 with nothing saved;
-        // for a Mamsa-owned listing it was the only surface that could set a
-        // licence at all. Now all four fields go through PermitWriter.
-        if ($permit = UnitWriter::permitChanges($data)) {
-            try {
-                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
-            } catch (LicenseViolation $e) {
-                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
+            if (array_key_exists($input, $data)) {
+                $license[$column] = $data[$input];
             }
         }
 
-        $columns = UnitWriter::toColumns($data, withPermit: false);
+        if ($license !== []) {
+            try {
+                UnitLicense::applyToGroup($unit, $license);
+            } catch (LicenseViolation $e) {
+                $this->fail($e->reason, $e->getMessage(), 422);
+            }
+        }
+        $this->assertFilesOwned($request, $data);
+
+        $columns = UnitWriter::toColumns($data);
 
         // An edited approved unit goes back for review and leaves the public
         // site — the same rule partner units follow, for the same reason: what
@@ -298,154 +309,6 @@ class UnitsController extends Controller
     }
 
     /** POST /admin/units/:id/unpublish — { reason }, approved → rejected (off the public site). */
-    /**
-     * POST /admin/units/:id/apartments — turn a Mamsa-owned listing into a
-     * building of `count` apartments.
-     *
-     * The platform's own duplicated studios were being added one by one through
-     * the wizard — the exact work the group model exists to remove, on the one
-     * surface that had no entry point for it.
-     *
-     * The apartments are FILED FOR REVIEW, not published. The first draft of
-     * this route created them approved — "an admin filing units for an admin
-     * to approve is theatre" — and that held only while Mamsa was assumed to be
-     * the permit holder. The first real permit to reach the team (19/09) was a
-     * third party's: a natural person's private-hospitality licence, with an
-     * expiry date, a specific address and a stated capacity. Those are facts a
-     * reviewer checks against the listing, and none of them is checked by code.
-     * So the copies go through the same queue partner units do. If management
-     * later exempts platform listings, `pending` below becomes `approved` and
-     * nothing else moves; the reverse — apartments sold under an expired permit
-     * — is not undone by a one-line change.
-     *
-     * What IS enforced here, before anything is written: the source must itself
-     * be approved (the copies are of a published listing, not of a draft), must
-     * pass the same completeness gate a submission passes, and the permit must
-     * cover the building.
-     *
-     * `count` is the TOTAL the building should hold, not an addition — the same
-     * meaning as the partner surface, so a console reusing that component does
-     * not double a building by resending a number. Shrinking is refused by the
-     * cloner: an apartment may already hold a booking.
-     *
-     * Restricted to `mamsa_owned`. A partner's building is theirs to expand,
-     * from their dashboard, under their permit; an admin doing it for them
-     * would file apartments the partner never declared.
-     *
-     * Not behind `units.multi_unit_enabled`: that flag gates the PARTNER
-     * rollout ({@see \App\Support\Units\UnitLicense::guardLicenceCovers()}).
-     */
-    public function apartments(Request $request, string $id): JsonResponse
-    {
-        $unit = $this->findUnit($id);
-
-        if (! $unit->mamsa_owned) {
-            $this->fail('NOT_MAMSA_OWNED', 'هذا المسار لوحدات ممسى فقط — وحدات الشركاء يوسّعها الشريك من لوحته', 403);
-        }
-
-        if ($unit->approval_status !== 'approved') {
-            // Expansion is of a PUBLISHED listing. Copies of a draft would reach
-            // the reviewer while their source never had — five pending doors
-            // and a source nobody filed. Approve it first, then build.
-            $this->fail('SOURCE_NOT_APPROVED', 'اعتمد الوحدة الأصلية أولاً — التوسيع يكون لوحدة منشورة', 409);
-        }
-
-        $data = $this->validate($request, [
-            'count' => ['required', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
-        ], [
-            'count.required' => 'عدد الوحدات مطلوب',
-            'count.integer' => 'عدد الوحدات يجب أن يكون رقماً صحيحاً',
-            'count.min' => 'عدد الوحدات يجب أن يكون 1 على الأقل',
-            'count.max' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد',
-        ]);
-
-        $count = (int) $data['count'];
-
-        // The permit is checked BEFORE anything is written — a refused
-        // expansion must not leave approved apartments behind.
-        try {
-            UnitLicense::guardLicenceCovers($unit, $count);
-        } catch (LicenseViolation $e) {
-            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
-        }
-
-        // The SOURCE must be publishable before it is copied. Every apartment
-        // inherits its fields, so a source missing its permit produces copies
-        // missing it too, and filing then fails on rows nobody has seen yet.
-        // Approval does not guarantee this: the gate lives at SUBMIT time, and
-        // a row written straight to the database (seeder, migration, fixture)
-        // can be approved without ever passing it. Production unit #39 is one.
-        if ($missing = UnitWriter::submitErrors($unit)) {
-            $this->fail(
-                'SOURCE_UNIT_INCOMPLETE',
-                'أكمل بيانات الوحدة الأصلية قبل إضافة وحدات إليها',
-                422,
-                $missing,
-                ['unitId' => (string) $unit->id],
-            );
-        }
-
-        $before = UnitLicense::groupSize($unit);
-
-        // Create and file in one transaction, as the partner surface does: a
-        // failure halfway must not leave apartments on nobody's screen.
-        // Documents travel with the apartments — expansion requires a facility
-        // permit, and a facility permit is issued to the property, so it covers
-        // every door in it.
-        $group = DB::transaction(function () use ($unit, $count) {
-            $group = UnitCloner::ensureTotal($unit, $count, copyDocuments: true);
-
-            foreach ($group as $member) {
-                if ($member->approval_status !== 'draft') {
-                    continue; // the source, or an apartment from an earlier expansion
-                }
-
-                // Each copy meets the same gate a manual submit passes — a
-                // source that passed it a moment ago produces copies that
-                // pass it too, but "should" is not a reason to skip the
-                // check. A failure rolls the whole expansion back.
-                if ($errors = UnitWriter::submitErrors($member)) {
-                    throw new AdminPanelException(
-                        'APARTMENT_INCOMPLETE',
-                        'تعذّر إنشاء الوحدات — إحدى النسخ غير مكتملة',
-                        422,
-                        $errors,
-                        ['apartmentNo' => $member->apartment_no],
-                    );
-                }
-
-                // `submitted_at` and the reviewer's feed entry come from
-                // UnitApprovalObserver on the way into `pending`, the same as
-                // every other path that files a unit.
-                $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
-            }
-
-            return $group;
-        });
-
-        // Reload so the response reports the state AFTER filing.
-        if ($groupId = $unit->fresh()->unit_group_id) {
-            $group = Unit::where('unit_group_id', $groupId)->orderBy('apartment_no')->get();
-        }
-
-        $added = max(0, $group->count() - $before);
-
-        return response()->json([
-            'groupId' => $unit->fresh()->unit_group_id,
-            // What the building holds now — not what was asked for.
-            'groupSize' => $group->count(),
-            'added' => $added,
-            'units' => $group->map(fn (Unit $u) => [
-                'id' => (string) $u->id,
-                'apartmentNo' => $u->apartment_no,
-                'status' => $u->approval_status,
-            ])->values()->all(),
-            'message' => $added > 0
-                ? 'تمت إضافة '.$added.' وحدة وهي قيد المراجعة. الوحدة الأصلية تستمر في استقبال الحجوزات.'
-                : 'المبنى يحتوي بالفعل على هذا العدد',
-        ]);
-    }
-
     public function unpublish(Request $request, string $id): JsonResponse
     {
         $data = $this->validate($request, [

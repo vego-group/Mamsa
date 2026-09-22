@@ -2,8 +2,6 @@
 
 namespace App\Models;
 
-use App\Support\Pricing;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,12 +10,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class Booking extends Model
 {
     /** Unpaid booking awaiting payment (renamed from 'pending' 2026-08-13). */
-    public const STATUS_PENDING = 'pending_payment';
-
+    public const STATUS_PENDING   = 'pending_payment';
     public const STATUS_CONFIRMED = 'confirmed';
-
     public const STATUS_COMPLETED = 'completed';
-
     public const STATUS_CANCELLED = 'cancelled';
 
     /**
@@ -48,7 +43,7 @@ class Booking extends Model
      */
     public const LEGACY_COMMISSION_RATE = 0.02;
 
-    /** @param Builder $q */
+    /** @param \Illuminate\Database\Eloquent\Builder $q */
     public function scopeRevenue($q)
     {
         // Qualify the column — this scope is used in queries joined to `units`,
@@ -83,36 +78,8 @@ class Booking extends Model
         return "{$table}.commission_amount";
     }
 
-    /**
-     * Split a refund amount using THIS booking's frozen commission rate.
-     *
-     * The rate comes off the row, never from config. A booking taken when the
-     * commission was 2% must have its refund split at 2% even though the live
-     * rate is 10% — otherwise the partner is debited a share that was never
-     * his, and Mamsa hands back commission it never collected. That is the
-     * same reasoning that keeps {@see LEGACY_COMMISSION_RATE} separate from
-     * config('booking.commission_rate'), applied to the refund path.
-     *
-     * No imputation and no fallback: `commission_rate` is NOT NULL with the
-     * default dropped (2026_08_28 migration), so every row carries an explicit
-     * rate and a zero here means a genuine zero. A Mamsa-owned unit froze at
-     * 1.0, so its refund yields partner_share 0.00 and must post no ledger
-     * entry at all.
-     *
-     * @param  float  $refundGross  GROSS, VAT-inclusive amount being returned
-     * @return array{gross:float, net_base:float, vat:float, vat_rate:float,
-     *   commission_rate:float, commission_amount:float, partner_share:float}
-     */
-    public function splitRefund(float $refundGross): array
-    {
-        return Pricing::split($refundGross, (float) $this->commission_rate);
-    }
-
     protected $fillable = [
         'unit_id',
-        'units_count',
-        'hold_expires_at',
-        'idempotency_key',
         'user_id',
         'start_date',
         'end_date',
@@ -139,22 +106,21 @@ class Booking extends Model
     ];
 
     protected $casts = [
-        'hold_expires_at' => 'datetime',
-        'start_date' => 'date',
-        'end_date' => 'date',
-        'nightly_rate' => 'float',
-        'subtotal' => 'float',
-        'service_fee' => 'float',
-        'service_fee_percent' => 'float',
-        'tax_percent' => 'float',
-        'cleaning_fee' => 'float',
-        'taxes' => 'float',
-        'commission_rate' => 'float',
-        'commission_amount' => 'float',
-        'partner_share' => 'float',
-        'total_amount' => 'float',
+        'start_date'            => 'date',
+        'end_date'              => 'date',
+        'nightly_rate'          => 'float',
+        'subtotal'              => 'float',
+        'service_fee'           => 'float',
+        'service_fee_percent'   => 'float',
+        'tax_percent'           => 'float',
+        'cleaning_fee'          => 'float',
+        'taxes'                 => 'float',
+        'commission_rate'       => 'float',
+        'commission_amount'     => 'float',
+        'partner_share'         => 'float',
+        'total_amount'          => 'float',
         'cancellation_snapshot' => 'array',
-        'cancelled_at' => 'datetime',
+        'cancelled_at'          => 'datetime',
     ];
 
     public function unit(): BelongsTo
@@ -180,12 +146,6 @@ class Booking extends Model
     public function refunds(): HasMany
     {
         return $this->hasMany(Refund::class);
-    }
-
-    /** At most one complaint per booking in v1 (unique index on booking_id). */
-    public function complaint(): HasOne
-    {
-        return $this->hasOne(BookingComplaint::class);
     }
 
     public function getNightsAttribute(): int

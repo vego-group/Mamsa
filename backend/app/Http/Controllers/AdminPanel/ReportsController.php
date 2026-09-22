@@ -8,7 +8,6 @@ use App\Models\Booking;
 use App\Support\AdminPanel\Analytics;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 
 /**
  * Reports summary — BACKEND_SPEC §5.10. All series cover the requested range
@@ -21,14 +20,14 @@ class ReportsController extends Controller
 
     public function summary(Request $request): JsonResponse
     {
-        $range = $this->cleanParam($request->query('range')) ?? '1y';
+        $range  = $this->cleanParam($request->query('range')) ?? '1y';
         $months = $this->months($range);
-        $since = now()->subMonths($months - 1)->startOfMonth();
+        $since  = now()->subMonths($months - 1)->startOfMonth();
 
-        $revenue = Booking::query()->revenue()->where('created_at', '>=', $since);
-        $grossSum = (float) (clone $revenue)->sum('total_amount');
-        $totalRevenue = $this->money($grossSum);
-        $vatSum = (float) (clone $revenue)->sum('taxes');
+        $revenue        = Booking::query()->revenue()->where('created_at', '>=', $since);
+        $grossSum       = (float) (clone $revenue)->sum('total_amount');
+        $totalRevenue   = $this->money($grossSum);
+        $vatSum         = (float) (clone $revenue)->sum('taxes');
 
         // The VAT-exclusive base, read from the FROZEN `subtotal` column — the
         // same basis as the wallet, the payout engine and the partner
@@ -38,43 +37,30 @@ class ReportsController extends Controller
         // carry abolished service and cleaning fees, so `gross − taxes` is
         // `subtotal + fees`. An admin and a partner looking at the same period
         // got different netRevenue figures, and neither screen said why.
-        $netSum = (float) (clone $revenue)->sum('subtotal');
+        $netSum         = (float) (clone $revenue)->sum('subtotal');
 
         // The remainder, so the tiles still add up on screen:
         //   netRevenue + vatCollected + fees === totalRevenue, always.
         // Zero on every modern range — hide the tile when it is.
-        $feesSum = round($grossSum - $netSum - $vatSum, 2);
-        $occupancy = $this->analytics->occupancySeries($months);
-        $occupancyAvg = $occupancy !== [] ? (int) round(array_sum(array_column($occupancy, 'value')) / count($occupancy)) : 0;
+        $feesSum        = round($grossSum - $netSum - $vatSum, 2);
+        $occupancy      = $this->analytics->occupancySeries($months);
+        $occupancyAvg   = $occupancy !== [] ? (int) round(array_sum(array_column($occupancy, 'value')) / count($occupancy)) : 0;
 
         return response()->json([
-            'totalRevenue' => $totalRevenue,
-            'netRevenue' => $this->money($netSum),
-            'vatCollected' => $this->money($vatSum),
-            'fees' => $feesSum,
-            'totalCommission' => $this->money($this->commissionSum((clone $revenue))),
-            // The same total, split by what it actually is. A Mamsa-owned unit
-            // freezes commission at 100% of the net base, so its "commission" is
-            // the platform's own rental income, not a fee earned on a partner's
-            // stay. Summed together the number is right as a total and wrong as
-            // a signal: commission growth is the marketplace's health metric,
-            // and platform-owned revenue mixed in moves it in the reassuring
-            // direction. `totalCommission` is unchanged — these two add up to it.
-            'partnerCommission' => $this->money($this->commissionSum(
-                (clone $revenue)->whereHas('unit', fn ($u) => $u->where('mamsa_owned', false)),
-            )),
-            'mamsaOwnedRevenue' => $this->money($this->commissionSum(
-                (clone $revenue)->whereHas('unit', fn ($u) => $u->where('mamsa_owned', true)),
-            )),
-            'totalBookings' => Booking::where('created_at', '>=', $since)->count(),
-            'avgMonthlyRevenue' => $this->money($totalRevenue / $months),
-            'revenueSeries' => $this->analytics->revenueSeries($months),
-            'revenueByCity' => $this->analytics->revenueByCity($since),
+            'totalRevenue'        => $totalRevenue,
+            'netRevenue'          => $this->money($netSum),
+            'vatCollected'        => $this->money($vatSum),
+            'fees'                => $feesSum,
+            'totalCommission'     => $this->money($this->commissionSum((clone $revenue))),
+            'totalBookings'       => Booking::where('created_at', '>=', $since)->count(),
+            'avgMonthlyRevenue'   => $this->money($totalRevenue / $months),
+            'revenueSeries'       => $this->analytics->revenueSeries($months),
+            'revenueByCity'       => $this->analytics->revenueByCity($since),
             'bookingStatusSlices' => $this->analytics->bookingStatusSlices($since),
-            'bookingVolume' => $this->analytics->bookingVolume($months),
-            'occupancySeries' => $occupancy,
-            'occupancyAverage' => $occupancyAvg,
-            'topPartners' => $this->analytics->topPartners(5, $since),
+            'bookingVolume'       => $this->analytics->bookingVolume($months),
+            'occupancySeries'     => $occupancy,
+            'occupancyAverage'    => $occupancyAvg,
+            'topPartners'         => $this->analytics->topPartners(5, $since),
         ]);
     }
 
@@ -82,8 +68,8 @@ class ReportsController extends Controller
     private function months(string $range): int
     {
         return match ($range) {
-            '6m' => 6,
-            'all' => $this->monthsSinceFirstBooking(),
+            '6m'    => 6,
+            'all'   => $this->monthsSinceFirstBooking(),
             default => 12, // 1y
         };
     }
@@ -98,7 +84,7 @@ class ReportsController extends Controller
 
         // +1 so the first and current month are both inclusive; cap to keep the
         // series bounded on very old data.
-        $months = (int) abs(now()->diffInMonths(Carbon::parse($first))) + 1;
+        $months = (int) abs(now()->diffInMonths(\Illuminate\Support\Carbon::parse($first))) + 1;
 
         return max(1, min(60, $months));
     }
