@@ -9,6 +9,7 @@ use App\Models\PartnerDetail;
 use App\Models\Unit;
 use App\Models\User;
 use App\Support\Documents\DocumentStorage;
+use App\Support\Permits\PermitWriter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -194,9 +195,9 @@ class UnitDocumentTest extends TestCase
         $this->unit->update([
             'approval_status' => 'approved',
             'status' => 'available',
-            'tourism_permit_no' => 'TL-SECRET-1',
             'ownership_doc_file' => 'units/1/docs/deed.jpg',
         ]);
+        PermitWriter::apply($this->unit, ['number' => 'TL-SECRET-1']);
 
         // A title deed carries the owner's name and the property's registry
         // details. A guest must never receive it, nor the licence number.
@@ -293,8 +294,8 @@ class UnitDocumentTest extends TestCase
         $this->unit->update([
             'approval_status' => 'approved',
             'status' => 'available',
-            'tourism_permit_no' => 'TL-SECRET-1',
         ]);
+        PermitWriter::apply($this->unit, ['number' => 'TL-SECRET-1']);
 
         // A REAL Bearer token, not actingAs(): on this PUBLIC route there is no
         // sanctum middleware, so `$request->user()` reads the default guard and

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Units;
 
 use App\Models\Unit;
+use App\Support\Permits\PermitWriter;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -46,36 +47,20 @@ final class UnitLicense
     public const TYPES = [self::TOURIST_FACILITY, self::PRIVATE_HOSPITALITY];
 
     /**
-     * Set only while this class is writing the licence columns.
-     *
-     * The Unit model refuses an UPDATE that touches them unless this is on, so
-     * `$unit->update(['license_type' => …])` from some future controller fails
-     * loudly instead of leaving one apartment claiming a permit its siblings do
-     * not have. Creation is deliberately NOT guarded: a new row is a group of
-     * one, and the cloner copies from the source it is cloning, so neither can
-     * introduce a disagreement.
-     *
-     * This cannot see query-builder updates — `Unit::where(...)->update(...)`
-     * fires no model events. That is precisely why the daily consistency check
-     * exists as well; the two guards catch different mistakes.
+     * The write barrier lives in {@see PermitWriter}, which owns all four permit
+     * columns (number, file, type, count) rather than only the two licence
+     * ones. These two remain so the model guard and older callers read the same
+     * way — they are the same switch.
      */
-    private static bool $writing = false;
-
     public static function isWriting(): bool
     {
-        return self::$writing;
+        return PermitWriter::isWriting();
     }
 
-    /** @template T @param callable(): T $write @return T */
+    /** @see PermitWriter::write() */
     public static function write(callable $write): mixed
     {
-        self::$writing = true;
-
-        try {
-            return $write();
-        } finally {
-            self::$writing = false;
-        }
+        return PermitWriter::write($write);
     }
 
     /**
@@ -99,6 +84,41 @@ final class UnitLicense
             ->havingRaw('COUNT(DISTINCT license_type) > 1 OR COUNT(DISTINCT licensed_units_count) > 1')
             ->get()
             ->all();
+    }
+
+    /**
+     * Units whose mirrored columns disagree with their scope's current permit.
+     *
+     * The model guard stops Eloquent writes; a query-builder update, a seeder
+     * or a hand-run SQL statement it cannot see. Asked every day for the same
+     * reason inconsistentGroups() is: a row here is trading under something
+     * other than its permit.
+     *
+     * @return array<int, object{unit_id: int, permit_id: int, column: string, unit_value: ?string, permit_value: ?string}>
+     */
+    public static function mirrorMismatches(): array
+    {
+        $out = [];
+
+        \App\Models\Permit::query()->current()->orderBy('id')->chunk(200, function ($permits) use (&$out) {
+            foreach ($permits as $permit) {
+                foreach ($permit->units()->get(['id', ...array_values(\App\Models\Permit::MIRROR)]) as $unit) {
+                    foreach (\App\Models\Permit::MIRROR as $own => $column) {
+                        if ((string) $unit->{$column} !== (string) $permit->{$own}) {
+                            $out[] = (object) [
+                                'unit_id' => (int) $unit->id,
+                                'permit_id' => (int) $permit->id,
+                                'column' => $column,
+                                'unit_value' => $unit->{$column} === null ? null : (string) $unit->{$column},
+                                'permit_value' => $permit->{$own} === null ? null : (string) $permit->{$own},
+                            ];
+                        }
+                    }
+                }
+            }
+        });
+
+        return $out;
     }
 
     /** How many rows this listing's group holds — 1 for a standalone unit. */
@@ -199,24 +219,16 @@ final class UnitLicense
     }
 
     /**
-     * Write the licence across the whole group, or refuse.
+     * Is changing the licence to (`$type`, `$count`) legal for the size this
+     * listing's group already has?
      *
      * Downgrading a building to a single-unit permit is blocked while it still
      * HAS more than one apartment: the apartments do not disappear when the
      * permit changes, and allowing it would leave rows trading under a licence
      * that does not cover them. The partner reduces the building first.
-     *
-     * @param  array<string, mixed>  $attributes  the licence fields being written
      */
-    public static function applyToGroup(Unit $unit, array $attributes): void
+    public static function guardChange(Unit $unit, ?string $type, ?int $count): void
     {
-        $type = array_key_exists('license_type', $attributes)
-            ? $attributes['license_type'] : $unit->license_type;
-        $count = array_key_exists('licensed_units_count', $attributes)
-            ? $attributes['licensed_units_count'] : $unit->licensed_units_count;
-
-        self::guardFields($type, $count === null ? null : (int) $count);
-
         $size = self::groupSize($unit);
 
         if ($size > 1 && $type !== self::TOURIST_FACILITY) {
@@ -235,30 +247,34 @@ final class UnitLicense
             );
         }
 
-        if ($size > 1 && $count !== null && $size > (int) $count) {
+        if ($size > 1 && $count !== null && $size > $count) {
             throw LicenseViolation::of(
                 'QUANTITY_EXCEEDS_LICENSED_UNITS',
                 'عدد الوحدات الحالي أكبر من العدد المرخّص',
-                ['group_size' => $size, 'licensed_units_count' => (int) $count],
+                ['group_size' => $size, 'licensed_units_count' => $count],
             );
         }
+    }
 
-        $write = [
-            'license_type' => $type,
-            'licensed_units_count' => $count,
-        ];
+    /**
+     * Write the licence across the whole group, or refuse.
+     *
+     * Kept under the name every caller knows; the write itself is the permit
+     * writer's — the licence type and count are two fields of the scope's
+     * permit and travel with it. {@see PermitWriter::apply()}
+     *
+     * @param  array<string, mixed>  $attributes  the licence fields being written
+     */
+    public static function applyToGroup(Unit $unit, array $attributes): void
+    {
+        $changes = [];
 
-        if (! $unit->unit_group_id) {
-            self::write(fn () => $unit->forceFill($write)->save());
-
-            return;
+        foreach (['license_type', 'licensed_units_count'] as $key) {
+            if (array_key_exists($key, $attributes)) {
+                $changes[$key] = $attributes[$key];
+            }
         }
 
-        // One statement, so the group cannot be observed half-updated — and no
-        // path exists that writes these columns to a single member.
-        DB::transaction(function () use ($unit, $write) {
-            Unit::where('unit_group_id', $unit->unit_group_id)->update($write);
-            $unit->forceFill($write)->syncOriginal();
-        });
+        PermitWriter::apply($unit, $changes);
     }
 }

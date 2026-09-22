@@ -130,15 +130,53 @@ final class UnitWriter
     }
 
     /**
+     * The contract keys that describe the PERMIT rather than the unit, and the
+     * PermitWriter field each one is.
+     *
+     * These have one writer. On create they may ride along in toColumns() —
+     * a new row's columns seed its permit (Unit::created adopts them). On
+     * update they must not: the caller strips them with `withPermit: false`
+     * and hands {@see permitChanges()} to PermitWriter::apply(), which writes
+     * the permit row and mirrors it onto every unit in the scope.
+     */
+    public const PERMIT_KEYS = [
+        'tourismLicenseNumber' => 'number',
+        'tourismLicenseFileId' => 'file',
+        'licenseType' => 'license_type',
+        'licensedUnitsCount' => 'licensed_units_count',
+    ];
+
+    /**
+     * The permit fields present in a request body, in PermitWriter's terms.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function permitChanges(array $data): array
+    {
+        $changes = [];
+
+        foreach (self::PERMIT_KEYS as $key => $field) {
+            if (array_key_exists($key, $data)) {
+                $changes[$field] = $data[$key];
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
      * Map contract keys → DB columns, sanitising free text.
      *
      * Only keys actually present are mapped, so a partial body updates exactly
      * what it names.
      *
      * @param  array<string, mixed>  $data
+     * @param  bool  $withPermit  include the permit columns (create) or leave
+     *                            them to PermitWriter (update)
      * @return array<string, mixed>
      */
-    public static function toColumns(array $data): array
+    public static function toColumns(array $data, bool $withPermit = true): array
     {
         $map = [
             // Stored verbatim, like `description` below and for the same reason:
@@ -193,6 +231,9 @@ final class UnitWriter
 
         $columns = [];
         foreach ($map as $key => $fn) {
+            if (! $withPermit && array_key_exists($key, self::PERMIT_KEYS)) {
+                continue;
+            }
             if (array_key_exists($key, $data)) {
                 $columns = array_merge($columns, $fn($data[$key]));
             }

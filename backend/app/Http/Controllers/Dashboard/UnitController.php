@@ -8,6 +8,7 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
 use App\Support\Dashboard\UnitPresenter;
+use App\Support\Permits\PermitWriter;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
@@ -89,28 +90,20 @@ class UnitController extends DashboardController
         $data = $this->validateUnit($request, required: false);
         $this->assertFilesOwned($request, $data);
 
-        // Licence columns are group-wide with a single writer, so they are
-        // pulled out before the ordinary update — sending them through it would
-        // hit the model guard. This is also the ONLY way a partner classifies a
-        // listing from this surface, and without a classification no building
-        // can ever be expanded.
-        $license = [];
-
-        foreach (['licenseType' => 'license_type', 'licensedUnitsCount' => 'licensed_units_count'] as $input => $column) {
-            if (array_key_exists($input, $data)) {
-                $license[$column] = $data[$input];
-            }
-        }
-
-        if ($license !== []) {
+        // The permit (number, file, type, count) is one record covering the
+        // whole scope, with a single writer — sending its fields through the
+        // ordinary update would hit the model guard. This is also the ONLY way
+        // a partner classifies a listing from this surface, and without a
+        // classification no building can ever be expanded.
+        if ($permit = UnitWriter::permitChanges($data)) {
             try {
-                UnitLicense::applyToGroup($unit, $license);
+                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
             } catch (LicenseViolation $e) {
                 $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
             }
         }
 
-        $columns = $this->toColumns($data);
+        $columns = UnitWriter::toColumns($data, withPermit: false);
 
         // §4 — an approved unit edited → back to pending + hidden from the site.
         $wasApproved = $unit->approval_status === 'approved';

@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\Unit;
 use App\Models\User;
+use App\Support\Permits\PermitWriter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -59,9 +60,9 @@ class V1SubmitValidationTest extends TestCase
             'description' => str_repeat('وصف كافٍ للوحدة. ', 5),
             'address' => 'حي الملقا، الرياض',
             'lat' => 24.7136, 'lng' => 46.6753,
-            'tourism_permit_no' => 'TL-0001',
-            'tourism_permit_file' => 'units/1/docs/licence.pdf',
         ]);
+        // The permit is the permit writer's, not a column edit.
+        PermitWriter::apply($unit, ['number' => 'TL-0001', 'file' => 'units/1/docs/licence.pdf']);
         $unit->images()->create(['path' => 'units/1/real.jpg', 'is_main' => true]);
 
         return $unit->fresh();
