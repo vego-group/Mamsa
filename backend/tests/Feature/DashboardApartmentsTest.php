@@ -9,6 +9,7 @@ use App\Models\PartnerDetail;
 use App\Models\Unit;
 use App\Models\User;
 use App\Support\Units\UnitLicense;
+use App\Support\Permits\PermitWriter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Spatie\Permission\Models\Role;
@@ -214,7 +215,7 @@ class DashboardApartmentsTest extends TestCase
         // reads as "the system lost my documents". The refusal has to name the
         // listing they actually have.
         $unit = $this->licensed(9);
-        $unit->forceFill(['tourism_permit_file' => null])->save();
+        PermitWriter::apply($unit, ['file' => null]);
 
         $this->expand($unit, 4)
             ->assertStatus(422)

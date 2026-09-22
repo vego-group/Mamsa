@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Permit;
 use App\Models\Unit;
 use App\Models\UnitImage;
 use App\Models\User;
@@ -43,7 +44,9 @@ class UnitCloningTest extends TestCase
 
     private function sourceUnit(array $overrides = []): Unit
     {
-        $unit = $this->partner->units()->create([
+        // array_merge, not `+`: the union operator keeps the LEFT value on a
+        // duplicate key, so an override would silently lose to the default.
+        $unit = $this->partner->units()->create(array_merge([
             // A building needs a facility permit now — the licence rule is not
             // optional, so every fixture that expands one has to carry it.
             'license_type' => \App\Support\Units\UnitLicense::TOURIST_FACILITY,
@@ -59,7 +62,7 @@ class UnitCloningTest extends TestCase
             'tourism_permit_file' => 'units/1/docs/licence.pdf',
             'approval_status' => 'approved', 'status' => 'available',
             'calendar_token' => str()->random(60),
-        ] + $overrides);
+        ], $overrides));
 
         $unit->images()->create(['path' => 'units/1/photo.jpg', 'is_main' => true]);
 
@@ -134,17 +137,45 @@ class UnitCloningTest extends TestCase
         $this->assertSame('approved', $unit->fresh()->approval_status);
     }
 
-    public function test_compliance_documents_are_not_copied_unless_asked_for(): void
+    public function test_a_facility_permit_covers_the_clones_whether_or_not_documents_are_copied(): void
     {
-        $unit = $this->sourceUnit();
+        // A facility permit is issued to the PROPERTY. The moment a listing
+        // classified that way becomes a building, its permit becomes the
+        // building's (PermitWriter::joinGroup) and every apartment mirrors it
+        // — `copyDocuments` no longer decides that, the classification does.
+        // The other documents are still opt-in: a title deed is the owner's
+        // proof of right to list, and one row of it is enough.
+        $unit = $this->sourceUnit(['ownership_doc_file' => 'units/1/docs/deed.pdf']);
 
         UnitCloner::assign($unit, ['401', '402']);
         $clone = Unit::where('apartment_no', '402')->firstOrFail();
 
-        // A permit issued for THIS apartment does not cover its neighbour, and
-        // an admin approving on copied evidence is the failure that matters.
+        $this->assertSame('TL-0001', $clone->tourism_permit_no);
+        $this->assertSame('units/1/docs/licence.pdf', $clone->tourism_permit_file);
+        $this->assertNull($clone->ownership_doc_file, 'the title deed is not part of the permit');
+
+        $permit = Permit::currentFor($clone);
+        $this->assertNotNull($permit);
+        $this->assertSame(Permit::SCOPE_GROUP, $permit->scope_type);
+        $this->assertSame($unit->fresh()->unit_group_id, $permit->scope_id);
+        $this->assertSame(1, Permit::count(), 'a building holds one permit row, not one per door');
+    }
+
+    public function test_an_unclassified_permit_stays_with_its_own_door(): void
+    {
+        // Nothing may be assumed about what an unclassified permit covers: it
+        // stays on the source, and the clones carry one only if the caller
+        // copied it onto them — the old opt-in rule, now scoped to exactly the
+        // case where the system does not know better.
+        $unit = $this->sourceUnit(['license_type' => null, 'licensed_units_count' => null]);
+
+        UnitCloner::assign($unit, ['401', '402']);
+        $clone = Unit::where('apartment_no', '402')->firstOrFail();
+
         $this->assertNull($clone->tourism_permit_no);
         $this->assertNull($clone->tourism_permit_file);
+        $this->assertNull(Permit::currentFor($clone));
+        $this->assertSame(Permit::SCOPE_UNIT, Permit::currentFor($unit->fresh())->scope_type);
 
         $unit->forceFill(['unit_group_id' => null, 'apartment_no' => null])->save();
         UnitCloner::assign($unit->fresh(), ['501', '502'], copyDocuments: true);
