@@ -445,6 +445,32 @@ class ApartmentModeTest extends TestCase
         $this->assertNull($source->fresh()->unit_group_id);
     }
 
+    public function test_an_apartment_that_cannot_be_filed_rolls_the_whole_expansion_back(): void
+    {
+        // The source passes the submit gate and a NEW apartment does not — the
+        // permit it arrived with has already lapsed. Checking only the source
+        // would file that door under a dead permit and put it in the admin
+        // queue, which is the one thing the expiry rule exists to stop.
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $this->actingAs($this->partner, 'dashboard')
+            ->postJson("/units/u_{$source->id}/submit", [
+                'count' => 3,
+                'permits' => [
+                    ['number' => 'LIVE-2', 'fileId' => $this->licenceFile($this->partner), 'expiresAt' => now()->addYear()->toDateString()],
+                    ['number' => 'DEAD-3', 'fileId' => $this->licenceFile($this->partner), 'expiresAt' => now()->subDay()->toDateString()],
+                ],
+            ])
+            ->assertStatus(400)
+            ->assertJsonPath('error.code', 'VALIDATION')
+            ->assertJsonStructure(['error' => ['fields' => ['permitExpiresAt']]]);
+
+        $this->assertSame(1, Unit::count(), 'an apartment that could not be filed survived the refusal');
+        $this->assertSame('draft', $source->fresh()->approval_status);
+        $this->assertNull($source->fresh()->unit_group_id);
+        $this->assertSame(1, Permit::count(), 'a permit outlived the expansion that wrote it');
+    }
+
     /* ---------- fixtures ---------- */
 
     /**
