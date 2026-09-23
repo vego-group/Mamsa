@@ -21,6 +21,8 @@ Route::prefix('admin')->group(function () {
         ->middleware('throttle:ap-otp')->name('ap.otp.request');
     Route::post('auth/verify-otp', [AdminPanel\AuthController::class, 'verifyOtp'])
         ->middleware('throttle:10,1')->name('ap.otp.verify');
+    Route::get('config', \App\Http\Controllers\RuntimeConfigController::class)->name('ap.config');
+
     Route::post('auth/logout', [AdminPanel\AuthController::class, 'logout'])->name('ap.logout');
 
     /* ---- Authenticated admin session ---- */

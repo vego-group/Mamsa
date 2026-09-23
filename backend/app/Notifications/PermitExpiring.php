@@ -35,6 +35,12 @@ class PermitExpiring extends Notification
         public readonly int $threshold,
         /** What the partner sees this permit as covering. */
         public readonly string $unitName,
+        /**
+         * The listing to send them to. A banner that can say "your permit
+         * expires" but not WHICH listing, and offers no way to act on it,
+         * makes the reader go and find both themselves.
+         */
+        public readonly ?int $unitId = null,
     ) {}
 
     /** @return array<int, string> */
@@ -95,8 +101,17 @@ class PermitExpiring extends Notification
             'permit_id' => $this->permit->id,
             'threshold' => $this->threshold,
             'expires_at' => $this->permit->expires_at?->toDateString(),
+            'unit_id' => $this->unitId,
             'unit_name' => $this->unitName,
             'title' => $this->headline(),
+            // `body` and `href` are the two keys the notification list actually
+            // renders. Without them the banner arrives as a title with no
+            // detail and no way to act, and the reader has to go and find both
+            // the listing and the form themselves.
+            'body' => $this->lapsed()
+                ? 'لا يمكن استقبال حجوزات جديدة حتى يتم تجديد التصريح.'
+                : 'لا يمكن استقبال حجوزات تنتهي إقامتها بعد '.($this->permit->expires_at?->toDateString() ?? '').'.',
+            'href' => $this->unitId ? "/units/{$this->unitId}/permit/renew" : null,
         ];
     }
 }

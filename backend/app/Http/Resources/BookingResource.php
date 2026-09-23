@@ -22,7 +22,22 @@ class BookingResource extends JsonResource
             // Human-friendly confirmation code derived deterministically from the id.
             // Stable per booking, no extra column required (used in UI + SMS).
             'reference' => $this->reference(),
-            'unit' => $this->whenLoaded('unit', fn () => new UnitResource($this->unit)),
+            // The unit here is the apartment ACTUALLY allocated, which in a
+            // building is not the one whose id the guest sent — the server
+            // picks a free, licensed door out of the group. The flag tells the
+            // unit resource to include `apartment_no`, so the confirmation page
+            // can say which door without that number leaking into the public
+            // listing, where the card is the building.
+            'unit' => $this->whenLoaded('unit', function () use ($request) {
+                $request->attributes->set('booking_allocation', true);
+
+                $unit = new UnitResource($this->unit);
+                $rendered = $unit->toArray($request);
+
+                $request->attributes->remove('booking_allocation');
+
+                return $rendered;
+            }),
             // Always-present scalar (column) so the partner dashboard need not
             // rely on the eager-loaded `user` object.
             'user_id' => $this->user_id,

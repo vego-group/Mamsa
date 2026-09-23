@@ -7,6 +7,7 @@ namespace App\Http\Controllers\AdminPanel;
 use App\Models\Unit;
 use App\Notifications\UnitReviewResult;
 use App\Support\AdminPanel\UnitPresenter;
+use App\Support\Permits\PermitExpiry;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitLicense;
 use Illuminate\Http\JsonResponse;
@@ -155,7 +156,77 @@ class ApprovalsController extends Controller
             'unit' => $this->units->detail($u),
             'partnerVerified' => $owner?->partnerDetail?->verified_at !== null,
             'partnerRating' => $rating !== null ? round((float) $rating, 1) : 0.0,
+            // The permit's own address beside the listing's, and the machine's
+            // opinion of whether they agree — see addressMatch() for what that
+            // opinion is worth.
+            'permit' => [
+                'address' => $this->units->detail($u)['permitAddress'],
+                'expiresAt' => PermitExpiry::on($u)?->toDateString(),
+                'status' => PermitExpiry::status($u),
+            ],
+            'addressMatch' => $this->addressMatch($u),
+            'group' => $this->groupContext($u),
         ]));
+    }
+
+    /**
+     * Does the address on the permit match the listing's?
+     *
+     * Only the CITY is answered. Cities go through one canonical map
+     * ({@see \App\Support\City}), so two spellings of Riyadh reduce to one
+     * value and a comparison means something. Districts are free text on both
+     * sides — "النرجس" and "حي النرجس" are the same place and different
+     * strings — so comparing them would produce confident nonsense, and a
+     * reviewer who saw one false mismatch would stop reading the field.
+     *
+     * `null` means "not compared", never "matches".
+     *
+     * @return array{city: bool|null, district: null}
+     */
+    private function addressMatch(Unit $u): array
+    {
+        $permit = \App\Models\Permit::currentFor($u);
+        $permitCity = $permit?->addr_city;
+
+        return [
+            'city' => $permitCity === null || $u->city === null
+                ? null
+                : \App\Support\City::toArabic((string) $permitCity) === \App\Support\City::toArabic((string) $u->city),
+            // Deliberately never computed. See above.
+            'district' => null,
+        ];
+    }
+
+    /**
+     * The building this listing belongs to, so a reviewer approving one
+     * apartment can see what else is in the queue behind it — and, in per-unit
+     * mode, that each door carries a different permit.
+     *
+     * Null for a standalone listing rather than a group of one: the screen
+     * should show nothing, not a building with one door.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function groupContext(Unit $u): ?array
+    {
+        if (! $u->unit_group_id) {
+            return null;
+        }
+
+        $members = Unit::where('unit_group_id', $u->unit_group_id)->orderBy('apartment_no')->get();
+
+        return [
+            'id' => $u->unit_group_id,
+            'size' => $members->count(),
+            'mode' => \App\Support\Permits\PermitMode::of($u),
+            'apartments' => $members->map(fn (Unit $m) => [
+                'id' => (string) $m->id,
+                'apartmentNo' => $m->apartment_no,
+                'status' => $m->approval_status,
+                'permitNumber' => $m->tourism_permit_no,
+                'permitExpiresAt' => PermitExpiry::on($m)?->toDateString(),
+            ])->values()->all(),
+        ];
     }
 
     public function approve(string $id): JsonResponse

@@ -186,41 +186,9 @@ class UnitController extends DashboardController
         $count = (int) $data['count'];
         $permits = $data['permits'] ?? [];
 
-        // The request's shape has to match the mode the building is in: a
-        // facility permit covers the new doors, a private one does not — and
-        // sending the wrong half is a different mistake from sending too few.
-        try {
-            PermitMode::guardShape($unit, array_key_exists('permits', $data));
-        } catch (LicenseViolation $e) {
-            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
-        }
-
-        // Each apartment's licence file must be this partner's own, stored, and
-        // of the licence kind — the same check every other attachment passes,
-        // applied per entry so the answer names which one.
-        $fileErrors = [];
-
-        foreach ($permits as $i => $permit) {
-            if ($errors = UnitWriter::fileErrors((int) $request->user()->id, ['tourismLicenseFileId' => $permit['fileId'] ?? null])) {
-                $fileErrors["permits.{$i}.fileId"] = reset($errors);
-            }
-        }
-
-        if ($fileErrors !== []) {
-            $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $fileErrors);
-        }
-
-        // The licence is checked BEFORE anything is written: a refused
-        // expansion must not leave apartments behind for an admin to review.
-        try {
-            UnitLicense::guardGroupSize($unit, $count);
-        } catch (LicenseViolation $e) {
-            // meta carries the numbers the message talks about — the dashboard
-            // renders "your permit covers 8 units" from the field, not by
-            // reading the Arabic. Dropping it here was the whole point of the
-            // refusal being machine-readable, undone one argument short.
-            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
-        }
+        // Shape, files and licence — the same checks /submit runs, so the two
+        // routes cannot drift into disagreeing about a valid expansion.
+        $this->assertExpansionShape($request, $unit, $data, $permits);
 
         // The SOURCE must be publishable before it is copied.
         //
@@ -399,6 +367,20 @@ class UnitController extends DashboardController
         ];
     }
 
+    /**
+     * POST /units/:id/submit — file for review, and optionally become a
+     * building on the way in.
+     *
+     * `count` (and `permits` in per-unit mode) may ride along, and then the
+     * expansion and the filing happen in ONE transaction. Without that, a
+     * partner who typed "5 apartments" in the wizard would have the browser
+     * call /apartments and then /submit — and a failure on the second call
+     * leaves them with four pending apartments and a draft they still have to
+     * find and file. One call, or nothing.
+     *
+     * The body is optional and backward compatible: no `count`, or `count` at
+     * or below the current size, is exactly the old behaviour.
+     */
     public function submit(Request $request, string $id): JsonResponse
     {
         $unit = $this->ownUnit($request, self::rawId($id));
@@ -407,15 +389,104 @@ class UnitController extends DashboardController
             $this->fail('UNIT_NOT_SUBMITTABLE', 'لا يمكن تقديم هذه الوحدة', 409);
         }
 
+        $data = $this->validated($request, self::apartmentRules(countOptional: true), [
+            'count.max' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد',
+            'permits.*.number.required' => 'رقم التصريح مطلوب لكل وحدة',
+            'permits.*.fileId.required' => 'ملف التصريح مطلوب لكل وحدة',
+        ]);
+
+        $count = isset($data['count']) ? (int) $data['count'] : 1;
+        $permits = $data['permits'] ?? [];
+        $expanding = $count > UnitLicense::groupSize($unit);
+
+        // The source is checked BEFORE anything is cloned, so the answer names
+        // the listing the partner actually has rather than rows that do not
+        // exist yet.
         $this->assertSubmittable($request->user(), $unit);
 
-        $unit->update(['approval_status' => 'pending', 'rejection_reason' => null]);
-        $this->notifyAdmins($unit);
+        if ($expanding) {
+            $this->assertExpansionShape($request, $unit, $data, $permits);
+        }
+
+        $group = DB::transaction(function () use ($unit, $count, $permits, $expanding, $request) {
+            if ($expanding) {
+                try {
+                    $result = ApartmentExpansion::run($unit, $count, $permits, (int) $request->user()->id);
+                } catch (LicenseViolation $e) {
+                    $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+                }
+
+                foreach ($result['added'] as $member) {
+                    $this->assertSubmittable($request->user(), $member->fresh());
+                    $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
+                }
+            }
+
+            $unit->update(['approval_status' => 'pending', 'rejection_reason' => null]);
+
+            return $unit->fresh()->unit_group_id
+                ? Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->orderBy('apartment_no')->get()
+                : collect([$unit->fresh()]);
+        });
+
+        // Outside the transaction: a mail failure must not undo a filing that
+        // actually happened.
+        foreach ($group->where('approval_status', 'pending') as $pending) {
+            $this->notifyAdmins($pending);
+        }
 
         return $this->ok([
             'unit' => UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])),
+            // Present whenever the listing is a building — the client that sent
+            // a count needs to know what it got, and one that did not is
+            // unaffected by an extra key.
+            'groupId' => $unit->fresh()->unit_group_id,
+            'groupSize' => $group->count(),
+            'units' => $group->map(fn (Unit $u) => [
+                'id' => 'u_'.$u->id,
+                'apartmentNo' => $u->apartment_no,
+                'status' => $u->approval_status,
+            ])->values()->all(),
             'message' => 'سيصلك إشعار خلال 24–48 ساعة',
         ]);
+    }
+
+    /**
+     * The checks an expansion must pass before any row is written — shared by
+     * /apartments and /submit so the two cannot drift into disagreeing about
+     * what a valid expansion looks like.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<int, array<string, mixed>>  $permits
+     */
+    private function assertExpansionShape(Request $request, Unit $unit, array $data, array $permits): void
+    {
+        try {
+            PermitMode::guardShape($unit, array_key_exists('permits', $data));
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
+
+        $fileErrors = [];
+
+        foreach ($permits as $i => $permit) {
+            if ($errors = UnitWriter::fileErrors((int) $request->user()->id, ['tourismLicenseFileId' => $permit['fileId'] ?? null])) {
+                $fileErrors["permits.{$i}.fileId"] = reset($errors);
+            }
+        }
+
+        if ($fileErrors !== []) {
+            $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $fileErrors);
+        }
+
+        try {
+            UnitLicense::guardGroupSize($unit, (int) $data['count']);
+        } catch (LicenseViolation $e) {
+            // meta carries the numbers the message talks about — the dashboard
+            // renders "your permit covers 8 units" from the field rather than
+            // by reading the Arabic.
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
     }
 
     /* ---- validation ---- */
@@ -432,10 +503,10 @@ class UnitController extends DashboardController
      *
      * @return array<string, mixed>
      */
-    private static function apartmentRules(): array
+    private static function apartmentRules(bool $countOptional = false): array
     {
         return [
-            'count' => ['required', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
+            'count' => [$countOptional ? 'sometimes' : 'required', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
             'permits' => ['sometimes', 'array', 'max:'.UnitCloner::MAX_GROUP],
             'permits.*.apartmentNo' => ['sometimes', 'nullable', 'string', 'max:20'],
             'permits.*.number' => ['required', 'string', 'max:50'],
