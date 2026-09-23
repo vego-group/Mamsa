@@ -26,6 +26,16 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
 
+    /*
+     * Runtime flags. Public and unauthenticated — these are switches, not
+     * secrets, and the apps bake them in at build time today, which is how a
+     * server-side flip does nothing until three deploys happen.
+     *
+     * At the top of the v1 group and OUTSIDE `units`: inside it the path
+     * became /units/config, which the `{unit}` route swallowed.
+     */
+    Route::get('config', \App\Http\Controllers\RuntimeConfigController::class)->name('api.config');
+
     /* ===================== AUTH (public) ===================== */
     Route::prefix('auth')->name('api.auth.')->group(function () {
         // Back-office (Admin / SuperAdmin) email + password login

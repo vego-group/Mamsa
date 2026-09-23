@@ -166,6 +166,12 @@ class UnitPresenter
             'lng' => $u->lng !== null ? (float) $u->lng : 0.0,
             'publicUrl' => $this->publicUrl($u),
             'tourismPermitNo' => $u->tourism_permit_no,
+            // The same value under the name the WRITE side uses. The console
+            // has always sent `tourismLicenseNumber` and read `tourismPermitNo`
+            // — two names for one field, on one screen. Both are emitted now so
+            // the client can converge on one without a flag day; neither is
+            // going away without notice.
+            'tourismLicenseNumber' => $u->tourism_permit_no,
             'permitFileUrl' => $this->fileUrl($u->tourism_permit_file),
             // The three the reviewer compares against the uploaded permit. The
             // system already refuses a group bigger than the declared count, so
@@ -181,6 +187,7 @@ class UnitPresenter
             // was valid on review day runs out on its own.
             'permitExpiresAt' => \App\Support\Permits\PermitExpiry::on($u)?->toDateString(),
             'permitStatus' => \App\Support\Permits\PermitExpiry::status($u),
+            'permitAddress' => self::permitAddress($u),
             // A renewal already waiting changes what "expired" means on this
             // screen: the listing is quiet, but somebody has already acted and
             // the remedy is in the reviewer's own queue.
@@ -235,6 +242,25 @@ class UnitPresenter
 
     /** Per-request memo so a unit list doesn't re-query the default N times. */
     private static ?string $defaultPolicyKey = null;
+
+    /**
+     * The address printed on the listing's permit, or nulls when none is
+     * recorded. Always the same four keys so a client never branches on
+     * whether the object is there.
+     *
+     * @return array<string, string|null>
+     */
+    private static function permitAddress(\App\Models\Unit $unit): array
+    {
+        $permit = \App\Models\Permit::currentFor($unit);
+
+        return [
+            'city' => $permit?->addr_city,
+            'district' => $permit?->addr_district,
+            'building' => $permit?->addr_building,
+            'unitNo' => $permit?->addr_unit_no,
+        ];
+    }
 
     private static function defaultPolicyKey(): ?string
     {

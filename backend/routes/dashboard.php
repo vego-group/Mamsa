@@ -22,6 +22,10 @@ Route::post('auth/otp/resend', [Dashboard\AuthController::class, 'requestOtp'])
     ->middleware('throttle:pd-otp')->name('pd.otp.resend');
 Route::post('auth/otp/verify', [Dashboard\AuthController::class, 'verifyOtp'])
     ->middleware('throttle:10,1')->name('pd.otp.verify');
+// Runtime flags — same payload as /api/v1/config, on the host this console
+// already talks to. Unauthenticated: the login screen needs them too.
+Route::get('config', \App\Http\Controllers\RuntimeConfigController::class)->name('pd.config');
+
 Route::post('auth/logout', [Dashboard\AuthController::class, 'logout'])->name('pd.logout');
 
 /* ---- Signed upload target (auth via URL signature, not session) ---- */

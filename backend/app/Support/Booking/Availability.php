@@ -206,9 +206,24 @@ final class Availability
             ));
         }
 
+        // How big each building is, regardless of what is free — so a card can
+        // say "4 of 6" instead of "4", which is the difference between a guest
+        // knowing the place is nearly full and guessing.
+        $sizes = $groups->isEmpty()
+            ? []
+            : Unit::query()
+                ->whereIn('unit_group_id', $groups)
+                ->where('approval_status', 'approved')
+                ->where('status', 'available')
+                ->selectRaw('unit_group_id, COUNT(*) AS total')
+                ->groupBy('unit_group_id')
+                ->pluck('total', 'unit_group_id')
+                ->all();
+
         foreach ($units as $unit) {
             if ($unit->unit_group_id) {
                 $unit->setAttribute('available_count', (int) ($counts[$unit->unit_group_id] ?? 0));
+                $unit->setAttribute('group_size', (int) ($sizes[$unit->unit_group_id] ?? 1));
 
                 continue;
             }
@@ -217,6 +232,7 @@ final class Availability
             // standalone unit counts as one. Reporting null would make every
             // existing listing look like it had no availability.
             $unit->setAttribute('available_count', isset($taken[$unit->id]) ? 0 : 1);
+            $unit->setAttribute('group_size', 1);
         }
     }
 

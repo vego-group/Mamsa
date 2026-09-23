@@ -344,6 +344,107 @@ class ApartmentModeTest extends TestCase
             ->assertJsonPath('meta.group_mode', PermitMode::SINGLE);
     }
 
+    /* ---------- one step: submit that also expands ---------- */
+
+    public function test_submit_can_create_the_building_and_file_it_in_one_call(): void
+    {
+        // The wizard asks for the apartment count on the same screen as
+        // everything else. Two calls — /apartments then /submit — means a
+        // failure on the second leaves the partner with pending apartments and
+        // a draft they still have to find and file themselves.
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $body = $this->actingAs($this->partner, 'dashboard')
+            ->postJson("/units/u_{$source->id}/submit", [
+                'count' => 3,
+                'permits' => [
+                    ['number' => 'ONE-2', 'fileId' => $this->licenceFile($this->partner)],
+                    ['number' => 'ONE-3', 'fileId' => $this->licenceFile($this->partner)],
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('groupSize', 3)
+            ->json();
+
+        $this->assertCount(3, $body['units']);
+
+        // EVERY door is filed, the source included — no draft left behind.
+        $group = Unit::where('unit_group_id', $source->fresh()->unit_group_id)->get();
+        $this->assertCount(3, $group);
+        foreach ($group as $door) {
+            $this->assertSame('pending', $door->approval_status, "door {$door->apartment_no} was left out of the filing");
+            $this->assertNotNull(Permit::currentFor($door), "door {$door->apartment_no} is covered by nothing");
+        }
+
+        $this->assertSame(3, Permit::count());
+    }
+
+    public function test_submit_without_a_count_is_exactly_the_old_behaviour(): void
+    {
+        $source = $this->unit(['approval_status' => 'draft']);
+
+        $this->actingAs($this->partner, 'dashboard')
+            ->postJson("/units/u_{$source->id}/submit")
+            ->assertOk()
+            ->assertJsonPath('groupSize', 1)
+            ->assertJsonPath('groupId', null);
+
+        $this->assertSame('pending', $source->fresh()->approval_status);
+        $this->assertNull($source->fresh()->unit_group_id, 'a plain submit made a building');
+    }
+
+    public function test_submit_expands_a_facility_building_without_permits(): void
+    {
+        $source = $this->unit([
+            'approval_status' => 'draft',
+            'license_type' => UnitLicense::TOURIST_FACILITY, 'licensed_units_count' => 6,
+        ]);
+
+        $this->actingAs($this->partner, 'dashboard')
+            ->postJson("/units/u_{$source->id}/submit", ['count' => 4])
+            ->assertOk()
+            ->assertJsonPath('groupSize', 4);
+
+        $this->assertSame(4, Unit::where('unit_group_id', $source->fresh()->unit_group_id)->where('approval_status', 'pending')->count());
+        $this->assertSame(1, Permit::count(), 'a facility building holds one permit');
+    }
+
+    public function test_submit_refuses_the_wrong_shape_and_writes_nothing(): void
+    {
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $this->actingAs($this->partner, 'dashboard')
+            ->postJson("/units/u_{$source->id}/submit", ['count' => 3])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'PERMIT_MODE_MIXED');
+
+        $this->assertSame(1, Unit::count());
+        $this->assertSame('draft', $source->fresh()->approval_status, 'a refused expansion still filed the source');
+    }
+
+    public function test_a_refused_expansion_at_submit_leaves_the_draft_a_draft(): void
+    {
+        // The whole point of one transaction: a duplicate number discovered
+        // halfway must not leave the partner with half a building.
+        $other = $this->unit(['tourism_permit_no' => 'TAKEN-9']);
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $this->actingAs($this->partner, 'dashboard')
+            ->postJson("/units/u_{$source->id}/submit", [
+                'count' => 3,
+                'permits' => [
+                    ['number' => 'FINE-2', 'fileId' => $this->licenceFile($this->partner)],
+                    ['number' => 'TAKEN-9', 'fileId' => $this->licenceFile($this->partner)],
+                ],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'DUPLICATE_PERMIT_NUMBER');
+
+        $this->assertSame(2, Unit::count(), 'apartments survived a refused expansion');
+        $this->assertSame('draft', $source->fresh()->approval_status);
+        $this->assertNull($source->fresh()->unit_group_id);
+    }
+
     /* ---------- fixtures ---------- */
 
     /**

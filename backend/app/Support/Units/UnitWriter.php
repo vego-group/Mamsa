@@ -116,6 +116,13 @@ final class UnitWriter
             // consoles convert — a date arriving here has already been read by
             // a human off the document.
             'permitExpiresAt'      => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            // Sent flat rather than nested so a partial patch can name one
+            // line of the address without resending the rest — the same way
+            // every other field on this surface behaves.
+            'permitAddressCity'     => ['sometimes', 'nullable', 'string', 'max:100'],
+            'permitAddressDistrict' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'permitAddressBuilding' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'permitAddressUnitNo'   => ['sometimes', 'nullable', 'string', 'max:50'],
             'tourismLicenseFileId' => ['sometimes', 'nullable', 'string'],
             'photoFileIds'         => ['sometimes', 'nullable', 'array', 'max:'.self::MAX_PHOTOS],
             'photoFileIds.*'       => ['string'],
@@ -150,6 +157,14 @@ final class UnitWriter
         'licenseType' => 'license_type',
         'licensedUnitsCount' => 'licensed_units_count',
         'permitExpiresAt' => 'expires_at',
+        // The address printed ON the permit — the thing a reviewer compares
+        // with the listing's own address. It was writable only through a
+        // renewal, which meant a listing that never renewed could never record
+        // it, and the reviewer had nothing to compare.
+        'permitAddressCity' => 'addr_city',
+        'permitAddressDistrict' => 'addr_district',
+        'permitAddressBuilding' => 'addr_building',
+        'permitAddressUnitNo' => 'addr_unit_no',
     ];
 
     /**
