@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Units;
 
+use App\Models\Permit;
 use App\Models\Unit;
 use App\Support\Permits\PermitMode;
 use App\Support\Permits\PermitWriter;
@@ -101,10 +102,10 @@ final class UnitLicense
     {
         $out = [];
 
-        \App\Models\Permit::query()->current()->orderBy('id')->chunk(200, function ($permits) use (&$out) {
+        Permit::query()->current()->orderBy('id')->chunk(200, function ($permits) use (&$out) {
             foreach ($permits as $permit) {
-                foreach ($permit->units()->get(['id', ...array_values(\App\Models\Permit::MIRROR)]) as $unit) {
-                    foreach (\App\Models\Permit::MIRROR as $own => $column) {
+                foreach ($permit->units()->get(['id', ...array_values(Permit::MIRROR)]) as $unit) {
+                    foreach (Permit::MIRROR as $own => $column) {
                         if ((string) $unit->{$column} !== (string) $permit->{$own}) {
                             $out[] = (object) [
                                 'unit_id' => (int) $unit->id,
@@ -187,12 +188,17 @@ final class UnitLicense
      * permit cover a group of `$size`?
      *
      * Separated from the rollout flag because the two answer different
-     * questions. The flag says whether PARTNERS may expand yet — a product
-     * switch, off on production until their UI ships. The permit says whether
-     * a building of this size may trade at all — a legal fact that holds
-     * regardless of any switch. The platform expanding its own inventory, and
-     * a reviewer re-approving an apartment that already exists, need the
-     * second answer and are not the rollout the first one gates.
+     * questions. The flag says whether anyone may expand yet — a product
+     * switch, off on production until the partner UI ships. The permit says
+     * whether a building of this size may trade at all — a legal fact that
+     * holds regardless of any switch.
+     *
+     * Exactly ONE caller needs the second answer without the first: a reviewer
+     * approving an apartment that ALREADY EXISTS. Refusing that would strand a
+     * building which already trades on a product switch, which is a worse
+     * failure than the one the flag prevents. Every path that CREATES
+     * apartments — partner or admin — goes through {@see guardGroupSize()}
+     * (the admin one since 27/09, at the owner's instruction).
      */
     public static function guardLicenceCovers(Unit $unit, int $size): void
     {
@@ -209,8 +215,8 @@ final class UnitLicense
         // scoped to it is covered by nothing at all; the building's other
         // permits name other apartments.
         if ($unit->license_type === self::PRIVATE_HOSPITALITY) {
-            $own = \App\Models\Permit::query()
-                ->where('scope_type', \App\Models\Permit::SCOPE_UNIT)
+            $own = Permit::query()
+                ->where('scope_type', Permit::SCOPE_UNIT)
                 ->where('scope_id', (string) $unit->getKey())
                 ->current()
                 ->exists();

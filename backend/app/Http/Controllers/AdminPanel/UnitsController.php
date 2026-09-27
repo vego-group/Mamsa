@@ -4,15 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AdminPanel;
 
+use App\Exceptions\AdminPanelException;
 use App\Models\Booking;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\PartnerWalletService;
 use App\Support\AdminPanel\UnitPresenter;
 use App\Support\City;
-use App\Support\Pricing;
-use App\Exceptions\AdminPanelException;
 use App\Support\Permits\PermitMode;
 use App\Support\Permits\PermitWriter;
+use App\Support\Pricing;
 use App\Support\Units\ApartmentExpansion;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
@@ -99,7 +100,7 @@ class UnitsController extends Controller
      * platform account ({@see User::platform()}; units.user_id is NOT NULL);
      * mamsa_owned flags it as platform-owned, which is what stops the booking
      * engine paying a partner share on it ({@see Pricing::breakdown()},
-     * {@see \App\Services\PartnerWalletService::recordEarning()}).
+     * {@see PartnerWalletService::recordEarning()}).
      */
     public function store(Request $request): JsonResponse
     {
@@ -334,8 +335,15 @@ class UnitsController extends Controller
      * from their dashboard, under their permit; an admin doing it for them
      * would file apartments the partner never declared.
      *
-     * Not behind `units.multi_unit_enabled`: that flag gates the PARTNER
-     * rollout ({@see \App\Support\Units\UnitLicense::guardLicenceCovers()}).
+     * Behind `units.multi_unit_enabled`, like the partner surface. It was not,
+     * on the reasoning that the flag gates the PARTNER rollout while the
+     * platform expanding its own inventory is a different question. True, but
+     * it left a write path open on production that no console calls — and an
+     * unused open path is a switch nobody can find when they need it off. The
+     * owner asked for it closed (27/09). A reviewer re-approving an apartment
+     * that already exists still bypasses the flag, because refusing to
+     * re-approve a building that already trades would be a different and worse
+     * failure — {@see UnitLicense::guardLicenceCovers()}.
      */
     public function apartments(Request $request, string $id): JsonResponse
     {
@@ -400,10 +408,10 @@ class UnitsController extends Controller
             $this->fail('VALIDATION_ERROR', 'ملفات غير صالحة', 422, $fileErrors);
         }
 
-        // The permit is checked BEFORE anything is written — a refused
-        // expansion must not leave approved apartments behind.
+        // The flag and the permit are both checked BEFORE anything is written —
+        // a refused expansion must not leave approved apartments behind.
         try {
-            UnitLicense::guardLicenceCovers($unit, $count);
+            UnitLicense::guardGroupSize($unit, $count);
         } catch (LicenseViolation $e) {
             $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
         }
