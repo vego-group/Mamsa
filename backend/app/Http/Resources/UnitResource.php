@@ -34,6 +34,21 @@ class UnitResource extends JsonResource
             // Present only where the controller computed it -- a resource that
             // guessed would be guessing about availability.
             'available_count' => $this->whenNotNull($this->available_count),
+            // How many apartments the building holds in total, so a card can
+            // say "4 of 6 available" rather than "4 available" and leave the
+            // guest to wonder 4 of what. Computed alongside available_count;
+            // absent where the controller did not compute it.
+            'group_size' => $this->whenNotNull($this->group_size),
+            // The door the guest actually got. Public ONLY on a booking's unit,
+            // where it is the answer to "which apartment am I in" — a question
+            // the confirmation page has no other way to answer, because the
+            // server picks the apartment out of the building. It stays out of
+            // the listing payload, where the card is the building and a door
+            // number would be noise.
+            'apartment_no' => $this->when(
+                $request->attributes->get('booking_allocation') === true,
+                fn () => $this->apartment_no,
+            ),
             'price' => $this->price,
             'capacity' => $this->capacity,
             'bedrooms' => $this->bedrooms,

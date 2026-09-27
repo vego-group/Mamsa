@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support\Units;
 
+use App\Models\Permit;
 use App\Models\Unit;
+use App\Support\Permits\PermitMode;
 use App\Support\Permits\PermitWriter;
 use Illuminate\Support\Facades\DB;
 
@@ -100,10 +102,10 @@ final class UnitLicense
     {
         $out = [];
 
-        \App\Models\Permit::query()->current()->orderBy('id')->chunk(200, function ($permits) use (&$out) {
+        Permit::query()->current()->orderBy('id')->chunk(200, function ($permits) use (&$out) {
             foreach ($permits as $permit) {
-                foreach ($permit->units()->get(['id', ...array_values(\App\Models\Permit::MIRROR)]) as $unit) {
-                    foreach (\App\Models\Permit::MIRROR as $own => $column) {
+                foreach ($permit->units()->get(['id', ...array_values(Permit::MIRROR)]) as $unit) {
+                    foreach (Permit::MIRROR as $own => $column) {
                         if ((string) $unit->{$column} !== (string) $permit->{$own}) {
                             $out[] = (object) [
                                 'unit_id' => (int) $unit->id,
@@ -186,16 +188,47 @@ final class UnitLicense
      * permit cover a group of `$size`?
      *
      * Separated from the rollout flag because the two answer different
-     * questions. The flag says whether PARTNERS may expand yet — a product
-     * switch, off on production until their UI ships. The permit says whether
-     * a building of this size may trade at all — a legal fact that holds
-     * regardless of any switch. The platform expanding its own inventory, and
-     * a reviewer re-approving an apartment that already exists, need the
-     * second answer and are not the rollout the first one gates.
+     * questions. The flag says whether anyone may expand yet — a product
+     * switch, off on production until the partner UI ships. The permit says
+     * whether a building of this size may trade at all — a legal fact that
+     * holds regardless of any switch.
+     *
+     * Exactly ONE caller needs the second answer without the first: a reviewer
+     * approving an apartment that ALREADY EXISTS. Refusing that would strand a
+     * building which already trades on a product switch, which is a worse
+     * failure than the one the flag prevents. Every path that CREATES
+     * apartments — partner or admin — goes through {@see guardGroupSize()}
+     * (the admin one since 27/09, at the owner's instruction).
      */
     public static function guardLicenceCovers(Unit $unit, int $size): void
     {
         if ($size <= 1) {
+            return;
+        }
+
+        // Two ways to be a building, and only one of them needs a facility
+        // permit. Under `private_hospitality` every door carries its own
+        // licence, so the group is legal at any size the cloner allows — on
+        // one condition, checked here because this is the question every
+        // caller asks before publishing a row: THIS apartment must hold a
+        // permit of its own. A door in a per-unit building with nothing
+        // scoped to it is covered by nothing at all; the building's other
+        // permits name other apartments.
+        if ($unit->license_type === self::PRIVATE_HOSPITALITY) {
+            $own = Permit::query()
+                ->where('scope_type', Permit::SCOPE_UNIT)
+                ->where('scope_id', (string) $unit->getKey())
+                ->current()
+                ->exists();
+
+            if (! $own) {
+                throw LicenseViolation::of(
+                    'PERMIT_MODE_MIXED',
+                    'كل وحدة في هذا المبنى تحتاج تصريحها الخاص — هذه الوحدة بلا تصريح',
+                    ['group_mode' => PermitMode::PER_UNIT, 'unit_id' => $unit->getKey()],
+                );
+            }
+
             return;
         }
 
@@ -230,6 +263,15 @@ final class UnitLicense
     public static function guardChange(Unit $unit, ?string $type, ?int $count): void
     {
         $size = self::groupSize($unit);
+
+        // A building of per-unit permits is not a downgrade candidate: it was
+        // never trading under one licence, so converting it to `private` is
+        // what it already is. The block exists for the other direction — a
+        // facility building cannot become a single-unit permit while it still
+        // has the apartments.
+        if ($size > 1 && $type === self::PRIVATE_HOSPITALITY && PermitMode::of($unit) === PermitMode::PER_UNIT) {
+            return;
+        }
 
         if ($size > 1 && $type !== self::TOURIST_FACILITY) {
             // The message deliberately does NOT say "reduce the units first".

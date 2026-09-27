@@ -222,30 +222,54 @@ class PayoutsController extends Controller
 
         $partner = $this->partner($data['partnerId']);
 
-        // The bank's own reference is the idempotency key: a double-submitted
-        // form must not record the same transfer twice.
-        if (Payout::where('bank_reference', $data['bankReference'])->exists()) {
-            $this->fail('DUPLICATE_BANK_REFERENCE', 'رقم المرجع البنكي مستخدم من قبل', 409);
-        }
+        // Every check below runs INSIDE the transaction, after the wallet row is
+        // locked. They used to run before it, and the gap was real: eligibility
+        // (including the minimum-balance rule) was decided against a balance
+        // read outside any lock, and a concurrent debit — a refund settling
+        // between the check and the insert — left the payout recorded against a
+        // balance that no longer existed. The transfer had already been made in
+        // the bank by then, so the wrong number was the durable one.
+        $payout = DB::transaction(function () use ($partner, $data) {
+            // Lock FIRST, and lock the same row PartnerWalletService::post()
+            // locks. One row, one order, so the payout path and every ledger
+            // write serialise against each other instead of interleaving.
+            $wallet = PartnerWallet::query()
+                ->where('partner_user_id', $partner->id)
+                ->lockForUpdate()
+                ->first()
+                ?? PartnerWallet::create(['partner_user_id' => $partner->id]);
 
-        if ($this->eligibility->paidThisMonth($partner->id)) {
-            $this->fail('ALREADY_PAID_THIS_MONTH', 'تم صرف مستحقات هذا الشهر بالفعل', 409);
-        }
+            // The bank's own reference is the idempotency key: a double-submitted
+            // form must not record the same transfer twice.
+            if (Payout::where('bank_reference', $data['bankReference'])->exists()) {
+                $this->fail('DUPLICATE_BANK_REFERENCE', 'رقم المرجع البنكي مستخدم من قبل', 409);
+            }
 
-        // Re-checked at the moment of recording, not trusted from the list the
-        // accountant loaded: minutes may have passed and a refund landed.
-        if ($this->eligibility->reason($partner, adminView: true) !== null) {
-            $this->fail('NOT_ELIGIBLE', 'الشريك غير مؤهل للصرف حالياً', 409);
-        }
+            if ($this->eligibility->paidThisMonth($partner->id)) {
+                $this->fail('ALREADY_PAID_THIS_MONTH', 'تم صرف مستحقات هذا الشهر بالفعل', 409);
+            }
 
-        $bank    = BankDetail::where('partner_user_id', $partner->id)->firstOrFail();
-        $payable = $this->eligibility->payable($partner->id);
+            // `first()`, not `firstOrFail()`: a missing bank is answered by
+            // reason() as 'bank_missing' → the Arabic 409, which is what this
+            // endpoint always returned. firstOrFail was unreachable for that
+            // case and would now fire before the check, turning a 409 into a
+            // bare 404.
+            $bank = BankDetail::where('partner_user_id', $partner->id)->first();
 
-        if ($payable['amount'] <= 0) {
-            $this->fail('NOT_ELIGIBLE', 'لا توجد حجوزات مستحقة للصرف', 409);
-        }
+            // Re-checked at the moment of recording, not trusted from the list
+            // the accountant loaded: minutes may have passed and a refund
+            // landed. The locked wallet is passed in so this reads the balance
+            // held under the lock, not a second, unlocked fetch.
+            if ($this->eligibility->reason($partner, $wallet, $bank, adminView: true) !== null) {
+                $this->fail('NOT_ELIGIBLE', 'الشريك غير مؤهل للصرف حالياً', 409);
+            }
 
-        $payout = DB::transaction(function () use ($partner, $bank, $payable, $data) {
+            $payable = $this->eligibility->payable($partner->id);
+
+            if ($payable['amount'] <= 0) {
+                $this->fail('NOT_ELIGIBLE', 'لا توجد حجوزات مستحقة للصرف', 409);
+            }
+
             $payout = Payout::create([
                 'partner_user_id' => $partner->id,
                 'reference'       => $this->nextReference(),

@@ -269,14 +269,17 @@ class UnitCloningTest extends TestCase
         $this->assertArrayNotHasKey('apartment_no', $payload);
         $this->assertArrayNotHasKey('unit_group_id', $payload);
 
-        // 32, up from the original 30. Two keys were added on purpose:
-        // `available_count`, so the card can say how many apartments are free,
-        // and `listing_id`, the stable identity of a building — `id` is not
-        // that, because the card shows whichever apartment happens to be free.
+        // 33, up from the original 30. Three keys were added on purpose:
+        // `available_count`, so the card can say how many apartments are free;
+        // `listing_id`, the stable identity of a building — `id` is not that,
+        // because the card shows whichever apartment happens to be free; and
+        // `group_size` (asked for 2026-09-23), so "4 available" can become
+        // "4 of 6" instead of leaving the guest to wonder four of what.
         // Pinned so the NEXT key here has to be a decision someone made.
         $this->assertArrayHasKey('available_count', $payload);
         $this->assertArrayHasKey('listing_id', $payload);
-        $this->assertCount(32, $payload);
+        $this->assertArrayHasKey('group_size', $payload);
+        $this->assertCount(33, $payload);
 
         // The group ULID IS the listing id — that is the point of it — but the
         // raw column stays gated so nothing else about the grouping leaks.

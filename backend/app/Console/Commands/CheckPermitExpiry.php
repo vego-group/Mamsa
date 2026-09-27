@@ -97,7 +97,7 @@ class CheckPermitExpiry extends Command
                 }
 
                 try {
-                    Notification::send($recipients, new PermitExpiring($permit, $threshold, (string) $unit->unit_name));
+                    Notification::send($recipients, new PermitExpiring($permit, $threshold, (string) $unit->unit_name, (int) $unit->id));
                     $sent++;
                 } catch (\Throwable $e) {
                     // The row stays: a mail provider having a bad minute is not

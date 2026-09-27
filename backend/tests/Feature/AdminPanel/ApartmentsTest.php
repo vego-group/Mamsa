@@ -130,14 +130,23 @@ class ApartmentsTest extends TestCase
         $this->assertSame(1, Unit::count());
     }
 
-    public function test_the_partner_rollout_flag_does_not_gate_the_platform(): void
+    public function test_the_rollout_flag_gates_this_route_too(): void
     {
-        // MULTI_UNIT_ENABLED=false on production until the partner UI ships.
-        // The platform expanding its own inventory is not that rollout.
+        // This route used to be exempt, on the reasoning that MULTI_UNIT_ENABLED
+        // gates the PARTNER rollout while the platform expanding its own
+        // inventory is a different question. The reasoning holds and the
+        // conclusion was still wrong: it left a write path open on production
+        // that no console calls, and an unused open path is a switch nobody can
+        // find when they need it off. Closed on the owner's instruction (27/09).
         config()->set('units.multi_unit_enabled', false);
         $unit = $this->licensed(8);
 
-        $this->expand($unit, 3)->assertOk()->assertJsonPath('groupSize', 3);
+        $this->expand($unit, 3)
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'MULTI_UNIT_DISABLED');
+
+        $this->assertSame(1, Unit::count(), 'the flag was off and apartments were created anyway');
+        $this->assertNull($unit->fresh()->unit_group_id);
     }
 
     public function test_an_incomplete_source_is_refused_naming_the_fields(): void
