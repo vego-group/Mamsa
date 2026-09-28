@@ -257,16 +257,7 @@ const { data } = useSWR('/notifications?limit=20', fetcher, { refreshInterval: 6
 const alert = data?.data?.find(n => n.type === 'permit_expiring' && !n.read);
 ```
 
-```tsx
-{alert && (
-  <Banner tone={unit.permitStatus === 'expired' ? 'danger' : 'warning'}>
-    {alert.title}
-    <Button href={`/units/${unitId}/permit/renew`}>جدّد التصريح</Button>
-  </Banner>
-)}
-```
-
-✅ **القيود دي اتصلحت (منشورة 27/09).** الإشعار بقى شايل `unit_id` و`body` و`href`:
+الإشعار بقى شايل `unit_id` و`body` و`href` (منشور 27/09)، فالبانر بيرسم منه مباشرة:
 
 ```tsx
 {alert && (
