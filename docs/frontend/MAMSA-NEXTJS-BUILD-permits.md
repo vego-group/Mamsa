@@ -1,9 +1,13 @@
 # دليل التنفيذ — التصاريح على واجهات Next.js التلاتة
 
-**الأساس:** `docs/backend/permits-frontend-contract-phases-1-3.md` (عقد الإنتاج)
-**والملحق:** `docs/backend/permits-frontend-contract-phases-4-6.md` (وضع أ + المرحلة ٦ — staging)
-**الكود المنشور:** `prod-2026-09-22-refunds` على الإنتاج · `5d29d18` على staging
-**التاريخ:** 22/09/2026 · **محدَّث 23/09/2026** بقسم وضع أ (§٨) وقسم الأعلام (§٩)
+**الأساس:** `docs/backend/permits-frontend-contract-phases-1-3.md`
+**والملحق:** `docs/backend/permits-frontend-contract-phases-4-6.md` (وضع أ + المرحلة ٦)
+**الكود المنشور:** `prod-2026-09-27` — **الاتنين بيوصفوا الإنتاج دلوقتي**
+**التاريخ:** 22/09/2026 · **محدَّث 28/09/2026** بعد النشرة الموحّدة
+
+> 🔴 **العَلَم هو الفرق الوحيد بين البيئتين:** `multiUnitEnabled` = `true` على staging
+> و**`false` على الإنتاج**. كل حاجة في الملف ده **منشورة**، بس **§٨ (وضع أ)** مقفول
+> بالعَلَم على الإنتاج لحد ما تخلّصوا الواجهة. اقروه من `GET /config` (§٩).
 
 الملف ده **إيه اللي تبنيه**، مش إيه اللي الـAPI بيرجّعه. العقد في الملف التاني.
 
@@ -143,14 +147,22 @@ const unitId = booking.unit.id;          // ممكن تختلف عن اللي ب
 ```
 في مبنى، الكارت بيعرض ممثّل واحد والسيرفر بيختار شقة فاضية ومرخّصة. **صفحة تأكيد الحجز لازم تقرا `booking.unit`.**
 
-⚠️ `booking.unit` **ما فيهوش `apartment_no`** حالياً — لو محتاجين تعرضوا رقم الباب للضيف، اطلبوه (سطر واحد عندنا).
+✅ **`booking.unit.apartment_no` بقى موجود** (منشور 27/09) — ومقفول على رد الحجز وحده.
+
+```ts
+const doorNumber = booking.unit.apartment_no   // "1" في مبنى · null في وحدة مستقلة
+```
+المفتاح **موجود دايماً** في رد الحجز حتى لو قيمته `null`، و**غايب تماماً** من `GET /api/v1/units`.
 
 ### ١.٥ `available_count` على الكارت
 
 ```tsx
-{unit.available_count > 1 && <Badge>{unit.available_count} وحدات متاحة</Badge>}
+{unit.group_size > 1 && (
+  <Badge>{unit.available_count} من {unit.group_size} متاحة</Badge>
+)}
 ```
-⚠️ **مفيش `group_size`** — تقدروا تقولوا «٤ متاحة» بس مش «٤ من ٦».
+✅ **`group_size` بقى موجود** (منشور 27/09). بيعدّ الأبواب **القابلة للبيع** (معتمدة ومتاحة)،
+مش كل الأبواب — فممكن نفس المبنى يطلع للأدمن `size` أكبر. **مش تضارب**، شوف §٤.١ في الملحق.
 
 ---
 
@@ -207,11 +219,24 @@ const alert = data?.data?.find(n => n.type === 'permit_expiring' && !n.read);
 )}
 ```
 
-⚠️ **قيود حالية في الإشعار** (بلّغناكم بيها):
-- `body` فاضي و`href` بـ`null` — **الزرار لازم تبنوه إنتوا**.
-- الإشعار **ما فيهوش `unit_id`** — اسم الوحدة جوّه نص `title` بس.
+✅ **القيود دي اتصلحت (منشورة 27/09).** الإشعار بقى شايل `unit_id` و`body` و`href`:
 
-**فالأفضل عملياً:** خدوا الحالة من **الوحدة نفسها** (`permitStatus` + `permitExpiresAt` في `GET /units`) للبانر اللي جوّه صفحة الوحدة، واستخدموا الإشعار للجرس العام بس. كده مش محتاجين تستنوا إصلاح الإشعار.
+```tsx
+{alert && (
+  <Banner tone={alert.data?.threshold === 0 ? 'danger' : 'warning'}>
+    <strong>{alert.title}</strong>
+    <p>{alert.body}</p>
+    <Button href={alert.href}>جدّد التصريح</Button>   {/* /units/{id}/permit/renew */}
+  </Banner>
+)}
+```
+
+⚠️ **`href` بيبقى `null`** في إشعار اتكتب **قبل** 27/09 — المفتاح موجود وقيمته فاضية.
+اعملوا fallback على `/units/${unit_id}/permit/renew`، ولو `unit_id` نفسه `null` اخفوا الزرار.
+
+**ولسه الأفضل عملياً** للبانر اللي **جوّه صفحة الوحدة**: خدوا الحالة من الوحدة نفسها
+(`permitStatus` + `permitExpiresAt`)، واستخدموا الإشعار للجرس العام. الوحدة مصدر أدق لأنها
+الحالة الحالية، والإشعار لقطة وقت إرساله.
 
 ```tsx
 // بانر صفحة الوحدة — من بيانات الوحدة، مش من الإشعار
@@ -288,11 +313,14 @@ if (code === 'SOURCE_UNIT_INCOMPLETE') {
   router.push(`/units/${meta.unit_id}/edit?highlight=${Object.keys(fields).join(',')}`);
 }
 ```
-⚠️ **وعلى الإنتاج `MULTI_UNIT_ENABLED=false`** — زرار «أضف وحدات» **يتخفي**، وإلا كل ضغطة بترجع `MULTI_UNIT_DISABLED`.
+⚠️ **وعلى الإنتاج `multiUnitEnabled: false`** — زرار «أضف وحدات» **يتخفي**، وإلا كل ضغطة بترجع `MULTI_UNIT_DISABLED`.
 
 ```ts
-const multiUnit = process.env.NEXT_PUBLIC_MULTI_UNIT_ENABLED === 'true';  // false على الإنتاج
+const { flags } = useRuntimeConfig();          // من GET /config — §٩
+const multiUnit = flags.multiUnitEnabled;      // false على الإنتاج دلوقتي
 ```
+
+**مش من `process.env`** — ده بيتحرق وقت البناء، فقلب العَلَم على السيرفر مش هيوصلكم. §٩.
 
 ---
 
@@ -362,7 +390,8 @@ const multiUnit = process.env.NEXT_PUBLIC_MULTI_UNIT_ENABLED === 'true';  // fal
 <a href={permitFileUrl} target="_blank">فتح ملف التصريح</a>   {/* رابط موقّع، صالح ساعتين */}
 ```
 
-⚠️ **مفيش `addressMatch`** — **المقارنة بعين المراجع.** ما تبنوش عليها منطق آلي.
+⚠️ **في الشاشة دي تحديداً مفيش `addressMatch`** — المقارنة بعين المراجع. الحقل ده موجود في
+`GET /admin/approvals/{id}` بس (§٨.٧)، وحتى هناك بيقارن **المدينة** وبس.
 ⚠️ **`permitAddress` كل حقوله ممكن تكون `null`** — اعرضوا «غير مُدخل» مش فراغ.
 ⚠️ **`permitFileUrl` صالح ساعتين** — اطلبوا الصف من جديد لو الصفحة مفتوحة من زمان.
 
@@ -375,11 +404,13 @@ await api.post(`/admin/permit-renewals/${id}/reject`, { reason, notes });  // re
 - `409 RENEWAL_NOT_PENDING` = حد تاني قرر قبلك → اعملوا refetch واعرضوا الحالة.
 - الصلاحيات: العرض `approvals.view` · القرار `approvals.manage` · شاشة `/permits` بتحتاج `units.view`. **أخفوا الأزرار حسب صلاحيات `/admin/me`** — السيرفر بيرفض بـ`403 INSUFFICIENT_PERMISSION` بس الشاشة المفروض ما تعرضش زرار مش مسموح.
 
-### ٣.٥ شاشة المراجعة `/approvals/{id}` — ما اتغيّرتش
+### ٣.٥ شاشة المراجعة `/approvals/{id}` — **اتغيّرت، اقروا §٨.٧**
 
-الحقول الجديدة بتوصل جوّه `unit` (`unit.permitExpiresAt`, `unit.permitStatus`, `unit.pendingRenewalId`). **اعرضوهم في كارت الوحدة.**
+الحقول اللي جوّه `unit` زي ما هي (`unit.permitExpiresAt`, `unit.permitStatus`,
+`unit.pendingRenewalId`) — اعرضوهم في كارت الوحدة.
 
-⚠️ **مفيش `permit.address` ولا `addressMatch` ولا كائن `group` هنا** — دول المرحلة ٦ وما اتبنتش.
+✅ **وزيادة عليهم، تلات مفاتيح جديدة على مستوى الرد** (مش جوّه `unit`): `permit` و`addressMatch`
+و`group`. منشورين من 27/09. **التفصيل وإزاي ترسموهم في §٨.٧**، والعقد في §٢ من الملحق.
 
 ---
 
@@ -426,25 +457,29 @@ NEXT_PUBLIC_PERMIT_WARNING_DAYS=30       # قيمة احتياطية فقط
 
 ---
 
-## ٧. اللي كان مستني منّا — **اتنفّذ كله على staging** (23/09)
+## ٧. اللي كان مستني منّا — **اتنفّذ كله ونزل الإنتاج** (27/09)
 
 | البند | الحالة |
 |---|---|
-| `body` + `href` + `unit_id` في إشعار `permit_expiring` | ✅ staging · §٦ في الملحق |
-| `apartment_no` في `booking.unit` | ✅ staging · §٤.٢ في الملحق |
-| `addressMatch` · كائن `group` | ✅ staging · §٢ في الملحق |
-| `group_size` في القائمة العامة | ✅ staging · §٤.١ في الملحق — **اقروا التعريف، مش زي `group.size`** |
-| مفتاح `tourismLicenseNumber` لقراءة الأدمن | ✅ staging · §٧ في الملحق |
-| عنوان التصريح وتاريخه قابلين للكتابة على الوحدة | ✅ staging · §٣ في الملحق |
-| `groupId`/`apartmentNo` في رد `/submit` | ✅ staging · §١.١ في الملحق |
+| `body` + `href` + `unit_id` في إشعار `permit_expiring` | ✅ **الإنتاج** · §٦ في الملحق |
+| `apartment_no` في `booking.unit` | ✅ **الإنتاج** · §٤.٢ في الملحق |
+| `addressMatch` · كائن `group` | ✅ **الإنتاج** · §٢ في الملحق |
+| `group_size` في القائمة العامة | ✅ **الإنتاج** · §٤.١ في الملحق — **اقروا التعريف، مش زي `group.size`** |
+| مفتاح `tourismLicenseNumber` لقراءة الأدمن | ✅ **الإنتاج** · §٧ في الملحق |
+| عنوان التصريح وتاريخه قابلين للكتابة على الوحدة | ✅ **الإنتاج** · §٣ في الملحق |
+| `groupId`/`apartmentNo` في رد `/submit` | ✅ **الإنتاج** · §١.١ في الملحق |
+| `GET /config` — الأعلام وقت التشغيل | ✅ **الإنتاج** · §٩ |
 
-❌ **لسه على الإنتاج:** ولا واحد منهم. الإنتاج على المراحل ١–٣ لحد النشرة الموحّدة.
+**المتبقّي الوحيد:** `groupId`/`apartmentNo` في `GET /units` بتاعة الشريك (موجودين في رد
+`/submit` بس). قولوا لو محتاجينهم.
 
 ---
 
 ## ٨. 🔴 وضع أ — تصريح لكل شقة (لوحة الشريك + لوحة الأدمن)
 
-**staging فقط.** على الإنتاج `MULTI_UNIT_ENABLED=false` وهيفضل كده لحد ما الواجهة تجهز — شوف §٩ لإزاي تقرا العَلَم من غير ما تعيد البناء.
+**منشور على الإنتاج، ومقفول بالعَلَم.** `multiUnitEnabled` = `false` على الإنتاج و`true` على
+staging — وهيفضل كده لحد ما الواجهة تجهز. يعني **ابنوا القسم ده واختبروه على staging**، وهيشتغل
+على الإنتاج بقلب العَلَم من السيرفر، **من غير build جديد منكم**. §٩.
 
 ### ٨.٠ الفكرة في سطر
 
@@ -561,7 +596,10 @@ POST /admin/units/{id}/apartments      { count, permits }
 
 1. **الغلاف:** `{ message, code, fields?, meta? }` و`VALIDATION_ERROR` بـ**422** (مش `VALIDATION` بـ400).
 2. **لوحدات ممسى بس** (`mamsaOwned: true`) — الصلاحية `units.manage`.
-3. **مش وراء `MULTI_UNIT_ENABLED`** — يعني شغّال على الإنتاج دلوقتي كمان.
+3. **✅ بقى ورا `MULTI_UNIT_ENABLED` زي مسار الشريك** (قرار المالك 27/09) — فعلى الإنتاج
+   بيرجّع **`422 MULTI_UNIT_DISABLED`**. ⚠️ **ما تبنوش على ترتيب الأخطاء**: الحارس بيجي
+   **بعد** التحقق من الحقول، فملف غلط هيطلّع `VALIDATION_ERROR` الأول. **العَلَم من `/config`
+   هو الجواب**، مش شكل الخطأ.
 4. ومافيش `/submit` هنا: الأدمن بيوافق بنفسه.
 
 ### ٨.٧ شاشة المراجعة — اللي بيتغيّر فيها
@@ -610,4 +648,5 @@ const { flags, permitWarningDays } = await fetch(`${API}/config`).then(r => r.js
 - `permitWarningDays` استعملوه بدل ما تكتبوا 30 في تلات تطبيقات — ده نفس الرقم اللي الجوب اليومي بيشتغل بيه، وتثبيته في الواجهة هو إزاي الاتنين بيختلفوا.
 - `legacyUnitWritesEnabled: false` معناها مسارات الكتابة القديمة بـBearer بترجّع **410 `ENDPOINT_RETIRED`**. لو شفتوا 410 من مسار قديم، ده مش عطل — ده ده.
 
-**القيم دلوقتي:** staging `multiUnitEnabled: true` · الإنتاج `false` (والمسار نفسه لسه مش منشور هناك).
+**القيم دلوقتي:** staging `multiUnitEnabled: true` · **الإنتاج `false`**.
+**والمسار حيّ على الإنتاج** من 27/09 — التلاتة بيردّوا `200` على `api.mamsaa.com`.
