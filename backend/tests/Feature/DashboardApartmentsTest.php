@@ -8,8 +8,8 @@ use App\Models\Feature;
 use App\Models\PartnerDetail;
 use App\Models\Unit;
 use App\Models\User;
-use App\Support\Units\UnitLicense;
 use App\Support\Permits\PermitWriter;
+use App\Support\Units\UnitLicense;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Spatie\Permission\Models\Role;
@@ -300,6 +300,57 @@ class DashboardApartmentsTest extends TestCase
             ->pluck('licensed_units_count')->map(intval(...))->unique();
 
         $this->assertSame([7], $counts->all(), 'the group must not disagree about its permit');
+    }
+
+    public function test_the_partner_list_says_which_building_each_row_belongs_to(): void
+    {
+        // Without groupId the partner opens their list and sees five rows that
+        // look like five listings they do not remember creating. The grouping
+        // exists in the data and has to exist in the response.
+        $source = $this->licensed(8);
+        $this->expand($source, 3)->assertOk();
+
+        $rows = $this->actingAs($this->partner, 'dashboard')
+            ->getJson('/units?limit=50')
+            ->assertOk()
+            ->json('data');
+
+        $this->assertCount(3, $rows);
+
+        $groupId = $source->fresh()->unit_group_id;
+        $this->assertNotNull($groupId);
+
+        foreach ($rows as $row) {
+            $this->assertArrayHasKey('groupId', $row);
+            $this->assertArrayHasKey('apartmentNo', $row);
+            $this->assertSame($groupId, $row['groupId'], 'a door of the building did not name it');
+            $this->assertNotNull($row['apartmentNo'], 'a door in a building has no number');
+        }
+
+        // Grouping by the key gives back one building of three, which is the
+        // whole point: the client can fold the rows without asking anything.
+        $this->assertSame([3], array_values(array_map(
+            'count',
+            collect($rows)->groupBy('groupId')->all(),
+        )));
+    }
+
+    public function test_a_standalone_listing_names_no_building(): void
+    {
+        // Null, not a group of one: the client branches on presence instead of
+        // comparing a size to 1, and a lone listing renders as a listing.
+        $unit = $this->unit();
+
+        $row = $this->actingAs($this->partner, 'dashboard')
+            ->getJson("/units/u_{$unit->id}")
+            ->assertOk()
+            ->json();
+
+        $this->assertArrayHasKey('groupId', $row);
+        $this->assertArrayHasKey('apartmentNo', $row);
+        $this->assertNull($row['groupId']);
+        $this->assertNull($row['apartmentNo']);
+        $this->assertSame(1, $row['groupSize']);
     }
 
     /* ---------- fixtures ---------- */
