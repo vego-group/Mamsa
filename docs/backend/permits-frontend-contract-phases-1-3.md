@@ -333,7 +333,7 @@
 
 **الجديد:** `permitExpiresAt` · `permitStatus`. (`licenseType` و`licensedUnitsCount` و`groupSize` كانوا موجودين من قبل.)
 
-**✅ `groupId` و`apartmentNo` بقوا في الرد ده كمان** (staging 28/09) — جنب `groupSize`:
+**✅ `groupId` و`apartmentNo` بقوا في الرد ده كمان** (الإنتاج 28/09) — جنب `groupSize`:
 
 ```json
 { "groupSize": 3, "groupId": "01M36C95Y28DDDCCMD0RPYJ8EF", "apartmentNo": "2" }
@@ -711,7 +711,6 @@
 | **`apartment_no` في رد الحجز** | ✅ **الإنتاج** |
 | **`POST /units/{id}/submit` بعدد — خطوة واحدة** | ✅ **الإنتاج** (مقفولة بالعَلَم) |
 | **`GET /config`** — الأعلام وقت التشغيل | ✅ **الإنتاج** |
-| `groupId`/`apartmentNo` في `GET /units` و`/units/{id}` بتاعة الشريك | ✅ **staging** (28/09) — مستني نشرة للإنتاج |
+| `groupId`/`apartmentNo` في `GET /units` و`/units/{id}` بتاعة الشريك | ✅ **الإنتاج** (28/09) |
 
-**كل حاجة في الملف ده وفي الملحق منشورة على الإنتاج**، ما عدا آخر سطر — ده على staging
-ومستني موافقتكم على نشره.
+**كل حاجة في الملف ده وفي الملحق منشورة على الإنتاج.** مافيش بند مفتوح.

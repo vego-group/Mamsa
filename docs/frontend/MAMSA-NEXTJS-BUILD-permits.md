@@ -470,7 +470,7 @@ NEXT_PUBLIC_PERMIT_WARNING_DAYS=30       # قيمة احتياطية فقط
 | `groupId`/`apartmentNo` في رد `/submit` | ✅ **الإنتاج** · §١.١ في الملحق |
 | `GET /config` — الأعلام وقت التشغيل | ✅ **الإنتاج** · §٩ |
 
-| `groupId`/`apartmentNo` في `GET /units` بتاعة الشريك | ✅ **staging** (28/09) — مستني نشرة للإنتاج |
+| `groupId`/`apartmentNo` في `GET /units` بتاعة الشريك | ✅ **الإنتاج** (28/09) |
 
 **ولازم تستعملوها:** من غير `groupId` قائمة الشريك بتعرض صف لكل شقة من غير ما تقول إنهم مبنى
 واحد. جمّعوا بـ`groupId` ورتّبوا جوّه المجموعة بـ`apartmentNo`:
