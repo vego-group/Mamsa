@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Permits\PermitExpiry;
 use App\Support\Permits\PermitWriter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -226,5 +227,66 @@ class Unit extends Model
     public function getAvgRatingAttribute(): ?float
     {
         return $this->reviews()->avg('rating');
+    }
+
+    /**
+     * Let a public URL address a BUILDING, not a door.
+     *
+     * The storefront shows one card per building and the server picks a free
+     * apartment at booking time, so the id in a URL is whichever door happened
+     * to be the representative that day. That door can be rejected, closed or
+     * lose its permit while the building carries on selling — and a link the
+     * guest saved, or a favourite, then 404s against a building that is still
+     * open. `listing_id` is the stable name for the building, so the public
+     * routes accept it wherever they accept an id.
+     *
+     * A plain numeric id resolves exactly as it always did, first and
+     * unchanged; nothing about the existing surfaces moves. Only a value that
+     * is NOT an existing id is read as a listing key:
+     *   - `u<id>`  the listing form of a standalone unit
+     *   - a ULID   the building — resolves to its representative
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field !== null) {
+            return parent::resolveRouteBinding($value, $field);
+        }
+
+        $value = (string) $value;
+
+        if (ctype_digit($value) && ($unit = $this->newQuery()->find((int) $value))) {
+            return $unit;
+        }
+
+        return self::resolveListingKey($value);
+    }
+
+    /**
+     * The unit a `listing_id` names.
+     *
+     * For a building that is the same representative the listing picks — the
+     * lowest id among the doors that may actually be sold — so opening a saved
+     * link lands on the same card the search would show. Computed with the
+     * storefront's own predicate rather than a copy of it: type supported,
+     * approved, available, permit not lapsed.
+     *
+     * Null when every door is closed. That is the honest answer: the building
+     * has nothing to show, and the caller returns its usual 404.
+     */
+    public static function resolveListingKey(string $key): ?self
+    {
+        if (preg_match('/^u(\d+)$/', $key, $matches)) {
+            return self::find((int) $matches[1]);
+        }
+
+        $query = self::query()
+            ->whereIn('unit_type', self::SUPPORTED_TYPES)
+            ->where('approval_status', 'approved')
+            ->where('status', 'available')
+            ->where('unit_group_id', $key);
+
+        PermitExpiry::covering($query);
+
+        return $query->orderBy('id')->first();
     }
 }
