@@ -100,6 +100,20 @@ class PaymentController extends Controller
                 'cleaning_fee' => (float) $booking->cleaning_fee,
                 'taxes' => (float) $booking->taxes,
                 'unit' => [
+                    // The ALLOCATED apartment, which in a building is not the
+                    // listing the guest tapped: the server picks a free door.
+                    // Without these three the payment screen could name the
+                    // building but not say which id it is paying for, nor match
+                    // the booking back to the card the guest came from.
+                    'id' => $unit->id,
+                    // Stable across the whole building, so a client can tie this
+                    // payment to the listing it opened. `unit_group_id` for a
+                    // building, `u<id>` for a standalone one — the same value
+                    // UnitResource emits, so the two cannot disagree.
+                    'listing_id' => $unit->unit_group_id ?: 'u'.$unit->id,
+                    // Which door. Null on a standalone listing, and the key is
+                    // always present so a client reads it unconditionally.
+                    'apartment_no' => $unit->apartment_no,
                     'name' => $unit->unit_name,
                     'city' => $unit->city,
                     'district' => $unit->district,
