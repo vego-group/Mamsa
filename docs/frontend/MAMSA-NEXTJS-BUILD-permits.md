@@ -143,7 +143,7 @@ if (res.status === 409 && body.code === 'BOOKING_EXCEEDS_PERMIT_VALIDITY') {
 // صح:
 const allocated = booking.unit;          // الشقة اللي السيرفر خصصها فعلاً
 const unitId = booking.unit.id;          // ممكن تختلف عن اللي بعتّوه
-// booking.unit_id في جذر الرد = null — ما تستخدموهوش
+// unit_id مش موجود في جذر الرد أصلاً — غايب، مش null
 ```
 في مبنى، الكارت بيعرض ممثّل واحد والسيرفر بيختار شقة فاضية ومرخّصة. **صفحة تأكيد الحجز لازم تقرا `booking.unit`.**
 
@@ -225,7 +225,7 @@ const doorNumber = booking.unit.apartment_no   // "1" في مبنى · null في
 <HijriGregorianDateField
   name="permitExpiresAt"
   label="تاريخ انتهاء التصريح"
-  required={PERMIT_EXPIRY_REQUIRED}   // من env، حالياً false
+  required={flags.permitExpiryRequired}   // من GET /config — §٩ · حالياً false
   help="مكتوب على التصريح. أدخله هجري أو ميلادي."
 />
 ```
