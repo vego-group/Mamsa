@@ -7,6 +7,8 @@ namespace Tests\Feature;
 use App\Models\AuditLog;
 use App\Models\Booking;
 use App\Models\DashboardUpload;
+use App\Models\PartnerLedgerEntry;
+use App\Models\PartnerWallet;
 use App\Models\Payment;
 use App\Models\Permit;
 use App\Models\Refund;
@@ -92,6 +94,12 @@ class PrelaunchCleanupTest extends TestCase
         $this->assertNull(User::find($fixture['guest_user_id']));
         $this->assertSame(0, Payment::count());
         $this->assertSame(0, Refund::count());
+        $this->assertSame(0, PartnerLedgerEntry::count(), 'the ledger row for the test booking survived');
+
+        // The wallet is restored, not removed: it existed before the test.
+        $wallet = PartnerWallet::where('partner_user_id', User::platform()->id)->first();
+        $this->assertNotNull($wallet, 'a wallet that existed before the test was deleted');
+        $this->assertSame(0.0, (float) $wallet->available_balance);
         $this->assertSame(0, DashboardUpload::count());
 
         // …and the real ones are untouched.
@@ -319,6 +327,23 @@ class PrelaunchCleanupTest extends TestCase
             'type' => 'refund', 'amount' => 1.15, 'refund_percent' => 100, 'status' => 'succeeded',
         ]);
 
+        // A wallet that existed BEFORE the test, with a balance the booking
+        // then moved. Cleanup must restore the number and keep the row.
+        PartnerWallet::create([
+            'partner_user_id' => User::platform()->id,
+            'available_balance' => 0, 'pending_balance' => 0,
+        ]);
+
+        // A ledger row for the booking. It is referenced by ref_type/ref_id, and
+        // the command used to look for a booking_id column that does not exist
+        // — which SQLite accepted silently. Creating one makes the query real.
+        PartnerLedgerEntry::create([
+            'partner_user_id' => User::platform()->id, 'type' => 'earning',
+            'amount' => 0.90, 'balance_after' => 0.90,
+            'ref_type' => 'booking', 'ref_id' => (string) $booking->id,
+            'description' => 'prelaunch test', 'created_at' => now(),
+        ]);
+
         $upload = DashboardUpload::create([
             'id' => 'file_'.strtolower((string) str()->ulid()), 'user_id' => $partner->id,
             'kind' => 'license_pdf', 'original_name' => 'p.pdf', 'mime' => 'application/pdf',
@@ -345,6 +370,10 @@ class PrelaunchCleanupTest extends TestCase
             'baseline_user_ids' => $baselineUsers,
             'baseline' => $baseline,
             'keep_partner_suspended' => $keepPartner,
+            'wallet' => [
+                'user_id' => User::platform()->id, 'existed' => true,
+                'available_balance' => 0, 'pending_balance' => 0,
+            ],
         ]);
 
         return $fixture;

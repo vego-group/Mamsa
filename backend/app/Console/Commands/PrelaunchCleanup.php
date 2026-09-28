@@ -266,7 +266,7 @@ class PrelaunchCleanup extends Command
         if ($booking) {
             $this->drop('refunds', Refund::where('booking_id', $booking)->delete());
             $this->drop('payments', Payment::where('booking_id', $booking)->delete());
-            $this->drop('partner_ledger_entries', PartnerLedgerEntry::where('booking_id', $booking)->delete());
+            $this->drop('partner_ledger_entries', $this->ledgerEntries($booking)->delete());
             $this->drop('notifications', $this->notifications($booking)->delete());
             $this->drop('bookings', Booking::where('id', $booking)->delete());
         }
@@ -398,6 +398,21 @@ class PrelaunchCleanup extends Command
 
     /* ---------- helpers ---------- */
 
+    /**
+     * The ledger references a booking through `ref_type` + `ref_id`, not a
+     * `booking_id` column. This method existed as `where('booking_id', …)` and
+     * every test passed: SQLite treats a double-quoted identifier it cannot
+     * resolve as a STRING LITERAL, so the clause compared 'ref_id' to a number,
+     * matched nothing and raised nothing. MySQL rejected it outright on the
+     * first staging dry run.
+     */
+    private function ledgerEntries(int|string $bookingId): Builder
+    {
+        return PartnerLedgerEntry::query()
+            ->where('ref_type', 'booking')
+            ->where('ref_id', (string) $bookingId);
+    }
+
     private function auditLogs(int|string|null $bookingId, int $unitId): Builder
     {
         return AuditLog::query()->where(function (Builder $q) use ($bookingId, $unitId) {
@@ -423,7 +438,11 @@ class PrelaunchCleanup extends Command
             return;
         }
 
-        $wallet = PartnerWallet::where('user_id', $before['user_id'])->first();
+        // The column is `partner_user_id`, not `user_id`. The manifest key stays
+        // `user_id` because it means "whose wallet"; the query has to speak the
+        // schema's language. Audited against MySQL's information_schema after
+        // SQLite swallowed two of these silently.
+        $wallet = PartnerWallet::where('partner_user_id', $before['user_id'])->first();
 
         if (! $wallet) {
             return;
