@@ -19,18 +19,39 @@ class FavoriteController extends Controller
     /** GET /user/favorites — the user's favourited units (supported/available only). */
     public function index(Request $request): JsonResponse
     {
-        $units = $request->user()->favoriteUnits()
-            ->with(['images', 'features'])
-            ->whereIn('unit_type', Unit::SUPPORTED_TYPES)
-            ->where('approval_status', 'approved')
-            ->where('status', 'available')
+        // The favourite is resolved to its BUILDING first, and the building to
+        // whichever apartment is currently sellable — not to the exact row that
+        // was saved.
+        //
+        // The row is stored against the building's lowest id, which is stable,
+        // but stable is not the same as open: that one door can be withdrawn or
+        // lose its permit while the building carries on selling. Filtering on
+        // the saved row would then drop the building out of the guest's
+        // favourites although it is still on the storefront — the heart goes
+        // out by itself and nothing says why.
+        $keys = $request->user()->favoriteUnits()
             ->latest('favorites.created_at')
+            ->get(['units.id', 'units.unit_group_id'])
+            ->map(fn (Unit $u) => $u->unit_group_id ?: 'u'.$u->id)
+            ->unique()
+            ->values();
+
+        // Null when every door of that building is closed: then there is
+        // genuinely nothing to show, and it drops out.
+        $ids = $keys
+            ->map(fn (string $key) => Unit::resolveListingKey($key)?->id)
+            ->filter()
+            ->values();
+
+        // One query for the cards, then put them back in the order the guest
+        // saved them — whereIn does not promise to.
+        $order = $ids->flip();
+
+        $units = Unit::query()
+            ->with(['images', 'features'])
+            ->whereIn('id', $ids)
             ->get()
-            // One card per building, like the storefront. A guest who
-            // favourited a tower wants it once, not once per apartment — and
-            // rows predating the canonicalisation in store() can still be
-            // spread across siblings.
-            ->unique(fn (Unit $u) => $u->unit_group_id ?: 'u'.$u->id)
+            ->sortBy(fn (Unit $u) => $order[$u->id])
             ->values();
 
         Availability::attachCounts($units);
