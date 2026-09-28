@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Support\Dashboard;
 
 use App\Models\CancellationPolicy;
+use App\Models\Permit;
 use App\Models\Unit;
+use App\Support\Permits\PermitExpiry;
 use App\Support\Units\UnitLicense;
 
 /**
@@ -59,8 +61,8 @@ class UnitPresenter
             // expiring · expired · unknown — so the dashboard renders the
             // banner without doing date arithmetic, and the two surfaces
             // cannot disagree about what "expiring" means.
-            'permitExpiresAt' => \App\Support\Permits\PermitExpiry::on($unit)?->toDateString(),
-            'permitStatus' => \App\Support\Permits\PermitExpiry::status($unit),
+            'permitExpiresAt' => PermitExpiry::on($unit)?->toDateString(),
+            'permitStatus' => PermitExpiry::status($unit),
             'permitAddress' => self::permitAddress($unit),
             // The reviewer's job on a building is to check the number the
             // partner TYPED against the number written on the permit they
@@ -72,6 +74,18 @@ class UnitPresenter
             'licensedUnitsCount' => $unit->licensed_units_count !== null
                 ? (int) $unit->licensed_units_count : null,
             'groupSize' => UnitLicense::groupSize($unit),
+            // The building this listing belongs to, and which door it is.
+            //
+            // Without these the partner's list is five rows that look like five
+            // separate listings they do not remember creating — the grouping
+            // exists in the data and nowhere in the response. `groupId` is the
+            // key to group by; `apartmentNo` is what the partner calls the door.
+            //
+            // Both null for a standalone listing, deliberately: a building of
+            // one is not a thing, and `null` lets the client branch on presence
+            // rather than compare a size to 1.
+            'groupId' => $unit->unit_group_id,
+            'apartmentNo' => $unit->apartment_no,
             'ownershipDocFileId' => $unit->ownership_doc_file,
             'photos' => $unit->images
                 ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
@@ -103,9 +117,9 @@ class UnitPresenter
      *
      * @return array<string, string|null>
      */
-    private static function permitAddress(\App\Models\Unit $unit): array
+    private static function permitAddress(Unit $unit): array
     {
-        $permit = \App\Models\Permit::currentFor($unit);
+        $permit = Permit::currentFor($unit);
 
         return [
             'city' => $permit?->addr_city,
