@@ -60,7 +60,7 @@ class PrelaunchCleanupTest extends TestCase
 
     public function test_a_dry_run_deletes_nothing(): void
     {
-        $fixture = $this->testRun();
+        $fixture = $this->completedRun();
 
         $this->artisan('prelaunch:cleanup', ['--dry-run' => true, '--manifest' => self::MANIFEST])
             ->assertExitCode(0);
@@ -72,7 +72,7 @@ class PrelaunchCleanupTest extends TestCase
 
     public function test_it_removes_exactly_the_recorded_rows_and_the_counts_return(): void
     {
-        $fixture = $this->testRun();
+        $fixture = $this->completedRun();
 
         $this->assertSame(2, Unit::count());
         $this->assertSame(4, User::count());   // platform + real owner + guest + partner
@@ -112,7 +112,7 @@ class PrelaunchCleanupTest extends TestCase
 
     public function test_it_refuses_to_delete_an_account_that_existed_before_the_test(): void
     {
-        $fixture = $this->testRun();
+        $fixture = $this->completedRun();
 
         // The manifest claims the test created an account that the baseline
         // also lists as pre-existing. Contradiction → stop.
@@ -134,7 +134,7 @@ class PrelaunchCleanupTest extends TestCase
 
     public function test_a_partner_account_kept_on_purpose_is_suspended_not_deleted(): void
     {
-        $fixture = $this->testRun(keepPartner: true);
+        $fixture = $this->completedRun(keepPartner: true);
 
         $this->artisan('prelaunch:cleanup', ['--manifest' => self::MANIFEST])
             ->expectsOutputToContain('kept and SUSPENDED')
@@ -154,9 +154,12 @@ class PrelaunchCleanupTest extends TestCase
      * A finished test run: the rows it would have written, and the manifest it
      * would have left behind.
      *
+     * Named `completedRun` and not `testRun` on purpose: a method whose name
+     * starts with "test" is a TEST to PHPUnit and to pint, which renames it.
+     *
      * @return array<string, mixed>
      */
-    private function test_run(bool $keepPartner = false): array
+    private function completedRun(bool $keepPartner = false): array
     {
         $baselineUsers = User::pluck('id')->all();
         $baseline = [
