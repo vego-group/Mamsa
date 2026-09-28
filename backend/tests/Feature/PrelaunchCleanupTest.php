@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\Booking;
 use App\Models\DashboardUpload;
 use App\Models\Payment;
@@ -12,6 +13,10 @@ use App\Models\Refund;
 use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Console\Output\BufferedOutput;
 use Tests\TestCase;
 
 /**
@@ -148,6 +153,123 @@ class PrelaunchCleanupTest extends TestCase
         $this->assertSame(3, User::count());   // platform + real owner + the kept partner
     }
 
+    public function test_the_dry_run_touches_exactly_the_same_tables_as_the_real_run(): void
+    {
+        // The reason the plan was rewritten: a hand-listed dry run drifted from
+        // the purge and hid three tables. Running both and diffing the reports
+        // is the only way that stays true as the purge grows.
+        $this->completedRun();
+
+        // A buffer per call: Artisan::output() accumulates across calls in one
+        // test, which silently doubled every number the first time this ran.
+        $dry = $this->tableCounts($this->cleanup(['--dry-run' => true]));
+        $real = $this->tableCounts($this->cleanup([]));
+
+        $this->assertNotEmpty($dry, 'the dry run reported no tables at all');
+        $this->assertSame($dry, $real, 'the dry run and the real run disagree about what is removed');
+    }
+
+    public function test_it_refuses_when_the_test_unit_somehow_belongs_to_a_group(): void
+    {
+        $fixture = $this->completedRun();
+
+        // A building means a group-scoped permit may cover doors that are not
+        // ours. The test never makes one, so this can only be a surprise.
+        Unit::where('id', $fixture['unit_id'])->update(['unit_group_id' => (string) str()->ulid()]);
+
+        $this->artisan('prelaunch:cleanup', ['--manifest' => self::MANIFEST])
+            ->expectsOutputToContain('REFUSING')
+            ->assertExitCode(1);
+
+        $this->assertNotNull(Unit::find($fixture['unit_id']), 'it deleted a unit that belongs to a group');
+    }
+
+    public function test_it_removes_audit_rows_written_against_the_unit_not_only_the_booking(): void
+    {
+        $fixture = $this->completedRun();
+
+        // A reviewer approving the test listing writes this, and it names the
+        // UNIT. Deleting only the booking's rows would leave it on production.
+        AuditLog::create([
+            'auditable_type' => Unit::class, 'auditable_id' => $fixture['unit_id'],
+            'action' => 'unit.approved', 'actor_id' => $this->realOwner->id,
+        ]);
+
+        $this->assertSame(1, AuditLog::count());
+
+        $this->artisan('prelaunch:cleanup', ['--manifest' => self::MANIFEST])->assertExitCode(0);
+
+        $this->assertSame(0, AuditLog::count(), 'an audit row against the test unit survived');
+    }
+
+    public function test_it_deletes_the_files_on_disk_not_just_the_rows(): void
+    {
+        // The gap the 22/09 production cleanup had to go back and close: rows
+        // gone, bytes still there and still reachable by URL.
+        Storage::fake('public');
+
+        $fixture = $this->completedRun();
+
+        $photo = 'units/'.$fixture['unit_id'].'/p.jpg';
+        $doc = 'dashboard/license_pdf/x.pdf';
+        Storage::disk('public')->put($photo, 'jpeg-bytes');
+        Storage::disk('public')->put($doc, 'pdf-bytes');
+
+        $this->artisan('prelaunch:cleanup', ['--manifest' => self::MANIFEST])
+            ->expectsOutputToContain('files deleted')
+            ->assertExitCode(0);
+
+        Storage::disk('public')->assertMissing($photo);
+        Storage::disk('public')->assertMissing($doc);
+    }
+
+    public function test_a_file_another_listing_still_uses_is_left_alone(): void
+    {
+        Storage::fake('public');
+
+        $fixture = $this->completedRun();
+
+        // The real listing shares the path. Our rows going away must not take
+        // somebody else's photo with them.
+        $shared = 'units/shared/p.jpg';
+        Storage::disk('public')->put($shared, 'jpeg-bytes');
+        DB::table('unit_images')->where('unit_id', $fixture['unit_id'])->update(['path' => $shared]);
+        $this->realUnit->images()->create(['path' => $shared, 'is_main' => false, 'sort_order' => 2]);
+
+        $this->artisan('prelaunch:cleanup', ['--manifest' => self::MANIFEST])->assertExitCode(0);
+
+        Storage::disk('public')->assertExists($shared);
+    }
+
+    /** @param array<string, mixed> $options */
+    private function cleanup(array $options): string
+    {
+        $buffer = new BufferedOutput;
+
+        Artisan::call('prelaunch:cleanup', $options + ['--manifest' => self::MANIFEST], $buffer);
+
+        return $buffer->fetch();
+    }
+
+    /**
+     * The "table  count" lines from a report, as a map. Ignores the totals and
+     * the notes so the two runs compare on substance.
+     *
+     * @return array<string, int>
+     */
+    private function tableCounts(string $output): array
+    {
+        $rows = [];
+
+        foreach (explode("\n", $output) as $line) {
+            if (preg_match('/^\s{2}([a-z_]+)\s+(\d+)$/', rtrim($line), $hit)) {
+                $rows[$hit[1]] = (int) $hit[2];
+            }
+        }
+
+        return $rows;
+    }
+
     /* ---------- fixtures ---------- */
 
     /**
@@ -169,6 +291,8 @@ class PrelaunchCleanupTest extends TestCase
             'refunds' => Refund::count(),
             'permits' => Permit::count(),
             'users' => User::count(),
+            'notifications' => DB::table('notifications')->count(),
+            'dashboard_uploads' => DashboardUpload::count(),
             'user_ids' => $baselineUsers,
         ];
 
@@ -233,6 +357,8 @@ class PrelaunchCleanupTest extends TestCase
             'units' => Unit::count(), 'bookings' => Booking::count(),
             'payments' => Payment::count(), 'refunds' => Refund::count(),
             'permits' => Permit::count(), 'users' => User::count(),
+            'notifications' => DB::table('notifications')->count(),
+            'dashboard_uploads' => DashboardUpload::count(),
         ];
         $baseline['user_ids'] = $manifest['baseline_user_ids'] ?? ($baseline['user_ids'] ?? []);
 

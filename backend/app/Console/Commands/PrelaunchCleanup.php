@@ -16,9 +16,11 @@ use App\Models\Refund;
 use App\Models\Unit;
 use App\Models\UnitImage;
 use App\Models\User;
+use App\Support\Documents\DocumentStorage;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Remove everything the pre-launch live test wrote to PRODUCTION, and prove it.
@@ -30,30 +32,59 @@ use Illuminate\Support\Facades\DB;
  * refuses to do anything without one.
  *
  * The name check still happens — but as an ASSERTION, not a selector. If the
- * unit the manifest points at is not the test unit, that means the manifest and
- * the database disagree about reality, and the only safe move is to stop and
- * let a human look.
+ * unit the manifest points at is not the test unit, the manifest and the
+ * database disagree about reality, and the only safe move is to stop.
+ *
+ * **The dry run is the real run, rolled back.** An earlier version listed the
+ * tables it would touch in a separate method, and that list drifted: three
+ * tables the purge deleted from were missing from it, so the thing under review
+ * was not the thing that would happen. There is now one code path, and
+ * `--dry-run` differs only in a rollback and in not touching the disk.
  *
  * Usage:
- *   php artisan prelaunch:cleanup --dry-run     # counts only, deletes nothing
+ *   php artisan prelaunch:cleanup --dry-run     # rolled back, nothing removed
  *   php artisan prelaunch:cleanup               # the real thing
  */
 class PrelaunchCleanup extends Command
 {
     protected $signature = 'prelaunch:cleanup
-        {--dry-run : Report what would be deleted and delete nothing}
+        {--dry-run : Run the whole purge in a transaction and roll it back}
         {--manifest=prelaunch/manifest.json : Path under storage/app}';
 
-    protected $description = 'Delete the pre-launch live test rows, by recorded id, and verify the counts return to baseline';
+    protected $description = 'Delete the pre-launch live test rows and files, by recorded id, and verify the counts return to baseline';
 
     /** The marker the test unit must carry. Checked, never searched by. */
     private const UNIT_MARKER = 'PRELAUNCH-TEST';
 
-    /** @var array<string, int> */
+    /** Every table whose count must return to baseline. */
+    private const COUNTED = [
+        'units', 'bookings', 'payments', 'refunds',
+        'permits', 'users', 'notifications', 'dashboard_uploads',
+    ];
+
+    /** @var array<string, int> rows removed, per table */
     private array $deleted = [];
+
+    /** @var array<int, array{path: string, why: string}> files the purge found orphaned */
+    private array $files = [];
+
+    /** @var array<int, string> lines that are not row counts (the wallet) */
+    private array $notes = [];
+
+    /** @var array<string, string> path of each upload, read before its row goes */
+    private array $uploadPaths = [];
 
     public function handle(): int
     {
+        // Artisan resolves a command ONCE per process, so a second invocation
+        // reuses this object. Without the reset a dry run followed by the real
+        // run reports every number doubled — which is precisely the state the
+        // dry run exists to let someone trust. Found by the parity test.
+        $this->deleted = [];
+        $this->files = [];
+        $this->notes = [];
+        $this->uploadPaths = [];
+
         $manifest = $this->manifest();
 
         if ($manifest === null) {
@@ -63,7 +94,7 @@ class PrelaunchCleanup extends Command
         $dry = (bool) $this->option('dry-run');
 
         $this->line('');
-        $this->info($dry ? '=== DRY RUN — nothing will be deleted ===' : '=== DELETING ===');
+        $this->info($dry ? '=== DRY RUN — every change is rolled back ===' : '=== DELETING ===');
         $this->line('manifest written at: '.($manifest['created_at'] ?? '—'));
         $this->line('');
 
@@ -72,19 +103,33 @@ class PrelaunchCleanup extends Command
         }
 
         if ($dry) {
-            $this->report($this->plan($manifest));
+            DB::beginTransaction();
+
+            try {
+                $this->purge($manifest);
+                $after = $this->counts();
+            } finally {
+                DB::rollBack();
+            }
+
+            $this->report();
+            $this->reportFiles(apply: false);
+            $this->verify($manifest, $after, dry: true);
 
             $this->line('');
-            $this->info('Dry run only. Re-run without --dry-run to delete.');
+            $this->info('Dry run only — the transaction was rolled back and no file was touched.');
 
             return self::SUCCESS;
         }
 
         DB::transaction(fn () => $this->purge($manifest));
 
-        $this->report($this->deleted);
+        // Files go AFTER the rows commit: an upload is safe to remove only once
+        // nothing points at it, and our own rows were the things pointing.
+        $this->report();
+        $this->reportFiles(apply: true);
 
-        return $this->verify($manifest) ? self::SUCCESS : self::FAILURE;
+        return $this->verify($manifest, $this->counts()) ? self::SUCCESS : self::FAILURE;
     }
 
     /* ---------- the manifest ---------- */
@@ -114,11 +159,7 @@ class PrelaunchCleanup extends Command
 
     /* ---------- the guards ---------- */
 
-    /**
-     * Everything that must be true before a single row is removed.
-     *
-     * @param  array<string, mixed>  $m
-     */
+    /** @param array<string, mixed> $m */
     private function assertSafe(array $m): bool
     {
         $unit = Unit::find($m['unit_id']);
@@ -132,9 +173,20 @@ class PrelaunchCleanup extends Command
             return false;
         }
 
-        // A booking that belongs to a different unit means the manifest is
-        // stale or was written for another run. Deleting on it would remove a
-        // real booking.
+        // permits are removed at UNIT scope. A group here would mean the test
+        // somehow produced a building, and a group-scoped permit covers doors
+        // that are not ours. Stop rather than guess which rows are safe.
+        if ($unit && $unit->unit_group_id) {
+            $group = Permit::where('scope_type', Permit::SCOPE_GROUP)
+                ->where('scope_id', (string) $unit->unit_group_id)->count();
+
+            $this->error("REFUSING: unit #{$unit->id} belongs to group {$unit->unit_group_id}"
+                .($group > 0 ? ", and {$group} group-scoped permit row(s) exist." : '.'));
+            $this->line('The test creates no buildings. A group here means something else happened.');
+
+            return false;
+        }
+
         if (! empty($m['booking_id'])) {
             $booking = Booking::find($m['booking_id']);
 
@@ -145,8 +197,6 @@ class PrelaunchCleanup extends Command
             }
         }
 
-        // No user may be deleted unless the manifest says the test CREATED it,
-        // and it is not one of the accounts that existed before the test.
         $protected = array_map('intval', $m['baseline']['user_ids'] ?? []);
 
         foreach ($this->usersToDelete($m) as $id) {
@@ -189,7 +239,6 @@ class PrelaunchCleanup extends Command
             }
         }
 
-        // The partner account may be kept, suspended, for later use.
         if (($m['keep_partner_suspended'] ?? false) === true) {
             $ids = array_values(array_filter($ids, fn (int $id) => $id !== (int) ($m['partner_user_id'] ?? 0)));
         }
@@ -197,36 +246,7 @@ class PrelaunchCleanup extends Command
         return $ids;
     }
 
-    /* ---------- counting and deleting ---------- */
-
-    /**
-     * What a real run would remove, per table.
-     *
-     * @param  array<string, mixed>  $m
-     * @return array<string, int>
-     */
-    private function plan(array $m): array
-    {
-        $booking = $m['booking_id'] ?? null;
-        $unit = $m['unit_id'];
-        $users = $this->usersToDelete($m);
-
-        return array_filter([
-            'refunds' => $booking ? Refund::where('booking_id', $booking)->count() : 0,
-            'payments' => $booking ? Payment::where('booking_id', $booking)->count() : 0,
-            'partner_ledger_entries' => $booking ? PartnerLedgerEntry::where('booking_id', $booking)->count() : 0,
-            'audit_logs' => $booking ? $this->auditLogs($booking)->count() : 0,
-            'notifications' => $booking ? $this->notifications($booking)->count() : 0,
-            'bookings' => $booking ? Booking::where('id', $booking)->count() : 0,
-            'unit_images' => UnitImage::where('unit_id', $unit)->count(),
-            'permits' => Permit::where('scope_type', Permit::SCOPE_UNIT)->where('scope_id', (string) $unit)->count(),
-            'units' => Unit::where('id', $unit)->count(),
-            'dashboard_uploads' => count($m['upload_ids'] ?? []),
-            'personal_access_tokens' => $users ? DB::table('personal_access_tokens')->whereIn('tokenable_id', $users)->count() : 0,
-            'partner_details' => $users ? PartnerDetail::whereIn('user_id', $users)->count() : 0,
-            'users' => count($users),
-        ], fn (int $n) => $n > 0);
-    }
+    /* ---------- the purge ---------- */
 
     /** @param array<string, mixed> $m */
     private function purge(array $m): void
@@ -235,28 +255,38 @@ class PrelaunchCleanup extends Command
         $unit = (int) $m['unit_id'];
         $users = $this->usersToDelete($m);
 
+        // Paths are read BEFORE their rows go: afterwards there is nothing to
+        // read them from.
+        $imagePaths = $this->imagePaths($unit);
+        $uploadIds = array_values((array) ($m['upload_ids'] ?? []));
+        $this->uploadPaths = $uploadIds === []
+            ? []
+            : DashboardUpload::whereIn('id', $uploadIds)->pluck('path', 'id')->all();
+
         if ($booking) {
             $this->drop('refunds', Refund::where('booking_id', $booking)->delete());
             $this->drop('payments', Payment::where('booking_id', $booking)->delete());
             $this->drop('partner_ledger_entries', PartnerLedgerEntry::where('booking_id', $booking)->delete());
-            $this->drop('audit_logs', $this->auditLogs($booking)->delete());
             $this->drop('notifications', $this->notifications($booking)->delete());
             $this->drop('bookings', Booking::where('id', $booking)->delete());
         }
 
-        // The wallet row is RESTORED, not deleted: it may have existed before
-        // the test, and a partner's wallet is not ours to remove.
+        // Covers the UNIT as well as the booking: a review decision or an admin
+        // edit on the test listing writes an audit row against the unit, and
+        // deleting only the booking's rows would leave it behind.
+        $this->drop('audit_logs', $this->auditLogs($booking, $unit)->delete());
+
         $this->restoreWallet($m);
 
         $this->drop('unit_images', UnitImage::where('unit_id', $unit)->delete());
         $this->drop('permits', Permit::where('scope_type', Permit::SCOPE_UNIT)->where('scope_id', (string) $unit)->delete());
         $this->drop('units', Unit::where('id', $unit)->delete());
 
-        if ($ids = $m['upload_ids'] ?? []) {
-            $this->drop('dashboard_uploads', DashboardUpload::whereIn('id', $ids)->delete());
+        if ($uploadIds !== []) {
+            $this->drop('dashboard_uploads', DashboardUpload::whereIn('id', $uploadIds)->delete());
         }
 
-        if ($users) {
+        if ($users !== []) {
             $this->drop('personal_access_tokens', DB::table('personal_access_tokens')->whereIn('tokenable_id', $users)->delete());
             $this->drop('refresh_tokens', DB::table('refresh_tokens')->whereIn('user_id', $users)->delete());
             $this->drop('partner_details', PartnerDetail::whereIn('user_id', $users)->delete());
@@ -264,23 +294,119 @@ class PrelaunchCleanup extends Command
             $this->drop('users', User::whereIn('id', $users)->delete());
         }
 
-        // A partner account kept on purpose is suspended, never left able to
-        // log in: is_active is what AuthController checks first.
         if (($m['keep_partner_suspended'] ?? false) === true && ! empty($m['partner_user_id'])) {
             User::where('id', $m['partner_user_id'])->update(['is_active' => false]);
-            $this->line('  partner account #'.$m['partner_user_id'].' kept and SUSPENDED (is_active = false)');
+            $this->notes[] = 'partner account #'.$m['partner_user_id'].' kept and SUSPENDED (is_active = false)';
         }
+
+        // The reference checks run HERE, with our rows already gone: anything
+        // still pointing at these bytes belongs to somebody else, and stays.
+        $this->collectFiles($imagePaths, $uploadIds);
+    }
+
+    /* ---------- files on disk ---------- */
+
+    /**
+     * Every path the test unit's photos occupy, originals and derivatives.
+     *
+     * Deleting the rows and leaving the bytes is the exact gap the 22/09
+     * production cleanup had to go back and close. The row is the pointer; the
+     * file is the thing that takes space and keeps being reachable by URL.
+     *
+     * @return array<int, string>
+     */
+    private function imagePaths(int $unitId): array
+    {
+        $paths = [];
+
+        foreach (UnitImage::where('unit_id', $unitId)->get() as $image) {
+            if (filled($image->path)) {
+                $paths[] = (string) $image->path;
+            }
+
+            foreach ((array) ($image->getRawOriginal('variants') ? json_decode((string) $image->getRawOriginal('variants'), true) : []) as $variant) {
+                if (is_string($variant) && filled($variant)) {
+                    $paths[] = $variant;
+                }
+            }
+        }
+
+        return array_values(array_unique($paths));
     }
 
     /**
-     * `audit_logs` is polymorphic — there is no booking_id column, so the rows
-     * are found by the morph pair. Still an id match, not a name match.
+     * @param  array<int, string>  $imagePaths
+     * @param  array<int, string>  $uploadIds
      */
-    private function auditLogs(int|string $bookingId): Builder
+    private function collectFiles(array $imagePaths, array $uploadIds): void
     {
-        return AuditLog::query()
-            ->where('auditable_type', Booking::class)
-            ->where('auditable_id', $bookingId);
+        $public = Storage::disk('public');
+
+        foreach ($imagePaths as $path) {
+            // Another listing may share the file. Checked now, after our rows
+            // are gone, so "still referenced" means referenced by somebody else.
+            $stillUsed = UnitImage::where('path', $path)
+                ->orWhere('variants', 'like', '%'.str_replace('/', '\\/', $path).'%')
+                ->exists();
+
+            if (! $stillUsed && $public->exists($path)) {
+                $this->files[] = ['path' => $path, 'why' => 'unit photo'];
+            }
+        }
+
+        foreach ($uploadIds as $id) {
+            // Read from the paths captured before the rows were deleted — by
+            // now the row is gone, so the model can no longer tell us.
+            $path = $this->uploadPaths[$id] ?? null;
+
+            if (blank($path) || DocumentStorage::referencedAnywhere((string) $id)) {
+                continue;
+            }
+
+            // The document may be on the public disk or in the vault — licence
+            // PDFs were moved there, and a public-only check reports "nothing
+            // to delete" for every one of them.
+            [$disk] = DocumentStorage::locate((string) $path);
+
+            if ($disk !== null) {
+                $this->files[] = ['path' => (string) $path, 'why' => 'upload '.$id];
+            }
+        }
+    }
+
+    private function reportFiles(bool $apply): void
+    {
+        $this->line('');
+
+        if ($this->files === []) {
+            $this->line('files: none orphaned');
+
+            return;
+        }
+
+        $this->info(($apply ? 'files deleted: ' : 'files that WOULD be deleted: ').count($this->files));
+
+        foreach ($this->files as $file) {
+            $this->line(sprintf('  %-60s %s', $file['path'], $file['why']));
+
+            if ($apply) {
+                DocumentStorage::delete($file['path']);
+                Storage::disk('public')->delete($file['path']);
+            }
+        }
+    }
+
+    /* ---------- helpers ---------- */
+
+    private function auditLogs(int|string|null $bookingId, int $unitId): Builder
+    {
+        return AuditLog::query()->where(function (Builder $q) use ($bookingId, $unitId) {
+            $q->where(fn (Builder $w) => $w->where('auditable_type', Unit::class)->where('auditable_id', $unitId));
+
+            if ($bookingId) {
+                $q->orWhere(fn (Builder $w) => $w->where('auditable_type', Booking::class)->where('auditable_id', $bookingId));
+            }
+        });
     }
 
     private function notifications(int|string $bookingId): \Illuminate\Database\Query\Builder
@@ -308,9 +434,13 @@ class PrelaunchCleanup extends Command
                 'available_balance' => $before['available_balance'],
                 'pending_balance' => $before['pending_balance'],
             ]);
-            $this->line('  partner_wallets: balance restored, row kept (it existed before the test)');
+            $this->notes[] = sprintf(
+                'partner_wallets: row KEPT (it existed before the test), balance restored to available=%s pending=%s',
+                $before['available_balance'], $before['pending_balance'],
+            );
         } else {
             $this->drop('partner_wallets', (int) $wallet->delete());
+            $this->notes[] = 'partner_wallets: row DELETED (the test created it)';
         }
     }
 
@@ -325,50 +455,63 @@ class PrelaunchCleanup extends Command
 
     /* ---------- reporting ---------- */
 
-    /** @param array<string, int> $rows */
-    private function report(array $rows): void
+    private function report(): void
     {
-        if ($rows === []) {
+        if ($this->deleted === [] && $this->notes === []) {
             $this->line('  (nothing to remove)');
 
             return;
         }
 
-        foreach ($rows as $table => $n) {
+        foreach ($this->deleted as $table => $n) {
             $this->line(sprintf('  %-26s %d', $table, $n));
         }
 
-        $this->line(sprintf('  %-26s %d', 'TOTAL', array_sum($rows)));
+        if ($this->deleted !== []) {
+            $this->line(sprintf('  %-26s %d', 'TOTAL ROWS', array_sum($this->deleted)));
+        }
+
+        foreach ($this->notes as $note) {
+            $this->line('  · '.$note);
+        }
     }
 
-    /**
-     * The counts must come back to exactly what they were. Anything else is
-     * reported as a failure — a leftover row on production is the thing this
-     * whole command exists to make impossible.
-     *
-     * @param  array<string, mixed>  $m
-     */
-    private function verify(array $m): bool
+    /** @return array<string, int> */
+    private function counts(): array
     {
-        $this->line('');
-        $this->info('=== counts after cleanup ===');
-
-        $now = [
+        return [
             'units' => Unit::count(),
             'bookings' => Booking::count(),
             'payments' => Payment::count(),
             'refunds' => Refund::count(),
             'permits' => Permit::count(),
             'users' => User::count(),
+            'notifications' => DB::table('notifications')->count(),
+            'dashboard_uploads' => DashboardUpload::count(),
         ];
+    }
+
+    /**
+     * Every counted table must come back to exactly what it was. Anything else
+     * is a failure — a leftover row on production is what this exists to make
+     * impossible.
+     *
+     * @param  array<string, mixed>  $m
+     * @param  array<string, int>  $after
+     */
+    private function verify(array $m, array $after, bool $dry = false): bool
+    {
+        $this->line('');
+        $this->info($dry ? '=== counts the real run WOULD leave ===' : '=== counts after cleanup ===');
 
         $ok = true;
 
-        foreach ($now as $table => $count) {
+        foreach (self::COUNTED as $table) {
+            $count = $after[$table] ?? 0;
             $want = $m['baseline'][$table] ?? null;
 
             if ($want === null) {
-                $this->line(sprintf('  %-10s %d  (no baseline recorded)', $table, $count));
+                $this->line(sprintf('  %-18s %d  (no baseline recorded)', $table, $count));
 
                 continue;
             }
@@ -382,15 +525,17 @@ class PrelaunchCleanup extends Command
             $match = $count === $want;
             $ok = $ok && $match;
 
-            $this->line(sprintf('  %-10s %d  (expected %d)  %s', $table, $count, $want, $match ? '✓' : '✗ MISMATCH'));
+            $this->line(sprintf('  %-18s %d  (expected %d)  %s', $table, $count, $want, $match ? '✓' : '✗ MISMATCH'));
         }
 
         $this->line('');
 
         if ($ok) {
             $this->info('✓ every count is back to baseline.');
-        } else {
+        } elseif (! $dry) {
             $this->error('✗ a count did not return to baseline. STOP and report before doing anything else.');
+        } else {
+            $this->error('✗ a count would NOT return to baseline. Fix this before running for real.');
         }
 
         return $ok;
