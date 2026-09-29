@@ -146,10 +146,26 @@ final class DocumentStorage
     }
 
     /**
-     * Does any live column still point at this upload?
+     * ⚠️ NOT a comprehensive reference check, despite the name.
      *
-     * The same columns the orphan sweep reads, for the same reason: these are
-     * the only places a document can be reachable from.
+     * This looks at two columns on `units` and the file columns on
+     * `partner_details`. It does NOT look at:
+     *
+     *   - `unit_images.file_id`  — written as $upload->id (UnitWriter.php:352),
+     *                              which is EVERY unit photo, and
+     *   - `permits.file`         — ApartmentExpansion.php:117; usually mirrors
+     *                              the unit's tourism_permit_file, so the unit
+     *                              covers it, EXCEPT for a group-scoped permit.
+     *
+     * So a `false` from here does not mean the upload is unreferenced. It is
+     * safe only where it is used today: as a last guard inside a purge already
+     * narrowed to one marked test unit, where unit photos are matched
+     * separately beforehand. Using it to decide a bulk delete — an orphan sweep,
+     * `model:prune` — would delete every unit photo.
+     *
+     * Widen it (all four tables) before any such use. See item 2 of
+     * docs/ops/BACKLOG-deferred.md, which carries the coverage table and the
+     * owner's orphan rule.
      */
     public static function referencedAnywhere(string $value): bool
     {
