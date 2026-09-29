@@ -239,11 +239,12 @@ class Unit extends Model
      *
      * Numeric is tried first and wins outright, so no later form can ever take
      * an id's place. That ordering is the ONLY guarantee: codes have two
-     * formats — UnitWriter::uniqueCode() mints `MRN` + five characters, but the
-     * legacy POST /api/v1/partner/units mints eight random characters with no
-     * prefix (`1G4ADB2F`), which can start with, or in principle be entirely,
-     * digits. `code` is never read from a request body. `units.code` carries a
-     * UNIQUE index, so step 3 can only ever match one row.
+     * formats — UnitWriter::uniqueCode() mints `MRN` + five characters for a new
+     * listing, but UnitCloner::uniqueCode() mints eight random characters with
+     * no prefix for every apartment added to a building (`1G4ADB2F`), which can
+     * start with, or in principle be entirely, digits. `code` is never read from
+     * a request body. `units.code` carries a UNIQUE index, so step 3 can only
+     * ever match one row.
      * ────────────────────────────────────────────────────────────────────────
      *
      * The storefront shows one card per building and the server picks a free
