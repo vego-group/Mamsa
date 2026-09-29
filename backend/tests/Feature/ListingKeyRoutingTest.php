@@ -8,6 +8,7 @@ use App\Models\PartnerDetail;
 use App\Models\Permit;
 use App\Models\Unit;
 use App\Models\User;
+use App\Support\Dashboard\UnitPresenter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -197,6 +198,44 @@ class ListingKeyRoutingTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1)
             ->assertJsonPath('0.listing_id', $first->unit_group_id);
+    }
+
+    public function test_a_listing_code_still_opens_the_page(): void
+    {
+        // The partner dashboard published /units/{code} from 14/07 to 29/09 and
+        // the API never resolved a code, so every link a partner copied and
+        // shared was dead. Accepting it repairs those without a redirect table.
+        $unit = $this->unit();
+
+        $this->getJson("/api/v1/units/{$unit->code}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $unit->id)
+            ->assertJsonPath('data.listing_id', 'u'.$unit->id);
+    }
+
+    public function test_a_code_inside_a_building_opens_the_building(): void
+    {
+        // A shared link naming one door should land on the card, like every
+        // other way of addressing a listing here.
+        [$first, $second] = $this->building(2);
+
+        $this->getJson("/api/v1/units/{$second->code}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $first->id)
+            ->assertJsonPath('data.listing_id', $first->unit_group_id);
+    }
+
+    public function test_the_partner_dashboard_publishes_the_key_not_the_code(): void
+    {
+        [$first, $second] = $this->building(2);
+
+        $payload = UnitPresenter::make($second);
+
+        $this->assertStringEndsWith('/units/'.$first->unit_group_id, (string) $payload['publicUrl']);
+        $this->assertStringNotContainsString($second->code, (string) $payload['publicUrl']);
+
+        $solo = $this->unit();
+        $this->assertStringEndsWith('/units/u'.$solo->id, (string) UnitPresenter::make($solo)['publicUrl']);
     }
 
     /* ---------- fixtures ---------- */

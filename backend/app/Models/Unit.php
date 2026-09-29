@@ -287,6 +287,21 @@ class Unit extends Model
 
         PermitExpiry::covering($query);
 
-        return $query->orderBy('id')->first();
+        if ($representative = $query->orderBy('id')->first()) {
+            return $representative;
+        }
+
+        // Last: a listing CODE. The partner dashboard published
+        // /units/{code} from 14/07 until 29/09 and the public API never
+        // resolved one, so every partner who copied that link from their
+        // dashboard has been sharing a page that does not open. Accepting it
+        // costs one lookup and repairs those links without a redirect table.
+        // A code inside a building resolves to the building, like everything
+        // else here.
+        $byCode = self::where('code', $key)->first();
+
+        return $byCode?->unit_group_id
+            ? self::resolveListingKey($byCode->unit_group_id)
+            : $byCode;
     }
 }
