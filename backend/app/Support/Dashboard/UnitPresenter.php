@@ -101,7 +101,12 @@ class UnitPresenter
                 ])->values(),
             'rejectionReason' => $unit->approval_status === 'rejected' ? $unit->rejection_reason : null,
             'publicUrl' => $unit->approval_status === 'approved'
-                ? rtrim((string) config('dashboard.public_site_url'), '/').'/units/'.$unit->code
+                // The LISTING key, not the code. This link has pointed at
+                // /units/{code} since 14/07 and the public API has never
+                // resolved a code — so every partner who copied it from their
+                // dashboard has been sharing a page that does not open. The key
+                // is also stable across the building, unlike an apartment id.
+                ? rtrim((string) config('dashboard.public_site_url'), '/').'/units/'.($unit->unit_group_id ?: 'u'.$unit->id)
                 : null,
             'updatedAt' => $unit->updated_at?->toIso8601ZuluString(),
         ];
