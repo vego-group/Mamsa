@@ -238,12 +238,12 @@ class Unit extends Model
      *   3. a listing `code`                  → its listing
      *
      * Numeric is tried first and wins outright, so no later form can ever take
-     * an id's place. Codes cannot collide with ids in practice either — every
-     * one is minted by UnitWriter::uniqueCode() as a three-letter prefix plus
-     * five characters, and `code` is never read from a request body — but the
-     * ordering is what makes that a guarantee rather than a property of the
-     * data. `units.code` also carries a UNIQUE index, so step 3 can only ever
-     * match one row.
+     * an id's place. That ordering is the ONLY guarantee: codes have two
+     * formats — UnitWriter::uniqueCode() mints `MRN` + five characters, but the
+     * legacy POST /api/v1/partner/units mints eight random characters with no
+     * prefix (`1G4ADB2F`), which can start with, or in principle be entirely,
+     * digits. `code` is never read from a request body. `units.code` carries a
+     * UNIQUE index, so step 3 can only ever match one row.
      * ────────────────────────────────────────────────────────────────────────
      *
      * The storefront shows one card per building and the server picks a free
