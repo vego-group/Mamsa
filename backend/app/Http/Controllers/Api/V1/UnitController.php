@@ -7,13 +7,18 @@ use App\Http\Resources\UnitResource;
 use App\Models\Booking;
 use App\Models\Unit;
 use App\Support\Booking\Availability;
+use App\Support\City;
+use App\Support\Dashboard\Maps;
+use App\Support\Media;
 use App\Support\Permits\PermitExpiry;
 use App\Support\Pricing;
 use App\Support\Sql;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 
 class UnitController extends Controller
 {
@@ -57,7 +62,7 @@ class UnitController extends Controller
 
         // Free-text search across name / city / district (hero search box + category chips).
         if ($request->filled('q')) {
-            $term = '%' . $request->q . '%';
+            $term = '%'.$request->q.'%';
             $query->where(function ($sub) use ($term) {
                 $sub->where('unit_name', 'like', $term)
                     ->orWhere('city', 'like', $term)
@@ -70,14 +75,14 @@ class UnitController extends Controller
         // "no results" rather than as an error — indistinguishable, from the
         // outside, from a city with nothing listed in it.
         if ($request->filled('city')) {
-            \App\Support\City::filter($query, 'city', (string) $request->city);
+            City::filter($query, 'city', (string) $request->city);
         }
         // Fetch a known set — the favourites page. Capped at the maximum page
         // size so one request with `per_page=50` always returns everything it
         // asked for; a longer list is the caller's to chunk.
         if ($request->filled('ids')) {
             $ids = $request->validate([
-                'ids'   => ['array', 'max:50'],
+                'ids' => ['array', 'max:50'],
                 'ids.*' => ['integer'],
             ])['ids'];
 
@@ -125,7 +130,7 @@ class UnitController extends Controller
         // the right set; raw labels still work as a fallback.
         if ($request->filled('features')) {
             foreach ((array) $request->features as $feature) {
-                $labels = \App\Support\Dashboard\Maps::filterLabels((string) $feature);
+                $labels = Maps::filterLabels((string) $feature);
                 $query->whereHas('features', fn ($q) => $q->whereIn('name', $labels));
             }
         }
@@ -139,7 +144,7 @@ class UnitController extends Controller
         // failure this section exists to remove.
         $dates = $request->validate([
             'start_date' => ['nullable', 'required_with:end_date', 'date'],
-            'end_date'   => ['nullable', 'required_with:start_date', 'date', 'after:start_date'],
+            'end_date' => ['nullable', 'required_with:start_date', 'date', 'after:start_date'],
         ]);
 
         // A listing whose permit has run out is not on the storefront, and one
@@ -196,18 +201,18 @@ class UnitController extends Controller
      * equal keys — and it need not pick the same order twice, so paging through
      * results could show one unit on two pages and never show another at all.
      */
-    private static function applySort(\Illuminate\Database\Eloquent\Builder $query, string $sort): void
+    private static function applySort(Builder $query, string $sort): void
     {
         match ($sort) {
-            'price_asc'  => $query->orderBy('price'),
+            'price_asc' => $query->orderBy('price'),
             'price_desc' => $query->orderByDesc('price'),
-            'newest'     => $query->orderByDesc('created_at'),
-            'rating'     => $query->orderByDesc(
-                \Illuminate\Support\Facades\DB::raw('(select coalesce(avg(rating), 0) from reviews where reviews.unit_id = units.id)')
+            'newest' => $query->orderByDesc('created_at'),
+            'rating' => $query->orderByDesc(
+                DB::raw('(select coalesce(avg(rating), 0) from reviews where reviews.unit_id = units.id)')
             ),
             // Unrecognised or absent → featured first, then newest. This is the
             // shape the storefront calls "موصى به".
-            default      => $query->orderByDesc('is_featured')->orderByDesc('created_at'),
+            default => $query->orderByDesc('is_featured')->orderByDesc('created_at'),
         };
 
         $query->orderBy('units.id');
@@ -251,12 +256,12 @@ class UnitController extends Controller
 
         $data = array_map(function (array $cat) use ($counts) {
             return [
-                'key'       => $cat['key'],
-                'label'     => $cat['label'],
-                'icon'      => $cat['icon'],
-                'count'     => collect($cat['types'])->sum(fn ($t) => (int) ($counts[$t] ?? 0)),
+                'key' => $cat['key'],
+                'label' => $cat['label'],
+                'icon' => $cat['icon'],
+                'count' => collect($cat['types'])->sum(fn ($t) => (int) ($counts[$t] ?? 0)),
                 // Single bundled default image for every category.
-                'image_url' => \App\Support\Media::defaultImageUrl(),
+                'image_url' => Media::defaultImageUrl(),
             ];
         }, self::CATEGORIES);
 
@@ -302,13 +307,13 @@ class UnitController extends Controller
             }
 
             return [
-                'key'       => $bucket['key'],
-                'label'     => $bucket['label'],
-                'min'       => $bucket['min'],
-                'max'       => $bucket['max'],
-                'count'     => $query->count(),
+                'key' => $bucket['key'],
+                'label' => $bucket['label'],
+                'min' => $bucket['min'],
+                'max' => $bucket['max'],
+                'count' => $query->count(),
                 // Single bundled default image for every budget bucket.
-                'image_url' => \App\Support\Media::defaultImageUrl(),
+                'image_url' => Media::defaultImageUrl(),
             ];
         }, self::BUDGET_BUCKETS);
 
@@ -335,7 +340,7 @@ class UnitController extends Controller
         // with it, letting half a window through to be silently ignored.
         $dates = $request->validate([
             'start_date' => ['nullable', 'required_with:end_date', 'date'],
-            'end_date'   => ['nullable', 'required_with:start_date', 'date', 'after:start_date'],
+            'end_date' => ['nullable', 'required_with:start_date', 'date', 'after:start_date'],
         ]);
 
         Availability::attachCounts(
@@ -351,7 +356,7 @@ class UnitController extends Controller
     {
         $request->validate([
             'start_date' => ['required', 'date', 'after_or_equal:today'],
-            'end_date'   => ['required', 'date', 'after:start_date'],
+            'end_date' => ['required', 'date', 'after:start_date'],
         ]);
 
         // Same predicate POST /bookings enforces — see Availability. A probe
@@ -373,9 +378,9 @@ class UnitController extends Controller
             ], 409);
         }
 
-        $free      = Availability::freeCount($unit, $request->start_date, $request->end_date);
+        $free = Availability::freeCount($unit, $request->start_date, $request->end_date);
         $available = $free > 0;
-        $payload   = ['available' => $available, 'available_count' => $free];
+        $payload = ['available' => $available, 'available_count' => $free];
 
         // Server-computed breakdown for the checkout page — the exact same
         // math POST /bookings freezes, so the frontend never does money math.
@@ -385,7 +390,7 @@ class UnitController extends Controller
 
             // Internal settlement figures stay out of this public payload
             // (contract §1.7, §7): a guest never sees the platform's margin.
-            $payload['pricing'] = \Illuminate\Support\Arr::except(
+            $payload['pricing'] = Arr::except(
                 Pricing::breakdown((float) $unit->price, $nights),
                 ['commission_rate', 'commission_amount', 'partner_share'],
             );
@@ -405,18 +410,19 @@ class UnitController extends Controller
             ->latest()
             ->get()
             ->map(fn ($r) => [
-                'id'         => (string) $r->id,
+                'id' => (string) $r->id,
                 'booking_id' => (string) $r->booking_id,
-                'unit_id'    => (string) $r->unit_id,
-                'user_id'    => (string) $r->user_id,
-                'user_name'  => $r->user?->name,
-                'rating'     => $r->rating,
-                'comment'    => $r->comment,
+                'unit_id' => (string) $r->unit_id,
+                'user_id' => (string) $r->user_id,
+                'user_name' => $r->user?->name,
+                'rating' => $r->rating,
+                'comment' => $r->comment,
                 'created_at' => $r->created_at,
             ]);
 
         return response()->json($reviews);
     }
+
     /**
      * GET /units/sitemap
      *
@@ -426,17 +432,42 @@ class UnitController extends Controller
      */
     public function sitemap(): JsonResponse
     {
+        // ONE row per listing, not per apartment.
+        //
+        // A building of eight doors is eight rows in this table and ONE page on
+        // the site — every door resolves to the same representative. Emitting a
+        // row each published eight URLs for one page, which is duplicate content
+        // that splits the ranking between them. Collapsed on the same key the
+        // public payload calls `listing_id`.
+        //
+        // And the permit filter runs here too. Without it the feed advertised
+        // listings whose permit had lapsed, which `show()` answers with 404 — a
+        // sitemap is a promise that the URL exists, and handing a crawler a page
+        // that 404s is worse than omitting it.
+        $query = Unit::query()
+            ->whereIn('unit_type', Unit::SUPPORTED_TYPES)
+            ->where('approval_status', 'approved')
+            ->where('status', 'available');
+
+        PermitExpiry::covering($query);
+
         return response()->json(
-            Unit::query()
-                ->whereIn('unit_type', Unit::SUPPORTED_TYPES)
-                ->where('approval_status', 'approved')
-                ->where('status', 'available')
-                ->orderBy('id')
-                ->get(['id', 'updated_at'])
-                ->map(fn (Unit $u) => [
-                    'id'         => (int) $u->id,
-                    'updated_at' => $u->updated_at?->toIso8601ZuluString(),
+            $query->get(['id', 'unit_group_id', 'updated_at'])
+                ->groupBy(fn (Unit $u) => $u->unit_group_id ?: 'u'.$u->id)
+                ->map(fn ($doors, string $key) => [
+                    // The stable URL. `<loc>` should be built from this.
+                    'listing_id' => $key,
+                    // The representative the key resolves to — the lowest id
+                    // among sellable doors, same as the search and the router.
+                    // Kept so a client that has not switched yet still works.
+                    'id' => (int) $doors->min('id'),
+                    // The NEWEST door in the building: editing apartment 405
+                    // changes the page, and dating it by the representative
+                    // alone would tell a crawler the page had not moved.
+                    'updated_at' => $doors->max('updated_at')?->toIso8601ZuluString(),
                 ])
+                ->sortBy('id')
+                ->values()
                 ->all(),
         );
     }
@@ -456,13 +487,13 @@ class UnitController extends Controller
     {
         $data = $request->validate([
             'from' => ['sometimes', 'date'],
-            'to'   => ['sometimes', 'date', 'after_or_equal:from'],
+            'to' => ['sometimes', 'date', 'after_or_equal:from'],
         ]);
 
         // Defaults cover the window a picker can realistically show; a wider
         // one is allowed but capped so a single call cannot scan years.
         $from = isset($data['from']) ? now()->parse($data['from']) : now();
-        $to   = isset($data['to']) ? now()->parse($data['to']) : (clone $from)->addMonths(6);
+        $to = isset($data['to']) ? now()->parse($data['to']) : (clone $from)->addMonths(6);
 
         if ($to->diffInDays($from) > 400) {
             $to = (clone $from)->addDays(400);
@@ -480,10 +511,9 @@ class UnitController extends Controller
         }
 
         return response()->json([
-            'from'    => $from->toDateString(),
-            'to'      => $to->toDateString(),
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
             'blocked' => $blocked,
         ]);
     }
-
 }
