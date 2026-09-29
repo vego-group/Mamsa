@@ -60,6 +60,10 @@ Route::prefix('v1')->group(function () {
     });
 
     /* ===================== PUBLIC ===================== */
+    // No throttle here on purpose: the guest app renders these server-side, so a
+    // per-IP limiter would throttle every visitor through a few Next.js server IPs.
+    // Exempt those calls FIRST (not by their header — it is forgeable), then enable.
+    // Full note: docs/ops/BACKLOG-deferred.md item 1.
     Route::prefix('units')->name('api.units.')->group(function () {
         Route::get('/', [UnitController::class, 'index'])->name('index');
         Route::get('popular', [UnitController::class, 'popular'])->name('popular');
