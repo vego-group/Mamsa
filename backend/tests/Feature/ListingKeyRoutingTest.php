@@ -238,6 +238,41 @@ class ListingKeyRoutingTest extends TestCase
         $this->assertStringEndsWith('/units/u'.$solo->id, (string) UnitPresenter::make($solo)['publicUrl']);
     }
 
+    public function test_a_numeric_code_cannot_take_an_ids_place(): void
+    {
+        // Codes are minted as a three-letter prefix plus five characters and
+        // are never read from a request body, so a numeric one should not
+        // exist. The ordering is what makes that a guarantee instead of a
+        // property of today's data — so the guarantee is tested, not assumed.
+        $target = $this->unit();
+        $impostor = $this->unit();
+
+        // A code that is exactly another unit's id, written straight to the
+        // column past the generator.
+        Unit::where('id', $impostor->id)->update(['code' => (string) $target->id]);
+
+        $this->getJson("/api/v1/units/{$target->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $target->id);   // NOT $impostor
+
+        // And the impostor is still reachable by its own id.
+        $this->getJson("/api/v1/units/{$impostor->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $impostor->id);
+    }
+
+    public function test_the_three_forms_resolve_in_the_documented_order(): void
+    {
+        [$first, $second] = $this->building(2);
+
+        // 1 — numeric id: the door itself, not the representative.
+        $this->getJson("/api/v1/units/{$second->id}")->assertOk()->assertJsonPath('data.id', $second->id);
+        // 2 — the key: the representative.
+        $this->getJson("/api/v1/units/{$first->unit_group_id}")->assertOk()->assertJsonPath('data.id', $first->id);
+        // 3 — a code: its listing, which for a door in a building is the building.
+        $this->getJson("/api/v1/units/{$second->code}")->assertOk()->assertJsonPath('data.id', $first->id);
+    }
+
     /* ---------- fixtures ---------- */
 
     /** @return array<int, Unit> */

@@ -232,6 +232,20 @@ class Unit extends Model
     /**
      * Let a public URL address a BUILDING, not a door.
      *
+     * ── RESOLUTION ORDER, and it is deliberate ──────────────────────────────
+     *   1. a numeric id that EXISTS          → that unit, unchanged
+     *   2. `u<id>` or a group ULID           → the listing's representative
+     *   3. a listing `code`                  → its listing
+     *
+     * Numeric is tried first and wins outright, so no later form can ever take
+     * an id's place. Codes cannot collide with ids in practice either — every
+     * one is minted by UnitWriter::uniqueCode() as a three-letter prefix plus
+     * five characters, and `code` is never read from a request body — but the
+     * ordering is what makes that a guarantee rather than a property of the
+     * data. `units.code` also carries a UNIQUE index, so step 3 can only ever
+     * match one row.
+     * ────────────────────────────────────────────────────────────────────────
+     *
      * The storefront shows one card per building and the server picks a free
      * apartment at booking time, so the id in a URL is whichever door happened
      * to be the representative that day. That door can be rejected, closed or
@@ -241,10 +255,7 @@ class Unit extends Model
      * routes accept it wherever they accept an id.
      *
      * A plain numeric id resolves exactly as it always did, first and
-     * unchanged; nothing about the existing surfaces moves. Only a value that
-     * is NOT an existing id is read as a listing key:
-     *   - `u<id>`  the listing form of a standalone unit
-     *   - a ULID   the building — resolves to its representative
+     * unchanged; nothing about the existing surfaces moves.
      */
     public function resolveRouteBinding($value, $field = null)
     {
@@ -254,10 +265,12 @@ class Unit extends Model
 
         $value = (string) $value;
 
+        // STEP 1 — a numeric id that exists. Always first, always wins.
         if (ctype_digit($value) && ($unit = $this->newQuery()->find((int) $value))) {
             return $unit;
         }
 
+        // STEPS 2 and 3.
         return self::resolveListingKey($value);
     }
 
@@ -275,9 +288,12 @@ class Unit extends Model
      */
     public static function resolveListingKey(string $key): ?self
     {
+        // STEP 2a — the standalone listing form.
         if (preg_match('/^u(\d+)$/', $key, $matches)) {
             return self::find((int) $matches[1]);
         }
+
+        // STEP 2b — a building.
 
         $query = self::query()
             ->whereIn('unit_type', self::SUPPORTED_TYPES)
@@ -291,7 +307,7 @@ class Unit extends Model
             return $representative;
         }
 
-        // Last: a listing CODE. The partner dashboard published
+        // STEP 3 — a listing CODE. The partner dashboard published
         // /units/{code} from 14/07 until 29/09 and the public API never
         // resolved one, so every partner who copied that link from their
         // dashboard has been sharing a page that does not open. Accepting it
