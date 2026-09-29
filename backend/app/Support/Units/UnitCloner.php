@@ -226,7 +226,7 @@ final class UnitCloner
         $clone = Unit::create(array_merge($attributes, [
             'unit_group_id'   => $groupId,
             'apartment_no'    => $number,
-            'code'            => self::uniqueCode(),
+            'code'            => self::apartmentCode(),
             'calendar_token'  => Str::random(60),
             'approval_status' => 'draft',
         ]));
@@ -248,8 +248,21 @@ final class UnitCloner
         return $clone;
     }
 
-    /** `code` is UNIQUE; a 100-row loop is where a random collision finally happens. */
-    private static function uniqueCode(): string
+    /**
+     * FORMAT: eight random characters, NO prefix — `1G4ADB2F`. Can start with,
+     * or in principle be entirely, digits. Every apartment added to a building
+     * gets one of these.
+     *
+     * NOT the same format as UnitWriter::uniqueCode() (`MRN` + five), which a
+     * new listing gets. This was also called uniqueCode() until 2026-09-29, and
+     * the shared name alone caused a wrong claim to the frontend about where
+     * the second format came from. Routing does not depend on the format —
+     * Unit::resolveRouteBinding() tries a numeric id first — so neither
+     * generator needs to change; they need to stay distinguishable.
+     *
+     * `code` is UNIQUE; a 100-row loop is where a random collision finally happens.
+     */
+    private static function apartmentCode(): string
     {
         do {
             $code = strtoupper(Str::random(8));

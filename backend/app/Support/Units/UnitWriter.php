@@ -478,6 +478,14 @@ final class UnitWriter
             ->count();
     }
 
+    /**
+     * FORMAT: `MRN` + five random characters — `MRNXDX5D`. What a NEW listing
+     * gets, from the partner dashboard or the admin console.
+     *
+     * NOT the only code format in the table: UnitCloner::apartmentCode() gives
+     * every apartment added to a building eight random characters with no
+     * prefix. Never infer "is this a code" from the MRN prefix.
+     */
     public static function uniqueCode(string $prefix = 'MRN'): string
     {
         do {

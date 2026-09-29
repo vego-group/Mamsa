@@ -71,7 +71,7 @@ class UnitController extends DashboardController
             $this->toColumns($data),
             [
                 'approval_status' => 'draft',
-                'code' => self::uniqueCode(),
+                'code' => UnitWriter::uniqueCode(),
                 'calendar_token' => Str::random(60),
             ],
         ));
@@ -576,11 +576,6 @@ class UnitController extends DashboardController
         } catch (\Throwable $e) {
             report($e);
         }
-    }
-
-    private static function uniqueCode(): string
-    {
-        return UnitWriter::uniqueCode();
     }
 
     /** Accept both "u_1" (contract) and raw "1". */
