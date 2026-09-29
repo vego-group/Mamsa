@@ -82,9 +82,12 @@ class FrontendGapEndpointsTest extends TestCase
         $rows = $this->getJson('/api/v1/units/sitemap')->assertOk()->json();
 
         // 15 public, and NOT capped at the 12 the paginated list would return.
+        // These fixtures are standalone, so one listing each; a building
+        // collapses to a single row — SitemapListingTest covers that.
         $this->assertCount(15, $rows);
-        $this->assertSame(['id', 'updated_at'], array_keys($rows[0]));
+        $this->assertSame(['listing_id', 'id', 'updated_at'], array_keys($rows[0]));
         $this->assertIsInt($rows[0]['id']);
+        $this->assertSame('u'.$rows[0]['id'], $rows[0]['listing_id']);
     }
 
     public function test_the_sitemap_needs_no_authentication(): void
