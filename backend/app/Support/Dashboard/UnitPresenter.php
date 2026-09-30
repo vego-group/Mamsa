@@ -23,6 +23,10 @@ class UnitPresenter
 
         $cover = $unit->images->firstWhere('is_main', true) ?? $unit->images->first();
 
+        // Read once: the Hijri text and the printed address come from the same
+        // row that supplies the expiry, never from two separate lookups.
+        $permit = Permit::currentFor($unit);
+
         // Prefer eager-loaded aggregates (withCount/withAvg) to avoid N+1 on
         // list endpoints; fall back to the model accessors for single fetches.
         $reviewsCount = $unit->reviews_count ?? $unit->reviews()->count();
@@ -63,7 +67,11 @@ class UnitPresenter
             // cannot disagree about what "expiring" means.
             'permitExpiresAt' => PermitExpiry::on($unit)?->toDateString(),
             'permitStatus' => PermitExpiry::status($unit),
-            'permitAddress' => self::permitAddress($unit),
+            // The expiry as the partner typed it in Hijri, verbatim — or null
+            // when it was typed in Gregorian or predates 2026-09-30. Always
+            // present, like permitAddress, so the client never branches on it.
+            'permitExpiresAtHijri' => $permit?->expires_at_hijri,
+            'permitAddress' => self::permitAddress($permit),
             // The reviewer's job on a building is to check the number the
             // partner TYPED against the number written on the permit they
             // uploaded. The system already refuses a group larger than the
@@ -122,10 +130,8 @@ class UnitPresenter
      *
      * @return array<string, string|null>
      */
-    private static function permitAddress(Unit $unit): array
+    private static function permitAddress(?Permit $permit): array
     {
-        $permit = Permit::currentFor($unit);
-
         return [
             'city' => $permit?->addr_city,
             'district' => $permit?->addr_district,

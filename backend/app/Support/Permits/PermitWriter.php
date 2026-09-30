@@ -40,6 +40,9 @@ final class PermitWriter
         'license_type' => 'license_type',
         'licensed_units_count' => 'licensed_units_count',
         'expires_at' => 'expires_at',
+        // The date as typed in Hijri. {@see PermitHijri} decides whether it
+        // survives a write — never a plain merge.
+        'expires_at_hijri' => 'expires_at_hijri',
         'addr_city' => 'addr_city',
         'addr_district' => 'addr_district',
         'addr_building' => 'addr_building',
@@ -128,6 +131,7 @@ final class PermitWriter
             $merged = array_merge(array_fill_keys(array_keys(self::FIELDS), null), $base, $changes);
             $merged['number'] = PermitNumber::normalize($merged['number'] === null ? null : (string) $merged['number']);
             $merged['licensed_units_count'] = $merged['licensed_units_count'] === null ? null : (int) $merged['licensed_units_count'];
+            $merged['expires_at_hijri'] = PermitHijri::resolve($base, $changes, $merged['expires_at']);
 
             // Licence rules — before anything is written.
             UnitLicense::guardFields($merged['license_type'], $merged['licensed_units_count']);

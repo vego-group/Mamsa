@@ -154,6 +154,7 @@ class PermitsController extends Controller
             'licenseType' => $permit->license_type,
             'licensedUnitsCount' => $permit->licensed_units_count,
             'permitExpiresAt' => $permit->expires_at?->toDateString(),
+            'permitExpiresAtHijri' => $permit->expires_at_hijri,
             'permitStatus' => $unit ? PermitExpiry::status($unit) : null,
             // The address printed on the document, for the reviewer to set
             // beside the listing's own — the comparison a human makes.
@@ -186,6 +187,7 @@ class PermitsController extends Controller
                 'id' => (string) $current->id,
                 'tourismPermitNo' => $current->number,
                 'permitExpiresAt' => $current->expires_at?->toDateString(),
+                'permitExpiresAtHijri' => $current->expires_at_hijri,
             ] : null;
         }
 
