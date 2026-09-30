@@ -320,6 +320,8 @@
   "tourismLicenseFileId": null,
   "permitExpiresAt": "2026-10-22",
   "permitStatus": "expiring",
+  "permitExpiresAtHijri": null,
+  "permitAddress": { "city": null, "district": null, "building": null, "unitNo": null },
   "licenseType": null,
   "licensedUnitsCount": null,
   "groupSize": 1,
@@ -332,6 +334,13 @@
 ```
 
 **الجديد:** `permitExpiresAt` · `permitStatus`. (`licenseType` و`licensedUnitsCount` و`groupSize` كانوا موجودين من قبل.)
+
+> **تصحيح 30/09 على العينة:** اللقطة الأصلية اتاخدت قبل ما `permitAddress` يدخل الرد، فماكانش
+> ظاهر فيها. **السطرين دول اتضافوا للعينة بإيدنا** عشان تعكس الرد الحالي — مش جزء من اللقطة:
+> - `permitAddress` — **موجود دايماً، الأربع مفاتيح، كل واحد `null` لو مش متسجّل.** مابيتشالش.
+>   مثبّت باختبار. التفاصيل §٣.٢ في الملحق.
+> - `permitExpiresAtHijri` — 🆕 30/09، الهجري زي ما اتكتب، **موجود دايماً** و`null` لو مافيش.
+>   §٣.١ في الملحق.
 
 **✅ `groupId` و`apartmentNo` بقوا في الرد ده كمان** (الإنتاج 28/09) — جنب `groupSize`:
 

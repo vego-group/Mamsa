@@ -162,6 +162,7 @@ class ApprovalsController extends Controller
             'permit' => [
                 'address' => $this->units->detail($u)['permitAddress'],
                 'expiresAt' => PermitExpiry::on($u)?->toDateString(),
+                'expiresAtHijri' => \App\Models\Permit::currentFor($u)?->expires_at_hijri,
                 'status' => PermitExpiry::status($u),
             ],
             'addressMatch' => $this->addressMatch($u),
@@ -225,6 +226,7 @@ class ApprovalsController extends Controller
                 'status' => $m->approval_status,
                 'permitNumber' => $m->tourism_permit_no,
                 'permitExpiresAt' => PermitExpiry::on($m)?->toDateString(),
+                'permitExpiresAtHijri' => \App\Models\Permit::currentFor($m)?->expires_at_hijri,
             ])->values()->all(),
         ];
     }

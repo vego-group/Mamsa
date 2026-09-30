@@ -59,6 +59,15 @@ return Application::configure(basePath: dirname(__DIR__))
             ForceJsonResponse::class,
         ]);
 
+        // The Hijri expiry is stored EXACTLY as the partner typed it — it is
+        // the source a Gregorian date was converted from, kept so it can be
+        // re-converted later. Trimming is the one transformation the framework
+        // would apply on the way in; these keys are exempt from it.
+        $middleware->trimStrings(except: [
+            'permitExpiresAtHijri',
+            'permits.*.expiresAtHijri',
+        ]);
+
         // Partner-dashboard group: cookie session (httpOnly) without the web
         // CSRF-token middleware — mutations are guarded by SameSite=Lax plus
         // the Origin allowlist inside DashboardApi.

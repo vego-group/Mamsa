@@ -34,7 +34,7 @@ final class PermitRenewal
 {
     /** The fields a renewal may carry — the same ones a permit has. */
     private const FIELDS = [
-        'number', 'file', 'license_type', 'licensed_units_count', 'expires_at',
+        'number', 'file', 'license_type', 'licensed_units_count', 'expires_at', 'expires_at_hijri',
         'addr_city', 'addr_district', 'addr_building', 'addr_unit_no',
     ];
 
@@ -74,6 +74,9 @@ final class PermitRenewal
             }
 
             $merged = array_merge($current->only(self::FIELDS), $fields);
+            // Not inherited like the rest: a renewal with a new date and no Hijri
+            // text must not carry the old permit's text onto it.
+            $merged['expires_at_hijri'] = PermitHijri::resolve($current->only(self::FIELDS), $fields, $merged['expires_at'] ?? null);
             $merged['number'] = PermitNumber::normalize($merged['number'] === null ? null : (string) $merged['number']);
             $merged['licensed_units_count'] = $merged['licensed_units_count'] === null ? null : (int) $merged['licensed_units_count'];
 

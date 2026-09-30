@@ -116,6 +116,12 @@ final class UnitWriter
             // consoles convert — a date arriving here has already been read by
             // a human off the document.
             'permitExpiresAt'      => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            // The same date AS TYPED in Hijri, stored verbatim — the source the
+            // Gregorian above was converted from, so it can be re-converted if
+            // the ministry's table turns out to differ. Optional; null means
+            // typed in Gregorian. Refused without the Gregorian beside it: the
+            // backend does not convert, so a Hijri date alone means nothing.
+            'permitExpiresAtHijri' => ['sometimes', 'nullable', 'string', 'max:50', 'prohibited_if:permitExpiresAt,null'],
             // Sent flat rather than nested so a partial patch can name one
             // line of the address without resending the rest — the same way
             // every other field on this surface behaves.
@@ -157,6 +163,7 @@ final class UnitWriter
         'licenseType' => 'license_type',
         'licensedUnitsCount' => 'licensed_units_count',
         'permitExpiresAt' => 'expires_at',
+        'permitExpiresAtHijri' => 'expires_at_hijri',
         // The address printed ON the permit — the thing a reviewer compares
         // with the listing's own address. It was writable only through a
         // renewal, which meant a listing that never renewed could never record

@@ -117,6 +117,7 @@ final class ApartmentExpansion
                 'file' => $permit['fileId'] ?? null,
                 'license_type' => UnitLicense::PRIVATE_HOSPITALITY,
                 'expires_at' => $permit['expiresAt'] ?? null,
+                'expires_at_hijri' => $permit['expiresAtHijri'] ?? null,
                 'addr_city' => $permit['address']['city'] ?? null,
                 'addr_district' => $permit['address']['district'] ?? null,
                 'addr_building' => $permit['address']['building'] ?? null,

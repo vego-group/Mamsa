@@ -372,6 +372,7 @@ class UnitsController extends Controller
             // with an error about a row the partner never saw.
             'permits.*.fileId' => ['required', 'string', 'max:64'],
             'permits.*.expiresAt' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'permits.*.expiresAtHijri' => ['sometimes', 'nullable', 'string', 'max:50', 'prohibited_if:permits.*.expiresAt,null'],
             'permits.*.address' => ['sometimes', 'array'],
             'permits.*.address.city' => ['sometimes', 'nullable', 'string', 'max:100'],
             'permits.*.address.district' => ['sometimes', 'nullable', 'string', 'max:150'],

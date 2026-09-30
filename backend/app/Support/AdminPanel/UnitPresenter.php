@@ -187,7 +187,10 @@ class UnitPresenter
             // was valid on review day runs out on its own.
             'permitExpiresAt' => \App\Support\Permits\PermitExpiry::on($u)?->toDateString(),
             'permitStatus' => \App\Support\Permits\PermitExpiry::status($u),
-            'permitAddress' => self::permitAddress($u),
+            // As typed in Hijri, verbatim — what the reviewer can hold against
+            // the paper. Null when typed in Gregorian or older than 2026-09-30.
+            'permitExpiresAtHijri' => ($permit = \App\Models\Permit::currentFor($u))?->expires_at_hijri,
+            'permitAddress' => self::permitAddress($u, $permit),
             // A renewal already waiting changes what "expired" means on this
             // screen: the listing is quiet, but somebody has already acted and
             // the remedy is in the reviewer's own queue.
@@ -250,9 +253,9 @@ class UnitPresenter
      *
      * @return array<string, string|null>
      */
-    private static function permitAddress(\App\Models\Unit $unit): array
+    private static function permitAddress(\App\Models\Unit $unit, ?\App\Models\Permit $permit = null): array
     {
-        $permit = \App\Models\Permit::currentFor($unit);
+        $permit ??= \App\Models\Permit::currentFor($unit);
 
         return [
             'city' => $permit?->addr_city,

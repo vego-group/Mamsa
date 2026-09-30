@@ -44,7 +44,7 @@ class Permit extends Model
 
     protected $fillable = [
         'scope_type', 'scope_id', 'number', 'file', 'license_type', 'licensed_units_count',
-        'expires_at', 'addr_city', 'addr_district', 'addr_building', 'addr_unit_no',
+        'expires_at', 'expires_at_hijri', 'addr_city', 'addr_district', 'addr_building', 'addr_unit_no',
         'status', 'created_by', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'review_notes',
     ];
 

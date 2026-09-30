@@ -301,6 +301,8 @@ class UnitController extends DashboardController
 
         $data = $this->validated($request, [
             'permitExpiresAt' => ['required', 'date_format:Y-m-d'],
+            // Verbatim, as typed. {@see UnitWriter::rules()}
+            'permitExpiresAtHijri' => ['sometimes', 'nullable', 'string', 'max:50'],
             'tourismLicenseNumber' => ['sometimes', 'nullable', 'string', 'max:50'],
             'tourismLicenseFileId' => ['sometimes', 'nullable', 'string', 'max:64'],
             'permitAddress' => ['sometimes', 'array'],
@@ -330,6 +332,12 @@ class UnitController extends DashboardController
             'addr_unit_no' => $data['permitAddress']['unitNo'] ?? null,
         ], fn ($v) => $v !== null);
 
+        // Outside the filter on purpose: an explicit null is an answer ("typed
+        // in Gregorian"), not an absence, and must not let the old text through.
+        if (array_key_exists('permitExpiresAtHijri', $data)) {
+            $fields['expires_at_hijri'] = $data['permitExpiresAtHijri'];
+        }
+
         try {
             $renewal = PermitRenewal::open($unit, $fields, (int) $request->user()->id);
         } catch (LicenseViolation $e) {
@@ -358,6 +366,7 @@ class UnitController extends DashboardController
             'id' => (string) $permit->id,
             'status' => $permit->status,
             'permitExpiresAt' => $permit->expires_at?->toDateString(),
+            'permitExpiresAtHijri' => $permit->expires_at_hijri,
             'tourismLicenseNumber' => $permit->number,
             'tourismLicenseFileId' => $permit->file,
             'submittedAt' => $permit->created_at?->toIso8601ZuluString(),
@@ -516,6 +525,7 @@ class UnitController extends DashboardController
             // with an error about a row the partner never saw.
             'permits.*.fileId' => ['required', 'string', 'max:64'],
             'permits.*.expiresAt' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'permits.*.expiresAtHijri' => ['sometimes', 'nullable', 'string', 'max:50', 'prohibited_if:permits.*.expiresAt,null'],
             'permits.*.address' => ['sometimes', 'array'],
             'permits.*.address.city' => ['sometimes', 'nullable', 'string', 'max:100'],
             'permits.*.address.district' => ['sometimes', 'nullable', 'string', 'max:150'],
