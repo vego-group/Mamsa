@@ -353,7 +353,78 @@ class DashboardApartmentsTest extends TestCase
         $this->assertSame(1, $row['groupSize']);
     }
 
+    /* ---------- any door, not just the original (asked 2026-09-30) ---------- */
+
+    // The building card shows on every door's page, so "add apartments" is
+    // pressed from whichever door the partner has open. These pin what that
+    // means: any door works, the count is still the building's total, and the
+    // new apartments copy THE DOOR THEY WERE ADDED FROM — there is no fixed
+    // "source" in a building once it exists.
+
+    public function test_any_door_in_the_building_can_add_apartments(): void
+    {
+        $original = $this->licensed(5);
+        $this->expand($original, 2)->assertOk();
+        $door2 = $this->door($original, 2);
+
+        // Still under review from the first expansion — and that does not
+        // stop it either: the lock is on editing a door, not on this.
+        $this->assertSame('pending', $door2->approval_status);
+
+        $this->expand($door2, 4)
+            ->assertOk()
+            ->assertJsonPath('groupId', $original->fresh()->unit_group_id)
+            ->assertJsonPath('groupSize', 4)
+            ->assertJsonPath('added', 2);
+    }
+
+    public function test_count_is_the_building_total_whichever_door_sends_it(): void
+    {
+        $original = $this->licensed(5);
+        $this->expand($original, 3)->assertOk();
+
+        $this->expand($this->door($original, 3), 3)
+            ->assertOk()
+            ->assertJsonPath('groupSize', 3)
+            ->assertJsonPath('added', 0);
+    }
+
+    public function test_new_apartments_copy_the_door_they_were_added_from(): void
+    {
+        $original = $this->licensed(5);
+        $this->expand($original, 2)->assertOk();
+        $door2 = $this->door($original, 2);
+        $door2->forceFill(['price' => 900])->save();
+
+        $this->expand($door2, 3)->assertOk();
+
+        $door3 = $this->door($original, 3);
+        $this->assertEquals(900, (float) $door3->price, 'copied the original, not the door it was added from');
+        $this->assertEquals(500, (float) $original->fresh()->price);
+    }
+
+    public function test_an_incomplete_door_is_the_one_named_in_the_refusal(): void
+    {
+        // The completeness check runs on the door that was sent, so the
+        // refusal names THAT door — even when the original is complete.
+        $original = $this->licensed(5);
+        $this->expand($original, 2)->assertOk();
+        $door2 = $this->door($original, 2);
+        $door2->forceFill(['description' => null])->save();
+
+        $this->expand($door2, 3)
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'SOURCE_UNIT_INCOMPLETE')
+            ->assertJsonPath('error.meta.unit_id', 'u_'.$door2->id);
+    }
+
     /* ---------- fixtures ---------- */
+
+    /** The n-th door of the original's building, by creation order. */
+    private function door(Unit $original, int $n): Unit
+    {
+        return Unit::where('unit_group_id', $original->fresh()->unit_group_id)->orderBy('id')->skip($n - 1)->firstOrFail();
+    }
 
     private function expand(Unit $unit, int $count): TestResponse
     {
