@@ -155,7 +155,7 @@ the owner's request); real numbers receive a real SMS.
 | `+966555000001` | User |
 | `+966555000002` | Partner |
 | `+966555000003` | SuperAdmin |
-| `+966537486167` | SuperAdmin (**real SMS**) |
+| `+96653*****67` | SuperAdmin (**real SMS**) |
 | `+9665XXXXXXXX` | Partner + User (**real SMS**) |
 
 Ask the backend lead for the current fixed code — it is deliberately not written in any document.

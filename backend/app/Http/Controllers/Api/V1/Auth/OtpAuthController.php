@@ -7,6 +7,7 @@ use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\OtpService;
 use App\Services\RefreshTokenService;
+use App\Support\OtpDebug;
 use App\Support\PhoneNumber;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -26,7 +27,7 @@ class OtpAuthController extends Controller
     public function requestOtp(Request $request): JsonResponse
     {
         $request->validate([
-            'phone'  => ['required', 'string', 'min:8', 'max:20'],
+            'phone' => ['required', 'string', 'min:8', 'max:20'],
             'intent' => ['nullable', 'in:login,register'],
         ]);
 
@@ -37,7 +38,7 @@ class OtpAuthController extends Controller
         $data = ['phone' => $request->phone];
 
         // Expose OTP in dev so developers don't have to tail logs
-        if (! app()->isProduction()) {
+        if (OtpDebug::exposeCode()) {
             $data['debug_otp'] = $code;
         }
 
@@ -47,7 +48,7 @@ class OtpAuthController extends Controller
     public function resendOtp(Request $request): JsonResponse
     {
         $request->validate([
-            'phone'  => ['required', 'string', 'min:8', 'max:20'],
+            'phone' => ['required', 'string', 'min:8', 'max:20'],
             'intent' => ['nullable', 'in:login,register'],
         ]);
 
@@ -56,7 +57,7 @@ class OtpAuthController extends Controller
         $code = $this->otp->request($request->phone, 'login', $request->ip());
 
         $data = [];
-        if (! app()->isProduction()) {
+        if (OtpDebug::exposeCode()) {
             $data['debug_otp'] = $code;
         }
 
@@ -66,8 +67,8 @@ class OtpAuthController extends Controller
     public function verifyOtp(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'phone'  => ['required', 'string', 'min:8', 'max:20'],
-            'code'   => ['required', 'digits_between:4,8'],
+            'phone' => ['required', 'string', 'min:8', 'max:20'],
+            'code' => ['required', 'digits_between:4,8'],
             'device' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -104,7 +105,7 @@ class OtpAuthController extends Controller
     {
         $validated = $request->validate([
             'refresh_token' => ['required', 'string'],
-            'device'        => ['nullable', 'string', 'max:255'],
+            'device' => ['nullable', 'string', 'max:255'],
         ]);
 
         $pair = $this->refreshTokens->rotate($validated['refresh_token'], $validated['device'] ?? 'mobile');
@@ -130,14 +131,14 @@ class OtpAuthController extends Controller
         $validated = $request->validate([
             // `name` (joined) OR first_name/last_name — at least one path must
             // resolve to a name (enforced below).
-            'name'       => ['sometimes', 'string', 'max:255'],
+            'name' => ['sometimes', 'string', 'max:255'],
             'first_name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'last_name'  => ['sometimes', 'nullable', 'string', 'max:255'],
-            'email'      => ['nullable', 'email', 'unique:users,email,'.$user->id],
+            'last_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'unique:users,email,'.$user->id],
         ]);
 
         if (blank($validated['name'] ?? null) && blank($validated['first_name'] ?? null)) {
-            throw \Illuminate\Validation\ValidationException::withMessages(['name' => ['الاسم مطلوب']]);
+            throw ValidationException::withMessages(['name' => ['الاسم مطلوب']]);
         }
 
         if (array_key_exists('email', $validated)) {
@@ -192,7 +193,7 @@ class OtpAuthController extends Controller
         throw new HttpResponseException(response()->json([
             'success' => false,
             'message' => $message,
-            'code'    => $code,
+            'code' => $code,
         ], 422));
     }
 
@@ -202,11 +203,11 @@ class OtpAuthController extends Controller
     private function tokenPayload(array $pair, array $extra = []): array
     {
         return array_merge([
-            'access_token'  => $pair['access_token'],
+            'access_token' => $pair['access_token'],
             'refresh_token' => $pair['refresh_token'],
-            'token_type'    => 'Bearer',
-            'expires_in'    => (int) config('tokens.access_minutes', 60) * 60,
-            'user'          => new UserResource($pair['user']->load('roles')),
+            'token_type' => 'Bearer',
+            'expires_in' => (int) config('tokens.access_minutes', 60) * 60,
+            'user' => new UserResource($pair['user']->load('roles')),
         ], $extra);
     }
 }

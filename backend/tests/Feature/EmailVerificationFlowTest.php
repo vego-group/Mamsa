@@ -36,6 +36,9 @@ class EmailVerificationFlowTest extends TestCase
         // only) — and pin the contract's OTP policy so a dev .env with
         // shortened staging values can't skew these assertions.
         config([
+            // These flows read the code the way a tester on staging does, so they
+            // opt in explicitly. Off is the default (OtpDebugResponseTest).
+            'otp.debug_response' => true,
             'otp.resend_seconds' => 60,
             'otp.exp_minutes' => 5,
             'otp.email_max_attempts' => 5,
@@ -288,12 +291,14 @@ class EmailVerificationFlowTest extends TestCase
         Notification::assertCount(1);
     }
 
-    public function test_the_code_comes_back_outside_production_and_never_inside_it(): void
+    public function test_the_code_comes_back_where_allowed_and_never_on_production(): void
     {
         $user = User::factory()->create(['is_active' => true, 'email' => null]);
 
         // Staging addresses are fixtures nobody can open (user@mamsa.test), so
-        // without this the email gate cannot be exercised by hand at all.
+        // without this the email gate cannot be exercised by hand at all. It is
+        // only on where an environment chose it (OTP_DEBUG_RESPONSE=true); the
+        // default is off, covered by OtpDebugResponseTest.
         $code = $this->actingAs($user, 'sanctum')
             ->postJson('/api/v1/user/email', ['email' => 'tester@mamsa.test'])
             ->assertOk()

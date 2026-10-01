@@ -122,7 +122,7 @@ the app as normal, then:
 ssh mamsa
 cd ~/domains/api.mamsaa.com/app_core
 /opt/alt/php84/usr/bin/php artisan tinker --execute='
-  $phone="+966537486167";                 // the number logging in
+  $phone="+96653*****67";                 // the number logging in
   foreach (["admin-login","login","change-phone"] as $purpose) {
     $v=\Illuminate\Support\Facades\Cache::store(config("otp.store"))->get("otp:$purpose:$phone");
     if ($v) echo "$purpose => ".$v["code"]." (sent_at ".date("H:i:s",$v["sent_at"]).")".PHP_EOL;
