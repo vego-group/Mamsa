@@ -353,6 +353,39 @@ class DashboardApartmentsTest extends TestCase
         $this->assertSame(1, $row['groupSize']);
     }
 
+    /* ---------- a stable order for the list (2026-10-01) ---------- */
+
+    public function test_rows_created_in_the_same_second_page_in_a_fixed_order(): void
+    {
+        // A building's doors are created in one second, so `latest()` alone
+        // leaves their order to the database — and a page boundary inside a
+        // building can then show a door twice or not at all. id breaks the tie.
+        $older = $this->unit();
+        $older->forceFill(['created_at' => now()->subDay()])->save();
+
+        $tie = now()->subHour()->startOfSecond();
+        $same = collect(range(1, 5))->map(function () use ($tie) {
+            $u = $this->unit();
+            $u->forceFill(['created_at' => $tie])->save();
+
+            return $u->id;
+        });
+
+        $newer = $this->unit();
+
+        $seen = collect(range(1, 4))->flatMap(fn (int $page) => collect(
+            $this->actingAs($this->partner, 'dashboard')->getJson("/units?limit=2&page={$page}")->assertOk()->json('data')
+        )->pluck('id'))->all();
+
+        $expected = collect([$newer->id])
+            ->merge($same->sortDesc()->values())
+            ->push($older->id)
+            ->map(fn (int $id) => 'u_'.$id)
+            ->all();
+
+        $this->assertSame($expected, $seen, 'newest first, and the same-second rows by id descending, across every page');
+    }
+
     /* ---------- any door, not just the original (asked 2026-09-30) ---------- */
 
     // The building card shows on every door's page, so "add apartments" is
