@@ -61,6 +61,15 @@ Schedule::command('units:check-licenses --alert')
     ->withoutOverlapping()->appendOutputTo($scheduleLog);
 
 /*
+ * Arabic collation. Without ICU's Arabic data, Collator('ar') silently falls
+ * back to root (Latin first) and door names sort unlike the frontend. Asked
+ * daily and mailed, because the log warning alone is read by nobody.
+ */
+Schedule::command('ops:check-collation --alert')
+    ->dailyAt('03:10')->timezone('Asia/Riyadh')
+    ->withoutOverlapping()->appendOutputTo($scheduleLog);
+
+/*
  * Permit expiry warnings — 60/30/14/7/1 days out, and the day itself.
  *
  * Morning local time, because these ask the partner to go and find a document.

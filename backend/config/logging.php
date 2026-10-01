@@ -1,5 +1,6 @@
 <?php
 
+use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -57,7 +58,24 @@ return [
      */
     'retired_channel' => env('LOG_RETIRED_CHANNEL', 'retired'),
 
+    /*
+    | The access log — one JSON line per request that reached the app
+    | (App\Http\Middleware\AccessLog). Off by default.
+    */
+    'access_log' => [
+        'enabled' => (bool) env('ACCESS_LOG_ENABLED', false),
+    ],
+
     'channels' => [
+
+        'access' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/access.log'),
+            'level' => 'info',
+            'days' => (int) env('ACCESS_LOG_DAYS', 14),
+            'formatter' => LineFormatter::class,
+            'formatter_with' => ['format' => "%message%\n", 'allowInlineLineBreaks' => false],
+        ],
 
         'retired' => [
             'driver' => 'daily',

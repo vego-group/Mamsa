@@ -3,6 +3,7 @@
 use App\Exceptions\AdminPanelException;
 use App\Exceptions\DashboardException;
 use App\Exceptions\OtpException;
+use App\Http\Middleware\AccessLog;
 use App\Http\Middleware\AdminPanelApi;
 use App\Http\Middleware\DashboardApi;
 use App\Http\Middleware\EnsureAdminPermission;
@@ -54,6 +55,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 ? '*'
                 : array_values(array_filter(explode(',', (string) $trustedProxies))),
         );
+
+        // Every surface — guest API, partner dashboard, admin panel — so a
+        // missing line means the request never reached the app at all.
+        $middleware->append(AccessLog::class);
 
         $middleware->api(prepend: [
             ForceJsonResponse::class,

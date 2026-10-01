@@ -111,7 +111,13 @@ final class DoorName
     /** True when names sort exactly as the frontend does (Arabic locale data present). */
     public static function hasArabicCollation(): bool
     {
-        return self::collator()->getLocale(\Locale::ACTUAL_LOCALE) === 'ar';
+        return self::collationLocale() === 'ar';
+    }
+
+    /** The locale ICU actually loaded for `ar` — "ar", or "root" when the data is missing. */
+    public static function collationLocale(): string
+    {
+        return (string) self::collator()->getLocale(\Locale::ACTUAL_LOCALE);
     }
 
     /**
