@@ -14,6 +14,13 @@ return [
     //
     // Developers do not need it: debug_otp returns the real code on
     // non-production and staging logs SMS instead of sending it.
+    // Return the one-time code in API responses (`data.debug_otp`) so testers
+    // can sign in without SMS. OFF unless an environment decides otherwise
+    // with OTP_DEBUG_RESPONSE=true, and never on production regardless
+    // (App\Support\OtpDebug). It used to follow `! isProduction()`, which
+    // left every new environment open without anyone deciding (2026-10-01).
+    'debug_response' => (bool) env('OTP_DEBUG_RESPONSE', false),
+
     'resend_seconds' => (int) env('OTP_RESEND_SECONDS', 60),
     'max_attempts' => (int) env('OTP_MAX_ATTEMPTS', 3),
 

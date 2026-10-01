@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api\V1\User;
 use App\Exceptions\EmailVerificationException;
 use App\Http\Controllers\Controller;
 use App\Services\EmailVerificationService;
+use App\Support\OtpDebug;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ class EmailController extends Controller
     /** POST /user/email — attach or change the email, unverified + OTP sent. */
     public function store(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $email = strtolower(trim((string) $request->input('email')));
 
         // Two separate checks so each failure maps to its own machine code.
@@ -53,8 +54,8 @@ class EmailController extends Controller
         }
 
         $data = [
-            'email'               => $email,
-            'verified'            => false,
+            'email' => $email,
+            'verified' => false,
             'resend_available_in' => (int) config('otp.resend_seconds', 60),
         ];
 
@@ -62,7 +63,7 @@ class EmailController extends Controller
         // comes back in the response. On staging the address is often a fixture
         // that nobody can open (user@mamsa.test), so without this the email gate
         // is untestable by hand — which is exactly what it was.
-        if (! app()->isProduction()) {
+        if (OtpDebug::exposeCode()) {
             $data['debug_otp'] = $code;
         }
 
@@ -85,7 +86,7 @@ class EmailController extends Controller
         $this->emails->confirm($user, $code);
 
         return $this->success([
-            'email'    => $user->email,
+            'email' => $user->email,
             'verified' => true,
         ], 'تم التحقق من البريد الإلكتروني بنجاح');
     }
@@ -98,12 +99,12 @@ class EmailController extends Controller
         $code = $this->emails->resendPending($user);
 
         $data = [
-            'email'               => $user->email,
-            'verified'            => false,
+            'email' => $user->email,
+            'verified' => false,
             'resend_available_in' => (int) config('otp.resend_seconds', 60),
         ];
 
-        if (! app()->isProduction()) {
+        if (OtpDebug::exposeCode()) {
             $data['debug_otp'] = $code;
         }
 
