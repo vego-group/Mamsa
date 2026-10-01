@@ -1,7 +1,10 @@
 # Known risk: live secrets and a production copy on one developer machine
 
 **Recorded:** 2026-10-01 · **Machine:** the backend developer's Windows/WSL2 machine (`/root/...`)
-**Nothing here was changed or deleted.** Deleting anything is irreversible, so Ahmed decides.
+**Update 2026-10-01 (Ahmed's written decision):** the rehearsal production copy was **deleted 2026-10-01 18:35:39 UTC**
+(dump, `app_core` + `.env`, archive, both containers, data volume), after `chmod 600`. `env.prod` and `backend/.env`
+went from world-readable to `chmod 600`; the SSH key and GitHub token were already `600`. Facts for the legal
+question: `incident-local-production-copy-2026-09-27.md`.
 
 ## What is on the machine
 
@@ -9,14 +12,14 @@
 |---|---|---|
 | `/root/Mamsaa/backend/.env` | Keys for the local Docker setup | No (git-ignored, never committed) |
 | `/root/Mamsaa/backend/env.prod` | **Production-style keys** (payment gateway publishable/secret among them) | No (never committed) |
-| `/root/rehearsal/prod-2026-09-27.sql` | 🔴 **Full production database dump** (2026-09-27, 45 tables), including production's real users | No |
-| `/root/rehearsal/app_core/.env` | 🔴 The `.env` from the rehearsal copy of production's `app_core`, **likely production's live secrets** (not opened) | No |
-| Docker: `mamsa_rehearsal_db` + its volume | The same production data, restored into MariaDB (container stopped) | No |
+| ~~`/root/rehearsal/prod-2026-09-27.sql`~~ | ~~Full production database dump~~ · **DELETED 2026-10-01 18:35:39 UTC** | No |
+| ~~`/root/rehearsal/app_core/.env`~~ | ~~production `.env` copy~~ · **DELETED 2026-10-01 18:35:39 UTC** | No |
+| ~~Docker: `mamsa_rehearsal_db` + volume~~ | **DELETED 2026-10-01 18:35:39 UTC** (with `mamsa_rehearsal_app`) | No |
 | `~/.ssh/mamsa_deploy` | 🔴 **SSH key with shell access to both servers** (staging + production) | No |
 | `~/.config/gh/hosts.yml` | GitHub token for `mohamedashrafdeve-arch` (push access to vego-group repos) | No |
 | `/root/claude-strip-backups-2026-10-01/` | Pre-rewrite git bundles of five repos (source code only) | No |
 
-These files are readable by any local user (`-rw-r--r--`). None of them is reachable from the internet.
+Remaining files are `chmod 600` (owner only) since 2026-10-01. None is reachable from the internet.
 
 ## If the machine is lost or compromised: rotate in this order
 
@@ -30,13 +33,12 @@ These files are readable by any local user (`-rw-r--r--`). None of them is reach
 6. **`TEST_OTP_CODE`** on staging (test-mode code).
 7. **`APP_KEY`:** last, and only with a plan. It invalidates sessions and signed URLs, and any value
    encrypted with it.
-8. **Personal data:** the production dump means production users' data left the server, so a data-protection
-   notification may be required. That's Ahmed's decision.
+8. **Personal data:** if a production copy ever leaves a server again, a data-protection notification may be
+   required. That's a legal decision, taken by the responsible person at VEGO via Ahmed.
 
-## Recommendation (pending Ahmed)
+## Rules (Ahmed, written, 2026-10-01)
 
-- **Delete the rehearsal production copy**: `/root/rehearsal/` (dump + `app_core` with its `.env`), and the
-  `mamsa_rehearsal_db` container and its volume. The rehearsal was 2026-09-27 and its report is written.
-- **Until then:** `chmod 600` on the dump and both `.env` files, so only the owner can read them.
-- **Rule from here on:** a production copy for a rehearsal is deleted when the rehearsal ends, and the
-  report says when.
+- **A production copy made for a rehearsal is deleted on the day the rehearsal ends**, and the rehearsal
+  report states when it was deleted.
+- **No production copy is kept on any machine between rehearsals.**
+- **Secrets that have to stay on the machine** (`env.prod`, the SSH key, the GitHub token) are `chmod 600`.

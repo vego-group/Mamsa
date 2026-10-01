@@ -46,8 +46,9 @@ as that person. **This was never tested against the real accounts.**
 emails differ. The other 14 don't exist on production. The one production copy ever made (the
 2026-09-27 rehearsal) went into a **local** container, not staging; see `known-risks-local-copies.md`.
 
-**Kept:** a backup of the 16 original rows is on the staging server only (`~/backups/`, chmod 600).
-Ahmed decides whether to delete it, since it holds the original personal data.
+**Kept, with a fixed end (Ahmed, written, 2026-10-01):** a backup of the 16 original rows sits on the staging
+server only (`~/backups/staging-users-before-anon-20261001-180724.json`, chmod 600).
+**🗓 Delete on 2026-10-08.** After that the original identities are gone from staging for good.
 
 ## Options, before UAT (Ahmed decides)
 
