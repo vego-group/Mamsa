@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\ProductionSeedGuard;
 use App\Models\PartnerDetail;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -35,6 +36,8 @@ class DevUsersSeeder extends Seeder
 {
     public function run(): void
     {
+        ProductionSeedGuard::assertAllowed($this);
+
         // 1. SuperAdmin — email + password login
         $superAdmin = User::updateOrCreate(
             ['phone' => '+966500000000'],
