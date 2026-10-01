@@ -46,6 +46,31 @@ and they're never sent to any third party.
 - **Who can read them:** only someone with SSH access to the hosting account.
 - **Switching it off** is one line: `ACCESS_LOG_ENABLED=false`, then `php artisan config:cache`.
 
+## Credential-in-path audit — all 250 routes (2026-10-01)
+
+Question asked of every route: **does any path parameter work as an access key**, meaning a value that
+reaches something without signing in? Run against the live route tables (`route:list --json -v`).
+Staging and production have the same 250 routes.
+
+| Group | Routes | Is the path value a key? |
+|---|---|---|
+| No path parameter | 143 | n/a |
+| Behind sign-in (`Authenticate:sanctum` 41 · `:dashboard` 20 · `:admin-panel` 36) | 97 | **No.** It's a record id. Knowing it reaches nothing without a session or token |
+| Signed URL (`ValidateSignature`): `/documents/{upload}`, `/uploads/{upload}`, `/complaints/attachments/{attachment}` | 3 | **No.** The key is the `signature` in the **query string**, which is never logged. `{upload}`/`{attachment}` are record ids |
+| `/storage/{path}` (GET, PUT): Laravel's local-disk route | 2 | **No.** Its controller rejects any request without a valid query `signature` (`ServeFile::__invoke`) |
+| Public listing: `/api/v1/units/{unit}` + `/availability`, `/blocked-dates`, `/reviews` | 4 | **No.** id, `listing_id` or `code`, all published in listings and the sitemap |
+| **`/api/v1/calendar/{token}.ics`** | **1** | **YES.** It opens the unit's calendar. **Masked** to `***` since 2026-10-01 |
+
+**Total 250. Credentials in a path: 1, masked.** The 16 parameter names in use: `attachment, block,
+booking, card, documentId, feedId, id, image, partnerId, path, payment, token, type, unit, upload,
+user`. Only `token` is credential-like. There's nothing named signature, key, hash, invite, reset or verify.
+
+**Limits of this audit:**
+- It covers **matched routes**. A request to a path that matches no route is logged as sent. The calendar
+  pattern is masked even then, but an unknown future secret in an unmatched path would not be.
+- It's a snapshot. **Re-run it whenever a public or signed route is added**, and name any credential
+  parameter `{token}`, so the existing mask covers it.
+
 ## 🔴 The limit: it only sees requests that reach PHP
 
 The line is written by the application. A request that never reaches PHP leaves **no line at all**.
