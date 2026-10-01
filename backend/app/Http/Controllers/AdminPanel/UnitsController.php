@@ -15,6 +15,7 @@ use App\Support\Permits\PermitMode;
 use App\Support\Permits\PermitWriter;
 use App\Support\Pricing;
 use App\Support\Units\ApartmentExpansion;
+use App\Support\Units\DoorName;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
@@ -477,7 +478,7 @@ class UnitsController extends Controller
 
         // Reload so the response reports the state AFTER filing.
         if ($groupId = $unit->fresh()->unit_group_id) {
-            $group = Unit::where('unit_group_id', $groupId)->orderBy('apartment_no')->get();
+            $group = DoorName::order(Unit::where('unit_group_id', $groupId)->get());
         }
 
         $added = max(0, $group->count() - $result['before']);

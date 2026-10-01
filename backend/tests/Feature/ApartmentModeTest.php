@@ -587,6 +587,92 @@ class ApartmentModeTest extends TestCase
             ->assertJsonPath('fields', ['permits.0.apartmentNo' => 'رقم الشقة 7 موجود بالفعل في المبنى']);
     }
 
+    /* ---------- option (a) and "٧" = "7" (owner decisions 2026-10-01) ---------- */
+
+    public function test_the_original_is_door_one_whatever_the_cards_are_named(): void
+    {
+        // Before (a), a card named "2" here was fine but a card named "1"
+        // pushed the original to "2" — read live on guests' bookings.
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $this->actingAs($this->partner, 'dashboard')->postJson("/units/u_{$source->id}/submit", [
+            'count' => 3,
+            'permits' => [
+                ['number' => 'NAMED-2', 'fileId' => $this->licenceFile($this->partner), 'apartmentNo' => '2'],
+                ['number' => 'AUTO', 'fileId' => $this->licenceFile($this->partner)],
+            ],
+        ])->assertOk();
+
+        $this->assertSame('1', $source->fresh()->apartment_no);
+        $doors = $this->doorsOf($source);
+        $this->assertSame('NAMED-2', $doors['2']);
+        $this->assertSame('AUTO', $doors['3']);
+    }
+
+    public function test_a_card_named_one_is_refused_as_reserved_for_the_original(): void
+    {
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        foreach (['1', '١'] as $name) {
+            $this->actingAs($this->partner, 'dashboard')->postJson("/units/u_{$source->id}/submit", [
+                'count' => 2,
+                'permits' => [['number' => 'R-'.$name, 'fileId' => $this->licenceFile($this->partner), 'apartmentNo' => $name]],
+            ])
+                ->assertStatus(400)
+                ->assertJsonPath('error.code', 'VALIDATION')
+                ->assertJsonPath('error.fields', ['permits.0.apartmentNo' => 'رقم الشقة 1 محجوز للوحدة الأصلية']);
+        }
+
+        $this->assertSame(1, Unit::count(), 'a refused expansion wrote doors');
+        $this->assertNull($source->fresh()->apartment_no);
+    }
+
+    public function test_arabic_digits_are_stored_as_the_same_door(): void
+    {
+        $source = $this->unit(['license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+        $this->expand($source, 2, [['number' => 'SEVEN', 'apartmentNo' => '٧']])->assertOk();
+
+        $this->assertSame('SEVEN', $this->doorsOf($source)['7'], '"٧" was not stored as "7"');
+
+        // …so "7" is now taken, and "٧" with "7" in one request is a repeat.
+        $this->expand($source->fresh(), 3, [['number' => 'AGAIN', 'apartmentNo' => '7']])
+            ->assertStatus(400)
+            ->assertJsonPath('error.fields', ['permits.0.apartmentNo' => 'رقم الشقة 7 موجود بالفعل في المبنى']);
+
+        $this->expand($source->fresh(), 4, [['number' => 'A', 'apartmentNo' => '٩'], ['number' => 'B', 'apartmentNo' => '9']])
+            ->assertStatus(400)
+            ->assertJsonPath('error.fields', ['permits.1.apartmentNo' => 'رقم الشقة 9 مكرر في نفس الطلب']);
+    }
+
+    public function test_the_response_lists_doors_in_the_one_agreed_order(): void
+    {
+        // orderBy('apartment_no') listed 1, 10, 2 — text order.
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $res = $this->actingAs($this->partner, 'dashboard')->postJson("/units/u_{$source->id}/submit", [
+            'count' => 3,
+            'permits' => [
+                ['number' => 'TEN', 'fileId' => $this->licenceFile($this->partner), 'apartmentNo' => '10'],
+                ['number' => 'TWO', 'fileId' => $this->licenceFile($this->partner), 'apartmentNo' => '2'],
+            ],
+        ])->assertOk();
+
+        $this->assertSame(['1', '2', '10'], collect($res->json('units'))->pluck('apartmentNo')->all());
+    }
+
+    public function test_the_admin_console_reserves_door_one_in_its_envelope(): void
+    {
+        $source = $this->unit(['license_type' => UnitLicense::PRIVATE_HOSPITALITY, 'mamsa_owned' => true], User::platform());
+
+        $this->actingAs($this->admin, 'admin-panel')->postJson("/admin/units/{$source->id}/apartments", [
+            'count' => 2,
+            'permits' => [['number' => 'ADM-1', 'fileId' => $this->licenceFile($this->admin), 'apartmentNo' => '1']],
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonPath('fields', ['permits.0.apartmentNo' => 'رقم الشقة 1 محجوز للوحدة الأصلية']);
+    }
+
     /** @return array<string, ?string> door number => permit number, in door order */
     private function doorsOf(Unit $source): array
     {

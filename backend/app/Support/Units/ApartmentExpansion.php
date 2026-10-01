@@ -101,20 +101,29 @@ final class ApartmentExpansion
     public static function nameErrors(Unit $source, array $permits): array
     {
         $taken = $source->unit_group_id
-            ? Unit::where('unit_group_id', $source->unit_group_id)->pluck('apartment_no')->filter()->map(strval(...))->all()
-            : array_filter([(string) $source->apartment_no]);
+            ? Unit::where('unit_group_id', $source->unit_group_id)->pluck('apartment_no')->map(fn ($n) => DoorName::normalize($n))->filter()->values()->all()
+            : array_filter([DoorName::normalize($source->apartment_no)]);
+
+        // A standalone unit becoming a building takes door "1" — owner decision
+        // 2026-10-01, option (a). Its number is read live on guests' bookings,
+        // so it must not depend on what the partner names the NEW doors.
+        $reserved = ! $source->unit_group_id && DoorName::normalize($source->apartment_no) === ''
+            ? UnitCloner::ORIGINAL_DOOR
+            : null;
 
         $errors = [];
         $seen = [];
 
         foreach ($permits as $i => $permit) {
-            $name = isset($permit['apartmentNo']) ? trim((string) $permit['apartmentNo']) : '';
+            $name = DoorName::normalize($permit['apartmentNo'] ?? null);
 
             if ($name === '') {
                 continue;
             }
 
-            if (in_array($name, $taken, true)) {
+            if ($name === $reserved) {
+                $errors["permits.{$i}.apartmentNo"] = "رقم الشقة {$name} محجوز للوحدة الأصلية";
+            } elseif (in_array($name, $taken, true)) {
                 $errors["permits.{$i}.apartmentNo"] = "رقم الشقة {$name} موجود بالفعل في المبنى";
             } elseif (isset($seen[$name])) {
                 $errors["permits.{$i}.apartmentNo"] = "رقم الشقة {$name} مكرر في نفس الطلب";
@@ -133,7 +142,7 @@ final class ApartmentExpansion
     private static function names(array $permits): array
     {
         return array_values(array_filter(array_map(
-            fn (array $p) => isset($p['apartmentNo']) ? trim((string) $p['apartmentNo']) : '',
+            fn (array $p) => DoorName::normalize($p['apartmentNo'] ?? null),
             $permits,
         ), fn (string $n) => $n !== ''));
     }
@@ -144,7 +153,7 @@ final class ApartmentExpansion
         $unnamed = [];
 
         foreach ($permits as $permit) {
-            $door = isset($permit['apartmentNo']) ? trim((string) $permit['apartmentNo']) : '';
+            $door = DoorName::normalize($permit['apartmentNo'] ?? null);
             $door === '' ? $unnamed[] = $permit : $byNumber[$door] = $permit;
         }
 

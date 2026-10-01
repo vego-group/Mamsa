@@ -13,6 +13,7 @@ use App\Support\Permits\PermitMode;
 use App\Support\Permits\PermitRenewal;
 use App\Support\Permits\PermitWriter;
 use App\Support\Units\ApartmentExpansion;
+use App\Support\Units\DoorName;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitCloner;
 use App\Support\Units\UnitLicense;
@@ -266,7 +267,7 @@ class UnitController extends DashboardController
         // Reload so the response reports state AFTER filing rather than the
         // state the rows were created in — the client reads status, not assumes.
         if ($groupId = $unit->fresh()->unit_group_id) {
-            $group = Unit::where('unit_group_id', $groupId)->orderBy('apartment_no')->get();
+            $group = DoorName::order(Unit::where('unit_group_id', $groupId)->get());
         }
 
         // Outside the transaction: a mail failure must not undo a filing that
@@ -439,7 +440,7 @@ class UnitController extends DashboardController
             $unit->update(['approval_status' => 'pending', 'rejection_reason' => null]);
 
             return $unit->fresh()->unit_group_id
-                ? Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->orderBy('apartment_no')->get()
+                ? DoorName::order(Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->get())
                 : collect([$unit->fresh()]);
         });
 

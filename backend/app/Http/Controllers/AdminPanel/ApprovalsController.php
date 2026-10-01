@@ -8,6 +8,7 @@ use App\Models\Unit;
 use App\Notifications\UnitReviewResult;
 use App\Support\AdminPanel\UnitPresenter;
 use App\Support\Permits\PermitExpiry;
+use App\Support\Units\DoorName;
 use App\Support\Units\LicenseViolation;
 use App\Support\Units\UnitLicense;
 use Illuminate\Http\JsonResponse;
@@ -214,7 +215,7 @@ class ApprovalsController extends Controller
             return null;
         }
 
-        $members = Unit::where('unit_group_id', $u->unit_group_id)->orderBy('apartment_no')->get();
+        $members = DoorName::order(Unit::where('unit_group_id', $u->unit_group_id)->get());
 
         return [
             'id' => $u->unit_group_id,
