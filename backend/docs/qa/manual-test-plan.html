@@ -1,0 +1,653 @@
+<title>Mamsa — Manual QA Test Plan</title>
+<style>
+  :root{
+    --ground:#F7F7F4; --paper:#ffffff; --paper-2:#f2f5f0;
+    --ink:#131e18; --ink-soft:#3c4640; --ink-mute:#6b746d;
+    --line:#e2e7e1; --line-2:#d3dad2;
+    --forest:#163c24; --forest-2:#2e5339; --forest-ink:#0c2415;
+    --amber:#F5A623; --amber-deep:#b9730a;
+    --pass:#1f9d5b; --pass-bg:#e6f4ec;
+    --fail:#c0362c; --fail-bg:#fbe9e7;
+    --block:#d98a15; --block-bg:#fbf1dd;
+    --todo:#8a938c;
+    --ring-track:#e2e7e1;
+    --shadow:0 1px 2px rgba(19,30,24,.06),0 6px 20px -12px rgba(19,30,24,.25);
+    --radius:14px;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0f1712; --paper:#16211a; --paper-2:#1b2820;
+      --ink:#e8efe9; --ink-soft:#c2ccc4; --ink-mute:#8b968d;
+      --line:#26332b; --line-2:#324034;
+      --forest:#a7d1af; --forest-2:#c2edca; --forest-ink:#e8efe9;
+      --amber:#F5B23A; --amber-deep:#f5b23a;
+      --pass:#4cc585; --pass-bg:#12271c;
+      --fail:#f0857a; --fail-bg:#2a1614;
+      --block:#e6a53a; --block-bg:#2a2011;
+      --todo:#6d776f;
+      --ring-track:#26332b;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"]{
+    --ground:#F7F7F4; --paper:#ffffff; --paper-2:#f2f5f0;
+    --ink:#131e18; --ink-soft:#3c4640; --ink-mute:#6b746d;
+    --line:#e2e7e1; --line-2:#d3dad2;
+    --forest:#163c24; --forest-2:#2e5339; --forest-ink:#0c2415;
+    --amber:#F5A623; --amber-deep:#b9730a;
+    --pass:#1f9d5b; --pass-bg:#e6f4ec; --fail:#c0362c; --fail-bg:#fbe9e7;
+    --block:#d98a15; --block-bg:#fbf1dd; --todo:#8a938c; --ring-track:#e2e7e1;
+    --shadow:0 1px 2px rgba(19,30,24,.06),0 6px 20px -12px rgba(19,30,24,.25);
+  }
+  :root[data-theme="dark"]{
+    --ground:#0f1712; --paper:#16211a; --paper-2:#1b2820;
+    --ink:#e8efe9; --ink-soft:#c2ccc4; --ink-mute:#8b968d;
+    --line:#26332b; --line-2:#324034;
+    --forest:#a7d1af; --forest-2:#c2edca; --forest-ink:#e8efe9;
+    --amber:#F5B23A; --amber-deep:#f5b23a;
+    --pass:#4cc585; --pass-bg:#12271c; --fail:#f0857a; --fail-bg:#2a1614;
+    --block:#e6a53a; --block-bg:#2a2011; --todo:#6d776f; --ring-track:#26332b;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.6);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.55;-webkit-font-smoothing:antialiased;font-size:15px}
+  a{color:var(--forest);text-decoration:underline;text-underline-offset:2px}
+  h1,h2,h3{margin:0;text-wrap:balance;line-height:1.2}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 20px}
+
+  /* ---- top bar ---- */
+  header.top{position:sticky;top:0;z-index:30;background:var(--forest);color:#eef4ee;
+    border-bottom:1px solid rgba(0,0,0,.15)}
+  header.top .wrap{display:flex;align-items:center;gap:16px;padding-top:14px;padding-bottom:14px;flex-wrap:wrap}
+  .brandmark{display:flex;align-items:center;gap:11px}
+  .brandmark .dot{width:30px;height:30px;border-radius:8px;background:var(--amber);
+    display:grid;place-items:center;color:#3a2600;font-weight:800;font-family:var(--mono);font-size:15px}
+  .brandmark b{font-size:16px;letter-spacing:.02em;color:#fff}
+  .brandmark small{display:block;font-size:11.5px;color:#bcd3c0;letter-spacing:.14em;text-transform:uppercase;margin-top:1px}
+  header.top .spacer{flex:1}
+  .themebtn{background:rgba(255,255,255,.1);color:#eef4ee;border:1px solid rgba(255,255,255,.22);
+    border-radius:9px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer}
+  .themebtn:hover{background:rgba(255,255,255,.18)}
+
+  /* ---- env warning ---- */
+  .envbar{background:var(--block-bg);border-bottom:1px solid var(--line)}
+  .envbar .wrap{display:flex;gap:12px;align-items:flex-start;padding:11px 20px}
+  .envbar .tag{flex:none;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.05em;
+    background:var(--amber);color:#3a2600;padding:3px 8px;border-radius:6px;margin-top:1px}
+  .envbar p{margin:0;font-size:13px;color:var(--ink-soft)}
+  .envbar code{font-family:var(--mono);font-size:12px;background:var(--paper);padding:1px 5px;border-radius:4px;border:1px solid var(--line-2)}
+
+  /* ---- layout ---- */
+  .grid{display:grid;grid-template-columns:288px 1fr;gap:28px;align-items:start;padding:28px 0 80px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr;gap:18px}}
+
+  /* ---- rail ---- */
+  aside{position:sticky;top:78px;display:flex;flex-direction:column;gap:16px}
+  @media(max-width:860px){aside{position:static}}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .rail-progress{padding:18px;display:flex;gap:16px;align-items:center}
+  .ring{--pct:0;width:84px;height:84px;flex:none;border-radius:50%;
+    background:conic-gradient(var(--pass) calc(var(--pct)*1%),var(--ring-track) 0);
+    display:grid;place-items:center;transition:background .35s ease}
+  .ring .inner{width:64px;height:64px;border-radius:50%;background:var(--paper);display:grid;place-items:center;
+    flex-direction:column;text-align:center}
+  .ring .inner b{font-size:19px;font-family:var(--mono);line-height:1}
+  .ring .inner span{font-size:10px;color:var(--ink-mute);letter-spacing:.08em;text-transform:uppercase}
+  .rail-progress .meta b{display:block;font-size:14px}
+  .rail-progress .meta span{font-size:12.5px;color:var(--ink-mute)}
+  .counts{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 18px 18px}
+  .count{display:flex;align-items:center;gap:8px;font-size:13px;padding:8px 10px;border-radius:9px;background:var(--paper-2);border:1px solid var(--line)}
+  .count .n{font-family:var(--mono);font-weight:700;margin-inline-start:auto}
+  .swatch{width:10px;height:10px;border-radius:3px;flex:none}
+  .sw-pass{background:var(--pass)}.sw-fail{background:var(--fail)}.sw-block{background:var(--block)}.sw-todo{background:var(--todo)}
+  .rail-actions{display:flex;flex-direction:column;gap:8px;padding:14px}
+  .filters{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font:inherit;font-size:12.5px;padding:6px 11px;border-radius:999px;border:1px solid var(--line-2);
+    background:var(--paper);color:var(--ink-soft);cursor:pointer}
+  .chip[aria-pressed="true"]{background:var(--forest);color:#fff;border-color:var(--forest)}
+  .btn{font:inherit;font-size:13px;padding:9px 12px;border-radius:10px;border:1px solid var(--line-2);
+    background:var(--paper);color:var(--ink);cursor:pointer;text-align:center}
+  .btn:hover{border-color:var(--forest)}
+  .btn.primary{background:var(--forest);color:#fff;border-color:var(--forest)}
+  .btn.primary:hover{background:var(--forest-2)}
+  .btn.ghostwarn:hover{border-color:var(--fail);color:var(--fail)}
+
+  /* ---- accounts card ---- */
+  .acct{padding:16px 18px}
+  .acct h3{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:10px}
+  .acct table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .acct td{padding:4px 0;vertical-align:top}
+  .acct td:first-child{color:var(--ink-mute);padding-inline-end:8px;white-space:nowrap}
+  .acct code{font-family:var(--mono);font-size:12px}
+
+  /* ---- main ---- */
+  main{min-width:0;display:flex;flex-direction:column;gap:26px}
+  .intro h1{font-size:26px;letter-spacing:-.01em}
+  .intro p{color:var(--ink-soft);margin:.5em 0 0;max-width:64ch}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:12.5px;color:var(--ink-mute)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+
+  section.role{scroll-margin-top:150px}
+  .role-head{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+  .role-head .rk{font-family:var(--mono);font-size:12px;font-weight:700;color:#fff;background:var(--forest);
+    padding:4px 9px;border-radius:7px;letter-spacing:.04em}
+  .role-head h2{font-size:19px}
+  .role-head .rmeta{margin-inline-start:auto;font-size:12.5px;color:var(--ink-mute);font-family:var(--mono)}
+  .role-desc{color:var(--ink-soft);font-size:13.5px;margin:2px 0 14px}
+
+  .cases{display:flex;flex-direction:column;gap:12px}
+  .case{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);overflow:hidden}
+  .case.st-pass{border-inline-start:4px solid var(--pass)}
+  .case.st-fail{border-inline-start:4px solid var(--fail)}
+  .case.st-block{border-inline-start:4px solid var(--block)}
+  .case.st-todo{border-inline-start:4px solid var(--line-2)}
+  .case-top{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;cursor:pointer}
+  .case-id{font-family:var(--mono);font-size:11.5px;font-weight:700;color:var(--forest);background:var(--paper-2);
+    border:1px solid var(--line);padding:3px 7px;border-radius:6px;flex:none;margin-top:1px}
+  .case-title{font-weight:600;font-size:14.5px}
+  .case-sub{font-size:12.5px;color:var(--ink-mute);margin-top:2px}
+  .case-top .statuspill{margin-inline-start:auto;flex:none}
+  .statuspill{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:4px 9px;border-radius:999px;border:1px solid transparent;white-space:nowrap}
+  .sp-todo{color:var(--todo);background:var(--paper-2);border-color:var(--line)}
+  .sp-pass{color:var(--pass);background:var(--pass-bg)}
+  .sp-fail{color:var(--fail);background:var(--fail-bg)}
+  .sp-block{color:var(--block-deep,var(--amber-deep));background:var(--block-bg)}
+  .caret{flex:none;margin-top:3px;color:var(--ink-mute);transition:transform .2s;font-size:12px}
+  .case[open-body] .caret{transform:rotate(90deg)}
+  .case-body{display:none;padding:0 16px 16px;border-top:1px solid var(--line)}
+  .case.exp .case-body{display:block}
+  .case.exp .caret{transform:rotate(90deg)}
+  .block-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);
+    margin:14px 0 6px;font-weight:700}
+  ol.steps{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--ink-soft)}
+  ol.steps code,.expect code,.acct code,.envbar code{font-family:var(--mono);font-size:12px;
+    background:var(--paper-2);padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
+  .expect{background:var(--pass-bg);border:1px solid color-mix(in srgb,var(--pass) 30%,transparent);
+    border-radius:10px;padding:10px 12px;font-size:13.5px;color:var(--ink)}
+  .expect b{color:var(--pass)}
+  @media (prefers-color-scheme:dark){.expect b{color:var(--pass)}}
+  .setctrl{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .sbtn{font:inherit;font-size:13px;font-weight:600;padding:8px 16px;border-radius:9px;cursor:pointer;
+    border:1.5px solid var(--line-2);background:var(--paper);color:var(--ink-soft)}
+  .sbtn[data-k="pass"][aria-pressed="true"]{background:var(--pass);border-color:var(--pass);color:#fff}
+  .sbtn[data-k="fail"][aria-pressed="true"]{background:var(--fail);border-color:var(--fail);color:#fff}
+  .sbtn[data-k="block"][aria-pressed="true"]{background:var(--block);border-color:var(--block);color:#3a2600}
+  .sbtn:hover{border-color:var(--ink-mute)}
+  textarea.note{margin-top:10px;width:100%;min-height:44px;resize:vertical;border:1px solid var(--line-2);
+    border-radius:9px;padding:9px 11px;font:inherit;font-size:13px;background:var(--paper-2);color:var(--ink)}
+  textarea.note:focus,.btn:focus-visible,.sbtn:focus-visible,.chip:focus-visible,.themebtn:focus-visible{
+    outline:2px solid var(--amber);outline-offset:2px}
+
+  dialog#export{border:1px solid var(--line);border-radius:14px;padding:0;background:var(--paper);color:var(--ink);
+    max-width:min(720px,92vw);width:100%;box-shadow:var(--shadow)}
+  dialog#export::backdrop{background:rgba(10,18,13,.5)}
+  .dlg-head{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .dlg-head h3{font-size:15px}.dlg-head .btn{margin-inline-start:auto}
+  dialog#export textarea{width:100%;min-height:340px;border:0;border-radius:0 0 14px 14px;padding:16px 18px;
+    font-family:var(--mono);font-size:12px;background:var(--paper-2);color:var(--ink);resize:vertical}
+  .foot{color:var(--ink-mute);font-size:12px;text-align:center;padding:8px 0 40px}
+  @media print{aside,header.top,.rail-actions{display:none}.case-body{display:block!important}}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brandmark">
+      <div class="dot">م</div>
+      <div><b>Mamsa · Manual QA</b><small>Browser Test Plan</small></div>
+    </div>
+    <div class="spacer"></div>
+    <button class="themebtn" id="themeToggle" type="button">◐ Theme</button>
+  </div>
+</header>
+
+<div class="envbar">
+  <div class="wrap" style="padding-inline:0">
+    <span class="tag">READ FIRST</span>
+    <p><b>Know which backend you're hitting.</b> The public site <code>mamsaa.com</code> / <code>www.mamsaa.com</code> is currently wired to the <b>staging</b> API (<code>staging.mamsaa.com/api/v1</code>) — staging accepts the fixed OTP <code>111222</code>. <code>admin.mamsaa.com</code> and <code>partner.mamsaa.com</code> point at <b>production</b> (<code>api.mamsaa.com</code>), where OTP is a real SMS. Note the target on every failure you log.</p>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="grid">
+    <!-- RAIL -->
+    <aside>
+      <div class="card">
+        <div class="rail-progress">
+          <div class="ring" id="ring"><div class="inner"><b id="ringPct">0%</b><span>done</span></div></div>
+          <div class="meta">
+            <b id="doneCount">0 / 0</b>
+            <span>cases resolved</span>
+          </div>
+        </div>
+        <div class="counts">
+          <div class="count"><span class="swatch sw-pass"></span>Pass<span class="n" id="cPass">0</span></div>
+          <div class="count"><span class="swatch sw-fail"></span>Fail<span class="n" id="cFail">0</span></div>
+          <div class="count"><span class="swatch sw-block"></span>Blocked<span class="n" id="cBlock">0</span></div>
+          <div class="count"><span class="swatch sw-todo"></span>Untested<span class="n" id="cTodo">0</span></div>
+        </div>
+      </div>
+
+      <div class="card rail-actions">
+        <div class="filters" id="filters">
+          <button class="chip" data-f="all" aria-pressed="true" type="button">All</button>
+          <button class="chip" data-f="todo" aria-pressed="false" type="button">Untested</button>
+          <button class="chip" data-f="fail" aria-pressed="false" type="button">Failed</button>
+          <button class="chip" data-f="block" aria-pressed="false" type="button">Blocked</button>
+        </div>
+        <button class="btn primary" id="exportBtn" type="button">Export results</button>
+        <button class="btn" id="expandBtn" type="button">Expand all</button>
+        <button class="btn ghostwarn" id="resetBtn" type="button">Reset run</button>
+      </div>
+
+      <div class="card acct">
+        <h3>Test accounts</h3>
+        <table>
+          <tr><td>Guest</td><td><code>0500000004</code></td></tr>
+          <tr><td>Partner</td><td><code>0500000002</code> (individual)</td></tr>
+          <tr><td>Partner Co.</td><td><code>0500000003</code></td></tr>
+          <tr><td>Admin</td><td><code>superadmin@mamsaa.sa</code></td></tr>
+          <tr><td>Admin pw</td><td><code>Password1</code></td></tr>
+          <tr><td>OTP (stg)</td><td><code>111222</code></td></tr>
+          <tr><td>OTP (prod)</td><td>SMS — ask backend</td></tr>
+          <tr><td>Test card</td><td><code>4111 1111 1111 1111</code></td></tr>
+        </table>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main id="main">
+      <div class="intro">
+        <h1>Mamsa full-platform manual test plan</h1>
+        <p>A browser-driven pass across every role and screen — guest, host (partner), and admin. Work top-to-bottom, mark each case Pass / Fail / Blocked, and jot the actual result on anything that isn't a clean pass. Your progress is saved in this browser automatically. The product UI is Arabic / RTL; this checklist is English for the team.</p>
+        <div class="legend">
+          <span><span class="swatch sw-pass"></span>Works as expected</span>
+          <span><span class="swatch sw-fail"></span>Wrong / broken</span>
+          <span><span class="swatch sw-block"></span>Couldn't test (dependency/data)</span>
+          <span><span class="swatch sw-todo"></span>Not run yet</span>
+        </div>
+      </div>
+      <!-- sections injected here -->
+    </main>
+  </div>
+</div>
+
+<dialog id="export">
+  <div class="dlg-head">
+    <h3>QA run — Markdown report</h3>
+    <button class="btn" id="copyReport" type="button">Copy</button>
+    <button class="btn" id="closeDlg" type="button">Close</button>
+  </div>
+  <textarea id="reportText" readonly spellcheck="false"></textarea>
+</dialog>
+
+<div class="foot wrap">Mamsa QA · state stored locally in your browser · print for a paper run</div>
+
+<script>
+/* ---------------- Test data ---------------- */
+const DATA = [
+ {rk:"G", role:"Guest / Visitor", desc:"Public browsing and the guest account journey — no elevated role required.", cases:[
+   {id:"G-01", t:"Home page loads", s:"Storefront",
+     steps:["Open the site root in a fresh tab.","Let all home sections render (hero, popular units, offers, testimonials)."],
+     exp:"Page loads with no console errors; images resolve; Arabic text is right-to-left."},
+   {id:"G-02", t:"Browse units list", s:"Units / search",
+     steps:["Go to the units / search page.","Scroll the results grid; trigger pagination or load-more."],
+     exp:"A grid of units renders with cover image, name, city, price/night; more results load on demand."},
+   {id:"G-03", t:"Filter by city, category & budget", s:"Units / search",
+     steps:["Apply a city filter.","Add a category (unit type).","Apply a budget/price range."],
+     exp:"Results narrow to match every active filter; clearing filters restores the full list."},
+   {id:"G-04", t:"Popular units section", s:"Storefront",
+     steps:["On home, find the 'Popular' section."],
+     exp:"Shows a curated set of units; each links through to its detail page."},
+   {id:"G-05", t:"Unit detail page", s:"Unit detail",
+     steps:["Open any unit.","Review gallery, description, amenities, map, price, reviews."],
+     exp:"All fields populate; image gallery navigates; price and rating match the list card."},
+   {id:"G-06", t:"Unit reviews list", s:"Unit detail",
+     steps:["Scroll to the reviews block on a unit that has reviews."],
+     exp:"Existing reviews render with rating + author; rating average matches the header."},
+   {id:"G-07", t:"Availability / date check", s:"Unit detail",
+     steps:["Pick a check-in and check-out date on a unit.","Submit the availability check."],
+     exp:"Available dates proceed to booking; already-booked/blocked ranges are rejected with a clear message."},
+   {id:"G-08", t:"Offers page", s:"Marketing",
+     steps:["Open the offers/promotions page."],
+     exp:"Active offers render (or a tidy empty state); expired offers don't show."},
+   {id:"G-09", t:"Testimonials", s:"Marketing",
+     steps:["Locate the testimonials section on home."],
+     exp:"Testimonials render in a carousel/grid without layout breakage."},
+   {id:"G-10", t:"Contact form", s:"Contact",
+     steps:["Open contact.","Submit empty → check validation.","Submit valid name/email/message."],
+     exp:"Empty submit shows field errors; a valid submit confirms success and is rate-limited on abuse."},
+ ]},
+ {rk:"GA", role:"Guest — Account & Booking", desc:"Signed-in guest flows: OTP login, profile, favorites, the full book→pay→review lifecycle.", cases:[
+   {id:"GA-01", t:"Request OTP", s:"Auth",
+     steps:["Open login, enter the guest phone <code>0500000004</code>.","Request the code."],
+     exp:"Success message; on staging the code is <code>111222</code>; on prod it arrives by SMS."},
+   {id:"GA-02", t:"Verify OTP & sign in", s:"Auth",
+     steps:["Enter the OTP and submit."],
+     exp:"Session starts, token stored; header switches to the logged-in state (name/avatar)."},
+   {id:"GA-03", t:"Complete profile (first login)", s:"Auth",
+     steps:["With a brand-new phone, log in.","Fill name (+ optional email) when prompted."],
+     exp:"Profile saves and the app proceeds; returning users skip this step."},
+   {id:"GA-04", t:"View profile", s:"Account",
+     steps:["Open the profile page."],
+     exp:"Name, phone, email, and account status display correctly."},
+   {id:"GA-05", t:"Edit profile", s:"Account",
+     steps:["Change the display name / email and save."],
+     exp:"Toast confirms; reload shows the new values persisted."},
+   {id:"GA-06", t:"Add & remove favorite", s:"Favorites",
+     steps:["Tap the heart on a unit.","Open favorites and confirm it's there.","Un-favorite it."],
+     exp:"Favorite toggles instantly and survives reload; removal drops it from the list."},
+   {id:"GA-07", t:"My bookings list", s:"Bookings",
+     steps:["Open 'My bookings'."],
+     exp:"All the guest's bookings show with status (pending/confirmed/completed/cancelled) and dates."},
+   {id:"GA-08", t:"Booking detail", s:"Bookings",
+     steps:["Open one booking."],
+     exp:"Shows unit, dates, price breakdown (subtotal + 15% VAT), status, and payment state."},
+   {id:"GA-09", t:"Cancellation preview", s:"Bookings",
+     steps:["On an eligible booking, open the cancellation preview."],
+     exp:"Shows the refund amount / policy before you commit — no charge yet."},
+   {id:"GA-10", t:"Create a booking", s:"Booking flow",
+     steps:["From a unit, choose valid dates → continue to checkout.","Review the price summary."],
+     exp:"A pending booking is created with the correct nights, subtotal and VAT."},
+   {id:"GA-11", t:"Pay with card (Moyasar)", s:"Payment",
+     steps:["At checkout choose card.","Enter test card <code>4111 1111 1111 1111</code>, any future expiry/CVC.","Complete 3-D Secure."],
+     exp:"Payment succeeds, returns to the app, and the booking flips to confirmed. (Staging = test keys.)"},
+   {id:"GA-12", t:"Saved cards", s:"Payment",
+     steps:["After a payment, open saved cards.","Set a default; delete a card."],
+     exp:"Card metadata (brand/last4) lists; default + delete work; no full PAN is ever stored."},
+   {id:"GA-13", t:"Wallet / transactions ledger", s:"Payment",
+     steps:["Open the transactions/wallet history."],
+     exp:"Read-only ledger of charges/refunds with amounts and timestamps."},
+   {id:"GA-14", t:"Cancel a booking + refund", s:"Bookings",
+     steps:["Cancel an eligible confirmed booking.","Confirm the previewed refund."],
+     exp:"Booking → cancelled; refund is initiated per policy and reflected in transactions."},
+   {id:"GA-15", t:"Write a review", s:"Reviews",
+     steps:["On a completed stay, submit a rating + comment."],
+     exp:"Review posts and appears on the unit; only completed stays can review."},
+   {id:"GA-16", t:"Add & verify email", s:"Account",
+     steps:["Add an email in account settings.","Enter the emailed code."],
+     exp:"Email marked verified; login stays phone-OTP only (email is a contact channel)."},
+   {id:"GA-17", t:"Change phone number", s:"Account",
+     steps:["Start change-phone, enter a new number.","Verify with the OTP sent to it."],
+     exp:"Phone updates only after OTP verification; old number no longer logs in."},
+   {id:"GA-18", t:"Notifications", s:"Account",
+     steps:["Open the notifications bell.","Mark one read; mark all read."],
+     exp:"Booking/payment notifications list; unread count decrements correctly."},
+   {id:"GA-19", t:"Logout", s:"Auth",
+     steps:["Log out."],
+     exp:"Session cleared; protected pages redirect to login."},
+   {id:"GA-20", t:"Delete account", s:"Account",
+     steps:["Open delete-account, confirm.","(Use a throwaway account — this is destructive.)"],
+     exp:"Account is removed/anonymized and can no longer authenticate."},
+ ]},
+ {rk:"P", role:"Partner / Host", desc:"Host dashboard and the unit lifecycle: create → images → calendar → submit for review → manage bookings. Live at partner.mamsaa.com (production).", cases:[
+   {id:"P-01", t:"Partner registration", s:"Onboarding",
+     steps:["Open partner sign-up.","Choose individual or company, submit details, verify OTP."],
+     exp:"Partner account is created in a pending state awaiting admin approval."},
+   {id:"P-02", t:"Partner login", s:"Auth",
+     steps:["Log in with the partner phone <code>0500000002</code> + OTP."],
+     exp:"Lands on the partner dashboard (guest storefront role is not shown here)."},
+   {id:"P-03", t:"Dashboard KPIs", s:"Dashboard",
+     steps:["Review the dashboard tiles."],
+     exp:"Units count, bookings, revenue and occupancy show real, non-zero numbers for an active host."},
+   {id:"P-04", t:"Edit partner profile", s:"Profile",
+     steps:["Update business/profile info and save."],
+     exp:"Changes persist; KYC/verification badge state is shown."},
+   {id:"P-05", t:"Units list", s:"Units",
+     steps:["Open 'My units'."],
+     exp:"All owned units list with status (draft / pending / approved / rejected)."},
+   {id:"P-06", t:"Create a unit (draft)", s:"Units",
+     steps:["Start a new unit, fill name, type, city, price, capacity, amenities, location.","Save as draft."],
+     exp:"Draft saves; required-field validation blocks an incomplete save."},
+   {id:"P-07", t:"Edit a unit", s:"Units",
+     steps:["Open a draft/rejected unit, change fields, save."],
+     exp:"Edits persist; approved units follow the re-review rule after edits."},
+   {id:"P-08", t:"Upload images & set cover", s:"Units",
+     steps:["Upload several photos.","Set one as the main/cover; delete one."],
+     exp:"Images upload to storage and render; cover choice reflects on the unit card."},
+   {id:"P-09", t:"Submit unit for review", s:"Units",
+     steps:["On a complete draft, submit for review."],
+     exp:"Status → pending; it now appears in the admin approvals queue."},
+   {id:"P-10", t:"Block / unblock calendar dates", s:"Calendar",
+     steps:["Open a unit's calendar.","Add a manual blocked range; then remove it."],
+     exp:"Blocked dates become unbookable by guests; unblock restores availability."},
+   {id:"P-11", t:"iCal calendar sync", s:"Calendar",
+     steps:["Copy the unit's iCal export URL.","(Optional) import an external iCal."],
+     exp:"Export produces a valid <code>.ics</code>; external busy dates block those nights."},
+   {id:"P-12", t:"Bookings on my units", s:"Bookings",
+     steps:["Open the partner bookings list."],
+     exp:"Bookings for owned units show with guest, dates, payout/commission and status."},
+   {id:"P-13", t:"Partner notifications", s:"Notifications",
+     steps:["Open notifications; mark read / read-all."],
+     exp:"New-booking, cancellation and approval events appear; unread count updates."},
+   {id:"P-14", t:"Delete a unit", s:"Units",
+     steps:["Delete a draft unit."],
+     exp:"Unit is removed; units with active bookings are protected from deletion."},
+ ]},
+ {rk:"A", role:"Admin / SuperAdmin", desc:"Back-office console. Live at admin.mamsaa.com (production). Sign in with email + password.", cases:[
+   {id:"A-01", t:"Admin login", s:"Auth",
+     steps:["Sign in with <code>superadmin@mamsaa.sa</code> / <code>Password1</code> (or admin.mamsaa.com OTP)."],
+     exp:"Lands on the admin dashboard; non-admins are rejected."},
+   {id:"A-02", t:"Dashboard — real financials", s:"Dashboard",
+     steps:["Review revenue, platform commission, bookings and partner tiles."],
+     exp:"Platform commission is NON-zero and matches reports (revenue = confirmed + completed bookings)."},
+   {id:"A-03", t:"Users list + search", s:"Users",
+     steps:["Open users.","Type a name/phone in the search box.","Page through results."],
+     exp:"List loads; search narrows live; the command palette (⌘K) jumps between screens."},
+   {id:"A-04", t:"User detail — booking count", s:"Users",
+     steps:["Open a user's detail drawer."],
+     exp:"Total bookings matches the list row; spend counts only revenue-bearing bookings."},
+   {id:"A-05", t:"Suspend / activate user", s:"Users",
+     steps:["Toggle a test user's status."],
+     exp:"Status flips; a suspended user can't authenticate."},
+   {id:"A-06", t:"Partners list + stats", s:"Partners",
+     steps:["Open partners; review the stats tiles."],
+     exp:"Partners list with type, verification and unit/booking counts."},
+   {id:"A-07", t:"Partner detail + documents", s:"Partners",
+     steps:["Open a partner.","Open a KYC/permit document in the viewer."],
+     exp:"Detail loads; documents render in the viewer (no 403) for an admin."},
+   {id:"A-08", t:"Approve / reject / verify partner", s:"Partners",
+     steps:["On a pending partner: approve.","On another: reject with a reason; verify a document."],
+     exp:"State changes stick; the partner is notified; rejection reason is recorded."},
+   {id:"A-09", t:"Approvals queue (units)", s:"Approvals",
+     steps:["Open the approvals/requests queue."],
+     exp:"Pending units list with partner, submitted-at and permit info."},
+   {id:"A-10", t:"Approve / reject a unit", s:"Approvals",
+     steps:["Approve one pending unit.","Reject another with a reason."],
+     exp:"Approved unit goes live in the storefront; rejected unit returns to the partner with the reason."},
+   {id:"A-11", t:"Units list + featured toggle", s:"Units",
+     steps:["Open admin units.","Toggle 'featured' on a unit."],
+     exp:"Featured units surface in the home editorial section."},
+   {id:"A-12", t:"Bookings register", s:"Bookings",
+     steps:["Open the bookings list; filter by status."],
+     exp:"All bookings across the platform with amounts, status and parties."},
+   {id:"A-13", t:"Cancellations + retry refund", s:"Cancellations",
+     steps:["Open cancellations; review high-risk partners.","Retry a failed refund."],
+     exp:"Cancellations list with refund status; retry re-submits a failed/pending refund."},
+   {id:"A-14", t:"Reports & charts", s:"Reports",
+     steps:["Open reports.","Check revenue series, revenue-by-city, occupancy, top partners."],
+     exp:"Charts render with real data; totals reconcile with the dashboard; no zeros where money exists."},
+   {id:"A-15", t:"Platform settings", s:"Settings",
+     steps:["Open platform settings."],
+     exp:"Shows the fixed 15% VAT (read-only since the fee revert) — nothing left to edit."},
+   {id:"A-16", t:"Admin notifications feed", s:"Notifications",
+     steps:["Open the admin notifications feed; mark read / read-all."],
+     exp:"New partner/unit/booking/cancellation events fan in; unread count updates."},
+   {id:"A-17", t:"Invite user / partner", s:"Users / Partners",
+     steps:["Use invite on the users and partners screens with a fresh phone."],
+     exp:"Invite creates the account with the right role; a duplicate phone is rejected cleanly."},
+ ]},
+];
+
+/* ---------------- App ---------------- */
+const KEY="mamsa_qa_v1";
+const store=JSON.parse(localStorage.getItem(KEY)||"{}");
+const SP={pass:"sp-pass",fail:"sp-fail",block:"sp-block",todo:"sp-todo"};
+const SPLABEL={pass:"Pass",fail:"Fail",block:"Blocked",todo:"Untested"};
+let filter="all";
+const all=[];
+
+const main=document.getElementById("main");
+DATA.forEach(group=>{
+  const sec=document.createElement("section");
+  sec.className="role";
+  const total=group.cases.length;
+  sec.innerHTML=`<div class="role-head"><span class="rk">${group.rk}</span><h2>${group.role}</h2>
+    <span class="rmeta" data-rolemeta>0/${total}</span></div>
+    <p class="role-desc">${group.desc}</p><div class="cases"></div>`;
+  const host=sec.querySelector(".cases");
+  group.cases.forEach(c=>{
+    all.push(c);
+    const st=(store[c.id]&&store[c.id].status)||"todo";
+    const note=(store[c.id]&&store[c.id].note)||"";
+    const el=document.createElement("div");
+    el.className=`case st-${st}`; el.dataset.id=c.id; el.dataset.status=st;
+    el.innerHTML=`
+      <div class="case-top" role="button" tabindex="0" aria-expanded="false">
+        <span class="caret">▶</span>
+        <span class="case-id">${c.id}</span>
+        <div style="min-width:0">
+          <div class="case-title">${c.t}</div>
+          <div class="case-sub">${c.s}</div>
+        </div>
+        <span class="statuspill ${SP[st]}">${SPLABEL[st]}</span>
+      </div>
+      <div class="case-body">
+        <div class="block-label">Steps</div>
+        <ol class="steps">${c.steps.map(s=>`<li>${s}</li>`).join("")}</ol>
+        <div class="block-label">Expected result</div>
+        <div class="expect">${c.exp}</div>
+        <div class="setctrl">
+          <button class="sbtn" data-k="pass" type="button" aria-pressed="${st==='pass'}">✓ Pass</button>
+          <button class="sbtn" data-k="fail" type="button" aria-pressed="${st==='fail'}">✕ Fail</button>
+          <button class="sbtn" data-k="block" type="button" aria-pressed="${st==='block'}">⊘ Blocked</button>
+        </div>
+        <textarea class="note" placeholder="Actual result / notes (required for fails)…">${note}</textarea>
+      </div>`;
+    // expand/collapse
+    const top=el.querySelector(".case-top");
+    const toggle=()=>el.classList.toggle("exp");
+    top.addEventListener("click",toggle);
+    top.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();toggle();}});
+    // status
+    el.querySelectorAll(".sbtn").forEach(b=>b.addEventListener("click",()=>{
+      const k=b.dataset.k; const cur=el.dataset.status;
+      const next=cur===k?"todo":k;
+      setStatus(c.id,next);
+    }));
+    el.querySelector(".note").addEventListener("input",e=>{
+      store[c.id]=store[c.id]||{}; store[c.id].note=e.target.value; persist();
+    });
+    host.appendChild(el);
+  });
+  main.appendChild(sec);
+});
+
+function setStatus(id,status){
+  store[id]=store[id]||{}; store[id].status=status; persist();
+  const el=document.querySelector(`.case[data-id="${id}"]`);
+  el.dataset.status=status; el.className=`case st-${status}${el.classList.contains("exp")?" exp":""}`;
+  const pill=el.querySelector(".statuspill"); pill.className=`statuspill ${SP[status]}`; pill.textContent=SPLABEL[status];
+  el.querySelectorAll(".sbtn").forEach(b=>b.setAttribute("aria-pressed", b.dataset.k===status));
+  render();
+}
+function persist(){localStorage.setItem(KEY,JSON.stringify(store));}
+
+function render(){
+  let pass=0,fail=0,block=0,todo=0;
+  all.forEach(c=>{const s=(store[c.id]&&store[c.id].status)||"todo";
+    if(s==="pass")pass++;else if(s==="fail")fail++;else if(s==="block")block++;else todo++;});
+  const total=all.length, resolved=pass+fail+block, pct=Math.round(resolved/total*100);
+  document.getElementById("cPass").textContent=pass;
+  document.getElementById("cFail").textContent=fail;
+  document.getElementById("cBlock").textContent=block;
+  document.getElementById("cTodo").textContent=todo;
+  document.getElementById("doneCount").textContent=`${resolved} / ${total}`;
+  document.getElementById("ringPct").textContent=pct+"%";
+  document.getElementById("ring").style.setProperty("--pct",pct);
+  // per-role meta
+  document.querySelectorAll("section.role").forEach((sec,i)=>{
+    const g=DATA[i]; const done=g.cases.filter(c=>store[c.id]&&store[c.id].status&&store[c.id].status!=="todo").length;
+    sec.querySelector("[data-rolemeta]").textContent=`${done}/${g.cases.length}`;
+  });
+  applyFilter();
+}
+function applyFilter(){
+  document.querySelectorAll(".case").forEach(el=>{
+    const s=el.dataset.status;
+    const show = filter==="all" || (filter==="todo"&&s==="todo") || (filter===s);
+    el.style.display=show?"":"none";
+  });
+  document.querySelectorAll("section.role").forEach(sec=>{
+    const any=[...sec.querySelectorAll(".case")].some(el=>el.style.display!=="none");
+    sec.style.display=any?"":"none";
+  });
+}
+document.getElementById("filters").addEventListener("click",e=>{
+  const b=e.target.closest(".chip"); if(!b)return;
+  filter=b.dataset.f;
+  document.querySelectorAll("#filters .chip").forEach(c=>c.setAttribute("aria-pressed",c===b));
+  applyFilter();
+});
+document.getElementById("expandBtn").addEventListener("click",e=>{
+  const cases=[...document.querySelectorAll(".case")];
+  const anyClosed=cases.some(c=>!c.classList.contains("exp"));
+  cases.forEach(c=>c.classList.toggle("exp",anyClosed));
+  e.target.textContent=anyClosed?"Collapse all":"Expand all";
+});
+document.getElementById("resetBtn").addEventListener("click",()=>{
+  if(!confirm("Clear all statuses and notes for this run?"))return;
+  for(const k in store)delete store[k]; persist();
+  document.querySelectorAll(".case").forEach(el=>{
+    el.dataset.status="todo"; el.className="case st-todo";
+    const p=el.querySelector(".statuspill");p.className="statuspill sp-todo";p.textContent="Untested";
+    el.querySelectorAll(".sbtn").forEach(b=>b.setAttribute("aria-pressed",false));
+    el.querySelector(".note").value="";
+  });
+  render();
+});
+
+/* export */
+const dlg=document.getElementById("export");
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  const now=new Date().toISOString().slice(0,16).replace("T"," ");
+  let pass=0,fail=0,block=0,todo=0;
+  all.forEach(c=>{const s=(store[c.id]&&store[c.id].status)||"todo";({pass,fail,block,todo}[s]!==undefined)&&0;
+    if(s==="pass")pass++;else if(s==="fail")fail++;else if(s==="block")block++;else todo++;});
+  let md=`# Mamsa — Manual QA Run\n_${now}_\n\n`;
+  md+=`**Pass ${pass} · Fail ${fail} · Blocked ${block} · Untested ${todo}** (of ${all.length})\n`;
+  DATA.forEach(g=>{
+    md+=`\n## ${g.rk} — ${g.role}\n`;
+    g.cases.forEach(c=>{
+      const rec=store[c.id]||{}; const s=rec.status||"todo";
+      const mark={pass:"✅",fail:"❌",block:"⛔",todo:"⬜"}[s];
+      md+=`- ${mark} \`${c.id}\` ${c.t}`;
+      if(rec.note)md+=` — ${rec.note.replace(/\n/g," ")}`;
+      md+=`\n`;
+    });
+  });
+  const fails=all.filter(c=>store[c.id]&&store[c.id].status==="fail");
+  if(fails.length){md+=`\n## ❌ Failures to file\n`;fails.forEach(c=>{md+=`- \`${c.id}\` ${c.t}: ${(store[c.id].note||"(no note)")}\n`;});}
+  document.getElementById("reportText").value=md;
+  if(typeof dlg.showModal==="function")dlg.showModal();
+});
+document.getElementById("closeDlg").addEventListener("click",()=>dlg.close());
+document.getElementById("copyReport").addEventListener("click",async()=>{
+  const t=document.getElementById("reportText"); t.select();
+  try{await navigator.clipboard.writeText(t.value);document.getElementById("copyReport").textContent="Copied ✓";
+    setTimeout(()=>document.getElementById("copyReport").textContent="Copy",1400);}catch(_){document.execCommand("copy");}
+});
+
+/* theme toggle */
+const root=document.documentElement;
+document.getElementById("themeToggle").addEventListener("click",()=>{
+  const cur=root.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");
+  root.setAttribute("data-theme",cur==="dark"?"light":"dark");
+});
+
+render();
+</script>
