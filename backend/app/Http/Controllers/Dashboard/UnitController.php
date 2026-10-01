@@ -488,6 +488,10 @@ class UnitController extends DashboardController
             $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $fileErrors);
         }
 
+        if ($nameErrors = ApartmentExpansion::nameErrors($unit, $permits)) {
+            $this->fail('VALIDATION', 'أرقام الشقق غير صالحة', 400, $nameErrors);
+        }
+
         try {
             UnitLicense::guardGroupSize($unit, (int) $data['count']);
         } catch (LicenseViolation $e) {

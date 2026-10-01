@@ -145,7 +145,15 @@ final class UnitCloner
      *
      * @return Collection<int,Unit> the whole group
      */
-    public static function ensureTotal(Unit $source, int $total, bool $copyDocuments = false): Collection
+    /**
+     * @param  list<string>  $names  door numbers the partner chose for the NEW
+     *                               apartments (per-apartment permits name
+     *                               their door). Used as given; the rest are
+     *                               numbered automatically around them. The
+     *                               caller has already refused duplicates and
+     *                               collisions — {@see ApartmentExpansion::nameErrors()}.
+     */
+    public static function ensureTotal(Unit $source, int $total, bool $copyDocuments = false, array $names = []): Collection
     {
         $existing = $source->unit_group_id
             ? Unit::where('unit_group_id', $source->unit_group_id)->pluck('apartment_no')->all()
@@ -165,7 +173,36 @@ final class UnitCloner
                 : collect([$source]);
         }
 
-        return self::assign($source, self::nextNumbers($existing, $source, $needed), $copyDocuments);
+        return self::assign($source, self::numbersFor($existing, $source, $needed, $names), $copyDocuments);
+    }
+
+    /**
+     * The numbers to hand assign(): the source's own first when it has none
+     * yet (assign() gives it the first), then the chosen names, then automatic
+     * numbers for the rest.
+     *
+     * Automatic numbers continue from the building — NOT from the names. A
+     * partner adding a door on the seventh floor and calling it "7" beside
+     * doors 1 and 2 should get 1, 2, 3 and 7 — not 1, 2, 7 and 8.
+     *
+     * @param  list<string>  $names
+     * @return list<string>
+     */
+    private static function numbersFor(array $existing, Unit $source, int $needed, array $names): array
+    {
+        $names = array_values(array_unique(array_filter(array_map(fn ($n) => trim((string) $n), $names), fn ($n) => $n !== '')));
+
+        if ($names === []) {
+            return self::nextNumbers($existing, $source, $needed);
+        }
+
+        $sourceNeedsOne = blank($source->apartment_no);
+        $autoCount = $needed - count($names);
+        $auto = self::nextNumbers(array_merge($existing, $names), $source, $autoCount, skipOnly: $names);
+
+        return $sourceNeedsOne
+            ? array_merge([array_shift($auto)], $names, $auto)
+            : array_merge($names, $auto);
     }
 
     /**
@@ -178,11 +215,18 @@ final class UnitCloner
      * @param  array<int, string|null>  $existing
      * @return list<string>
      */
-    private static function nextNumbers(array $existing, Unit $source, int $needed): array
+    /**
+     * @param  list<string>  $skipOnly  numbers to step over WITHOUT counting
+     *                                  them when deciding where to start — a
+     *                                  chosen name like "7" must not push the
+     *                                  automatic sequence to 8.
+     */
+    private static function nextNumbers(array $existing, Unit $source, int $needed, array $skipOnly = []): array
     {
         $taken = collect($existing)->push($source->apartment_no)->filter()->map(strval(...));
 
-        $numeric = $taken->filter(fn ($n) => ctype_digit($n))->map(fn ($n) => (int) $n);
+        $numeric = $taken->reject(fn ($n) => in_array($n, $skipOnly, true))
+            ->filter(fn ($n) => ctype_digit($n))->map(fn ($n) => (int) $n);
         $next    = $numeric->isNotEmpty() ? $numeric->max() + 1 : 1;
 
         $numbers = [];

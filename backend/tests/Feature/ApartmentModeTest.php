@@ -471,6 +471,130 @@ class ApartmentModeTest extends TestCase
         $this->assertSame(1, Permit::count(), 'a permit outlived the expansion that wrote it');
     }
 
+    /* ---------- a card's apartmentNo NAMES its door (2026-10-01) ---------- */
+
+    // Until 2026-10-01 the doors were numbered first and the cards matched to
+    // them afterwards, so a name outside the automatic numbers matched nothing
+    // and came back as PERMITS_COUNT_MISMATCH with EQUAL counts. A door number
+    // is a name — "402", "7", "الدور الثالث" — not an index.
+
+    public function test_the_frontends_exact_request_now_names_the_door_seven(): void
+    {
+        // Reported by the partner dashboard's staging pass on u_78.
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $this->actingAs($this->partner, 'dashboard')->postJson("/units/u_{$source->id}/submit", [
+            'count' => 3,
+            'permits' => [
+                ['number' => 'CARD-11', 'fileId' => $this->licenceFile($this->partner)],
+                ['number' => 'CARD-12', 'fileId' => $this->licenceFile($this->partner), 'apartmentNo' => '7'],
+            ],
+        ])->assertOk();
+
+        $doors = $this->doorsOf($source);
+        $this->assertSame(['1', '2', '7'], array_map('strval', array_keys($doors)), 'the automatic numbers should continue from the building, not from 7');
+        $this->assertSame('CARD-12', $doors['7'], 'the named card did not land on the door it named');
+        $this->assertSame('CARD-11', $doors['2']);
+    }
+
+    public function test_a_name_inside_the_automatic_range_still_works(): void
+    {
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $this->actingAs($this->partner, 'dashboard')->postJson("/units/u_{$source->id}/submit", [
+            'count' => 3,
+            'permits' => [
+                ['number' => 'IN-A', 'fileId' => $this->licenceFile($this->partner)],
+                ['number' => 'IN-B', 'fileId' => $this->licenceFile($this->partner), 'apartmentNo' => '3'],
+            ],
+        ])->assertOk();
+
+        $this->assertSame(['1' => 'TL-SRC', '2' => 'IN-A', '3' => 'IN-B'], array_map(
+            fn ($n) => $n === $source->fresh()->tourism_permit_no ? 'TL-SRC' : $n,
+            $this->doorsOf($source),
+        ));
+    }
+
+    public function test_a_named_door_joins_an_existing_building_under_its_own_name(): void
+    {
+        $source = $this->unit(['license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+        $this->expand($source, 2, [['number' => 'P-2']])->assertOk();
+
+        $this->expand($source->fresh(), 4, [['number' => 'FLOOR-7', 'apartmentNo' => '7'], ['number' => 'NEXT']])->assertOk();
+
+        $doors = $this->doorsOf($source);
+        $this->assertSame(['1', '2', '3', '7'], array_map('strval', array_keys($doors)));
+        $this->assertSame('FLOOR-7', $doors['7']);
+        $this->assertSame('NEXT', $doors['3']);
+    }
+
+    public function test_a_door_can_be_named_in_words(): void
+    {
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $this->actingAs($this->partner, 'dashboard')->postJson("/units/u_{$source->id}/submit", [
+            'count' => 2,
+            'permits' => [['number' => 'WORDS', 'fileId' => $this->licenceFile($this->partner), 'apartmentNo' => 'الدور الثالث']],
+        ])->assertOk();
+
+        $this->assertSame('WORDS', $this->doorsOf($source)['الدور الثالث']);
+    }
+
+    public function test_a_name_already_in_the_building_is_refused_on_its_card(): void
+    {
+        $source = $this->unit(['license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+        $this->expand($source, 2, [['number' => 'P-2']])->assertOk();
+
+        $this->expand($source->fresh(), 4, [['number' => 'OK-A'], ['number' => 'CLASH', 'apartmentNo' => '2']])
+            ->assertStatus(400)
+            ->assertJsonPath('error.code', 'VALIDATION')
+            ->assertJsonPath('error.fields', ['permits.1.apartmentNo' => 'رقم الشقة 2 موجود بالفعل في المبنى']);
+
+        $this->assertSame(2, Unit::count(), 'a refused expansion wrote doors');
+    }
+
+    public function test_two_cards_with_one_name_are_refused_on_the_second(): void
+    {
+        $source = $this->unit(['approval_status' => 'draft', 'license_type' => UnitLicense::PRIVATE_HOSPITALITY]);
+
+        $this->actingAs($this->partner, 'dashboard')->postJson("/units/u_{$source->id}/submit", [
+            'count' => 3,
+            'permits' => [
+                ['number' => 'TWIN-A', 'fileId' => $this->licenceFile($this->partner), 'apartmentNo' => '7'],
+                ['number' => 'TWIN-B', 'fileId' => $this->licenceFile($this->partner), 'apartmentNo' => ' 7 '],
+            ],
+        ])
+            ->assertStatus(400)
+            ->assertJsonPath('error.fields', ['permits.1.apartmentNo' => 'رقم الشقة 7 مكرر في نفس الطلب']);
+
+        $this->assertSame(1, Unit::count());
+        $this->assertSame('draft', $source->fresh()->approval_status);
+    }
+
+    public function test_the_admin_console_names_doors_and_refuses_clashes_in_its_envelope(): void
+    {
+        $source = $this->unit(['license_type' => UnitLicense::PRIVATE_HOSPITALITY, 'mamsa_owned' => true], User::platform());
+        $admin = fn (array $permits, int $count) => $this->actingAs($this->admin, 'admin-panel')
+            ->postJson("/admin/units/{$source->id}/apartments", ['count' => $count, 'permits' => array_map(
+                fn (array $p) => $p + ['fileId' => $this->licenceFile($this->admin)], $permits)]);
+
+        $admin([['number' => 'M-A'], ['number' => 'M-7', 'apartmentNo' => '7']], 3)->assertOk();
+        $this->assertSame('M-7', $this->doorsOf($source)['7']);
+
+        $admin([['number' => 'M-CLASH', 'apartmentNo' => '7']], 4)
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonPath('fields', ['permits.0.apartmentNo' => 'رقم الشقة 7 موجود بالفعل في المبنى']);
+    }
+
+    /** @return array<string, ?string> door number => permit number, in door order */
+    private function doorsOf(Unit $source): array
+    {
+        return Unit::where('unit_group_id', $source->fresh()->unit_group_id)->get()
+            ->mapWithKeys(fn (Unit $u) => [(string) $u->apartment_no => Permit::currentFor($u)?->number])
+            ->sortKeys(SORT_NATURAL)->all();
+    }
+
     /* ---------- fixtures ---------- */
 
     /**
