@@ -40,6 +40,12 @@ return [
     |
     */
 
+    /*
+    | Seeders that create accounts refuse to run on production unless this is
+    | set (App\Support\ProductionSeedGuard). Nothing else reads it.
+    */
+    'allow_production_seed' => (bool) env('ALLOW_PRODUCTION_SEED', false),
+
     'default' => env('DB_CONNECTION', 'sqlite'),
 
     /*

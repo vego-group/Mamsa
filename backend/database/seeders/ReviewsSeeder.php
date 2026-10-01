@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\Review;
 use App\Models\Unit;
 use App\Models\User;
+use App\Support\ProductionSeedGuard;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 
@@ -28,6 +29,8 @@ class ReviewsSeeder extends Seeder
 
     public function run(): void
     {
+        ProductionSeedGuard::assertAllowed($this);
+
         $guests = $this->guests();
         if ($guests->isEmpty()) {
             return; // DevUsersSeeder must run first
@@ -45,15 +48,15 @@ class ReviewsSeeder extends Seeder
             }
 
             foreach ($this->ratingsFor($i) as $n => $rating) {
-                $guest   = $guests[($i + $n) % $guests->count()];
+                $guest = $guests[($i + $n) % $guests->count()];
                 $booking = $this->pastBooking($unit, $guest, $n);
 
                 Review::create([
                     'booking_id' => $booking->id,
-                    'user_id'    => $guest->id,
-                    'unit_id'    => $unit->id,
-                    'rating'     => $rating,
-                    'comment'    => self::COMMENTS[max(3, $rating)][$n % 3],
+                    'user_id' => $guest->id,
+                    'unit_id' => $unit->id,
+                    'rating' => $rating,
+                    'comment' => self::COMMENTS[max(3, $rating)][$n % 3],
                 ]);
             }
         }
@@ -77,38 +80,38 @@ class ReviewsSeeder extends Seeder
     /** A completed, fully-priced booking in the past to hang a review on. */
     private function pastBooking(Unit $unit, User $guest, int $n): Booking
     {
-        $end   = Carbon::today()->subDays(10 + $n * 7);
+        $end = Carbon::today()->subDays(10 + $n * 7);
         $start = $end->copy()->subDays(2 + ($n % 3));
         $nights = $start->diffInDays($end);
 
-        $nightly     = (float) $unit->price;
-        $subtotal    = round($nightly * $nights, 2);
-        $serviceFee  = round($subtotal * (float) config('booking.service_fee_rate'), 2);
+        $nightly = (float) $unit->price;
+        $subtotal = round($nightly * $nights, 2);
+        $serviceFee = round($subtotal * (float) config('booking.service_fee_rate'), 2);
         $cleaningFee = round((float) config('booking.cleaning_fee'), 2);
-        $taxes       = round($subtotal * (float) config('booking.tax_rate'), 2);
+        $taxes = round($subtotal * (float) config('booking.tax_rate'), 2);
 
         // The split has to be stated: the columns have no default any more, so a
         // seeder that omits them is rejected by the database rather than
         // silently written as a zero-commission booking.
-        $rate       = (float) config('booking.commission_rate');
+        $rate = (float) config('booking.commission_rate');
         $commission = round($subtotal * $rate, 2);
 
         return Booking::create([
-            'commission_rate'   => $rate,
+            'commission_rate' => $rate,
             'commission_amount' => $commission,
-            'partner_share'     => round($subtotal - $commission, 2),
-            'unit_id'      => $unit->id,
-            'user_id'      => $guest->id,
-            'start_date'   => $start->toDateString(),
-            'end_date'     => $end->toDateString(),
-            'guests'       => min(2, $unit->capacity),
+            'partner_share' => round($subtotal - $commission, 2),
+            'unit_id' => $unit->id,
+            'user_id' => $guest->id,
+            'start_date' => $start->toDateString(),
+            'end_date' => $end->toDateString(),
+            'guests' => min(2, $unit->capacity),
             'nightly_rate' => $nightly,
-            'subtotal'     => $subtotal,
-            'service_fee'  => $serviceFee,
+            'subtotal' => $subtotal,
+            'service_fee' => $serviceFee,
             'cleaning_fee' => $cleaningFee,
-            'taxes'        => $taxes,
+            'taxes' => $taxes,
             'total_amount' => round($subtotal + $serviceFee + $cleaningFee + $taxes, 2),
-            'status'       => Booking::STATUS_COMPLETED,
+            'status' => Booking::STATUS_COMPLETED,
         ]);
     }
 

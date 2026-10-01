@@ -13,6 +13,8 @@ use App\Models\User;
 use App\Notifications\IcalSyncFailed;
 use App\Notifications\NewBooking;
 use App\Notifications\UnitReviewResult;
+use App\Support\Media;
+use App\Support\ProductionSeedGuard;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -33,6 +35,8 @@ class DashboardTestPartnerSeeder extends Seeder
 {
     public function run(): void
     {
+        ProductionSeedGuard::assertAllowed($this);
+
         // Notifications fan out to mail/SMS; keep seeding self-contained.
         config(['mail.default' => 'array']);
 
@@ -41,46 +45,46 @@ class DashboardTestPartnerSeeder extends Seeder
         }
 
         $partner = $this->partner();
-        $guest   = $this->guest();
+        $guest = $this->guest();
 
         // One rich APPROVED unit + the other lifecycle states.
         $approved = $this->unit($partner, [
-            'unit_name'         => 'شقة تجريبية — لوحة الشريك',
-            'unit_type'         => 'apartment',
-            'approval_status'   => 'approved',
-            'price'             => 480,
-            'description'       => 'شقة أنيقة في قلب الرياض للاختبار — إطلالة، تشطيب فاخر، قريبة من الخدمات.',
-            'address'           => 'حي العليا، الرياض',
-            'lat'               => 24.7136,
-            'lng'               => 46.6753,
+            'unit_name' => 'شقة تجريبية — لوحة الشريك',
+            'unit_type' => 'apartment',
+            'approval_status' => 'approved',
+            'price' => 480,
+            'description' => 'شقة أنيقة في قلب الرياض للاختبار — إطلالة، تشطيب فاخر، قريبة من الخدمات.',
+            'address' => 'حي العليا، الرياض',
+            'lat' => 24.7136,
+            'lng' => 46.6753,
             'tourism_permit_no' => 'TL-TEST-0001',
             'tourism_permit_file' => 'dashboard/license_pdf/seed-license.pdf',
         ], amenities: ['واي فاي', 'تكييف', 'مطبخ', 'موقف سيارات']);
 
         $this->unit($partner, [
-            'unit_name'       => 'استوديو تجريبي — قيد المراجعة',
-            'unit_type'       => 'studio',
+            'unit_name' => 'استوديو تجريبي — قيد المراجعة',
+            'unit_type' => 'studio',
             'approval_status' => 'pending',
-            'price'           => 260,
-            'address'         => 'حي النخيل، الرياض',
-            'lat'             => 24.75, 'lng' => 46.63,
+            'price' => 260,
+            'address' => 'حي النخيل، الرياض',
+            'lat' => 24.75, 'lng' => 46.63,
             'tourism_permit_no' => 'TL-TEST-0002',
         ], amenities: ['واي فاي', 'تكييف']);
 
         $this->unit($partner, [
-            'unit_name'       => 'مسودة تجريبية غير مكتملة',
-            'unit_type'       => 'apartment',
+            'unit_name' => 'مسودة تجريبية غير مكتملة',
+            'unit_type' => 'apartment',
             'approval_status' => 'draft',
-            'price'           => 300,
+            'price' => 300,
         ]);
 
         $this->unit($partner, [
-            'unit_name'        => 'فيلا تجريبية — مرفوضة',
-            'unit_type'        => 'villa',
-            'approval_status'  => 'rejected',
-            'price'            => 1200,
-            'address'          => 'حي الياسمين، الرياض',
-            'lat'              => 24.83, 'lng' => 46.64,
+            'unit_name' => 'فيلا تجريبية — مرفوضة',
+            'unit_type' => 'villa',
+            'approval_status' => 'rejected',
+            'price' => 1200,
+            'address' => 'حي الياسمين، الرياض',
+            'lat' => 24.83, 'lng' => 46.64,
             'rejection_reason' => 'الصور غير واضحة ورقم رخصة السياحة غير صالح — يرجى التصحيح وإعادة التقديم.',
         ]);
 
@@ -91,7 +95,7 @@ class DashboardTestPartnerSeeder extends Seeder
         UnitIcalFeed::updateOrCreate(
             ['unit_id' => $approved->id, 'source' => 'Airbnb'],
             ['url' => 'https://www.airbnb.com/calendar/ical/seed-test.ics',
-             'status' => UnitIcalFeed::STATUS_SYNCED, 'last_synced_at' => now()->subMinutes(8)],
+                'status' => UnitIcalFeed::STATUS_SYNCED, 'last_synced_at' => now()->subMinutes(8)],
         );
 
         // A manual block (maintenance) next week.
@@ -139,15 +143,15 @@ class DashboardTestPartnerSeeder extends Seeder
         $unit = $partner->units()->updateOrCreate(
             ['user_id' => $partner->id, 'unit_name' => $attrs['unit_name']],
             array_merge([
-                'code'           => 'MRN'.strtoupper(Str::random(5)),
-                'capacity'       => 4,
-                'bedrooms'       => 2,
-                'bathrooms'      => 2,
-                'city'           => 'الرياض',
-                'district'       => 'العليا',
-                'status'         => 'available',
-                'checkin_time'   => '15:00',
-                'checkout_time'  => '12:00',
+                'code' => 'MRN'.strtoupper(Str::random(5)),
+                'capacity' => 4,
+                'bedrooms' => 2,
+                'bathrooms' => 2,
+                'city' => 'الرياض',
+                'district' => 'العليا',
+                'status' => 'available',
+                'checkin_time' => '15:00',
+                'checkout_time' => '12:00',
                 'calendar_token' => Str::random(60),
             ], $attrs),
         );
@@ -159,7 +163,7 @@ class DashboardTestPartnerSeeder extends Seeder
 
         // Ensure at least one image so the approved unit passes UI expectations.
         if ($unit->images()->count() === 0) {
-            $unit->images()->create(['path' => \App\Support\Media::defaultImagePath(), 'is_main' => true]);
+            $unit->images()->create(['path' => Media::defaultImagePath(), 'is_main' => true]);
         }
 
         return $unit;
@@ -168,31 +172,31 @@ class DashboardTestPartnerSeeder extends Seeder
     private function bookings(Unit $unit, User $guest): void
     {
         $mk = function (string $tag, string $start, string $end, string $status, array $extra = []) use ($unit, $guest) {
-            $nights   = Carbon::parse($start)->diffInDays(Carbon::parse($end));
+            $nights = Carbon::parse($start)->diffInDays(Carbon::parse($end));
             $subtotal = $nights * (float) $unit->price;
             $cleaning = 100;
             // Live rate, not a hardcoded 2%: seeded data should behave like a
             // booking taken today.
-            $rate       = (float) config('booking.commission_rate');
+            $rate = (float) config('booking.commission_rate');
             $commission = round($subtotal * $rate, 2);
-            $total    = $subtotal + $cleaning;
+            $total = $subtotal + $cleaning;
 
             $booking = $unit->bookings()->updateOrCreate(
                 ['unit_id' => $unit->id, 'user_id' => $guest->id, 'start_date' => $start],
                 array_merge([
-                    'end_date'          => $end,
-                    'guests'            => 2,
-                    'nightly_rate'      => $unit->price,
-                    'subtotal'          => $subtotal,
-                    'cleaning_fee'      => $cleaning,
-                    'service_fee'       => 0,
-                    'taxes'             => 0,
-                    'commission_rate'   => $rate,
+                    'end_date' => $end,
+                    'guests' => 2,
+                    'nightly_rate' => $unit->price,
+                    'subtotal' => $subtotal,
+                    'cleaning_fee' => $cleaning,
+                    'service_fee' => 0,
+                    'taxes' => 0,
+                    'commission_rate' => $rate,
                     'commission_amount' => $commission,
                     // Stated explicitly: the column has no default any more.
-                    'partner_share'     => round($subtotal - $commission, 2),
-                    'total_amount'      => $total,
-                    'status'            => $status,
+                    'partner_share' => round($subtotal - $commission, 2),
+                    'total_amount' => $total,
+                    'status' => $status,
                     'cancellation_snapshot' => [
                         'policy_key' => 'flexible', 'policy_name' => 'مرنة',
                         'checkin_at' => Carbon::parse($start.' 15:00')->toIso8601String(),
@@ -214,10 +218,10 @@ class DashboardTestPartnerSeeder extends Seeder
         $mk('c1', now()->addDays(12)->toDateString(), now()->addDays(15)->toDateString(), Booking::STATUS_CONFIRMED);
         $mk('c2', now()->addDays(25)->toDateString(), now()->addDays(28)->toDateString(), Booking::STATUS_CONFIRMED);
         $mk('p1', now()->subDays(20)->toDateString(), now()->subDays(17)->toDateString(), Booking::STATUS_COMPLETED);
-        $mk('p2', now()->subDays(9)->toDateString(),  now()->subDays(6)->toDateString(),  Booking::STATUS_COMPLETED);
+        $mk('p2', now()->subDays(9)->toDateString(), now()->subDays(6)->toDateString(), Booking::STATUS_COMPLETED);
         $mk('x1', now()->addDays(40)->toDateString(), now()->addDays(43)->toDateString(), Booking::STATUS_CANCELLED, [
-            'cancelled_at'        => now()->subDays(2),
-            'cancelled_by'        => 'partner',
+            'cancelled_at' => now()->subDays(2),
+            'cancelled_by' => 'partner',
             'cancellation_reason' => 'الوحدة محجوزة في منصة أخرى',
         ]);
     }
