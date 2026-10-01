@@ -38,7 +38,12 @@ class UnitController extends DashboardController
             ->with(['images', 'features', 'cancellationPolicy'])
             ->withCount('reviews')
             ->withAvg('reviews', 'rating')
-            ->latest();
+            // Newest first — and id breaks the tie. A building's doors are all
+            // created in one second, so created_at alone left their order to
+            // the database, and a page boundary falling inside a building could
+            // show a door twice or not at all.
+            ->latest()
+            ->orderByDesc('units.id');
 
         if ($status = $request->query('status')) {
             $query->where('approval_status', $status);
@@ -486,6 +491,10 @@ class UnitController extends DashboardController
 
         if ($fileErrors !== []) {
             $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $fileErrors);
+        }
+
+        if ($nameErrors = ApartmentExpansion::nameErrors($unit, $permits)) {
+            $this->fail('VALIDATION', 'أرقام الشقق غير صالحة', 400, $nameErrors);
         }
 
         try {

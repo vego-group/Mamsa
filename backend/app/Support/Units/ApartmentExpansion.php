@@ -57,7 +57,13 @@ final class ApartmentExpansion
             // Documents travel with the clones only when one permit covers them
             // all. In per-unit mode each door brings its own, so copying would
             // put apartment 402's licence on 403.
-            $group = UnitCloner::ensureTotal($source, $total, copyDocuments: $mode === PermitMode::SINGLE);
+            // A card's apartmentNo NAMES the door it brings — it is not a key
+            // into numbers chosen for it. Until 2026-10-01 the doors were
+            // numbered first and the cards matched afterwards, so "7" beside
+            // doors 2 and 3 matched nothing and came back as a count mismatch
+            // with equal counts.
+            $names = $mode === PermitMode::PER_UNIT ? self::names($permits) : [];
+            $group = UnitCloner::ensureTotal($source, $total, copyDocuments: $mode === PermitMode::SINGLE, names: $names);
 
             $added = $group->reject(fn (Unit $u) => in_array($u->id, $existingIds, true))->values();
 
@@ -81,6 +87,57 @@ final class ApartmentExpansion
      * @param  Collection<int, Unit>  $added
      * @param  array<int, array<string, mixed>>  $permits
      */
+    /**
+     * Problems with the door names on the cards, keyed `permits.{i}.apartmentNo`
+     * so the client can put each one on its card. Empty when there are none.
+     *
+     * Checked BEFORE anything is written: a name that is already a door in the
+     * building, or that two cards share, cannot become a door — and finding
+     * that out halfway would roll back a building the partner watched build.
+     *
+     * @param  array<int, array<string, mixed>>  $permits
+     * @return array<string, string>
+     */
+    public static function nameErrors(Unit $source, array $permits): array
+    {
+        $taken = $source->unit_group_id
+            ? Unit::where('unit_group_id', $source->unit_group_id)->pluck('apartment_no')->filter()->map(strval(...))->all()
+            : array_filter([(string) $source->apartment_no]);
+
+        $errors = [];
+        $seen = [];
+
+        foreach ($permits as $i => $permit) {
+            $name = isset($permit['apartmentNo']) ? trim((string) $permit['apartmentNo']) : '';
+
+            if ($name === '') {
+                continue;
+            }
+
+            if (in_array($name, $taken, true)) {
+                $errors["permits.{$i}.apartmentNo"] = "رقم الشقة {$name} موجود بالفعل في المبنى";
+            } elseif (isset($seen[$name])) {
+                $errors["permits.{$i}.apartmentNo"] = "رقم الشقة {$name} مكرر في نفس الطلب";
+            }
+
+            $seen[$name] = true;
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $permits
+     * @return list<string>
+     */
+    private static function names(array $permits): array
+    {
+        return array_values(array_filter(array_map(
+            fn (array $p) => isset($p['apartmentNo']) ? trim((string) $p['apartmentNo']) : '',
+            $permits,
+        ), fn (string $n) => $n !== ''));
+    }
+
     private static function attachPermits(Collection $added, array $permits, ?int $actorId): void
     {
         $byNumber = [];

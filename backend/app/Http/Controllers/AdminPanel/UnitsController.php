@@ -409,6 +409,10 @@ class UnitsController extends Controller
             $this->fail('VALIDATION_ERROR', 'ملفات غير صالحة', 422, $fileErrors);
         }
 
+        if ($nameErrors = ApartmentExpansion::nameErrors($unit, $permits)) {
+            $this->fail('VALIDATION_ERROR', 'أرقام الشقق غير صالحة', 422, $nameErrors);
+        }
+
         // The flag and the permit are both checked BEFORE anything is written —
         // a refused expansion must not leave approved apartments behind.
         try {

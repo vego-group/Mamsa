@@ -8,8 +8,8 @@ use App\Models\Feature;
 use App\Models\PartnerDetail;
 use App\Models\Unit;
 use App\Models\User;
-use App\Support\Units\UnitLicense;
 use App\Support\Permits\PermitWriter;
+use App\Support\Units\UnitLicense;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Spatie\Permission\Models\Role;
@@ -302,7 +302,162 @@ class DashboardApartmentsTest extends TestCase
         $this->assertSame([7], $counts->all(), 'the group must not disagree about its permit');
     }
 
+    public function test_the_partner_list_says_which_building_each_row_belongs_to(): void
+    {
+        // Without groupId the partner opens their list and sees five rows that
+        // look like five listings they do not remember creating. The grouping
+        // exists in the data and has to exist in the response.
+        $source = $this->licensed(8);
+        $this->expand($source, 3)->assertOk();
+
+        $rows = $this->actingAs($this->partner, 'dashboard')
+            ->getJson('/units?limit=50')
+            ->assertOk()
+            ->json('data');
+
+        $this->assertCount(3, $rows);
+
+        $groupId = $source->fresh()->unit_group_id;
+        $this->assertNotNull($groupId);
+
+        foreach ($rows as $row) {
+            $this->assertArrayHasKey('groupId', $row);
+            $this->assertArrayHasKey('apartmentNo', $row);
+            $this->assertSame($groupId, $row['groupId'], 'a door of the building did not name it');
+            $this->assertNotNull($row['apartmentNo'], 'a door in a building has no number');
+        }
+
+        // Grouping by the key gives back one building of three, which is the
+        // whole point: the client can fold the rows without asking anything.
+        $this->assertSame([3], array_values(array_map(
+            'count',
+            collect($rows)->groupBy('groupId')->all(),
+        )));
+    }
+
+    public function test_a_standalone_listing_names_no_building(): void
+    {
+        // Null, not a group of one: the client branches on presence instead of
+        // comparing a size to 1, and a lone listing renders as a listing.
+        $unit = $this->unit();
+
+        $row = $this->actingAs($this->partner, 'dashboard')
+            ->getJson("/units/u_{$unit->id}")
+            ->assertOk()
+            ->json();
+
+        $this->assertArrayHasKey('groupId', $row);
+        $this->assertArrayHasKey('apartmentNo', $row);
+        $this->assertNull($row['groupId']);
+        $this->assertNull($row['apartmentNo']);
+        $this->assertSame(1, $row['groupSize']);
+    }
+
+    /* ---------- a stable order for the list (2026-10-01) ---------- */
+
+    public function test_rows_created_in_the_same_second_page_in_a_fixed_order(): void
+    {
+        // A building's doors are created in one second, so `latest()` alone
+        // leaves their order to the database — and a page boundary inside a
+        // building can then show a door twice or not at all. id breaks the tie.
+        $older = $this->unit();
+        $older->forceFill(['created_at' => now()->subDay()])->save();
+
+        $tie = now()->subHour()->startOfSecond();
+        $same = collect(range(1, 5))->map(function () use ($tie) {
+            $u = $this->unit();
+            $u->forceFill(['created_at' => $tie])->save();
+
+            return $u->id;
+        });
+
+        $newer = $this->unit();
+
+        $seen = collect(range(1, 4))->flatMap(fn (int $page) => collect(
+            $this->actingAs($this->partner, 'dashboard')->getJson("/units?limit=2&page={$page}")->assertOk()->json('data')
+        )->pluck('id'))->all();
+
+        $expected = collect([$newer->id])
+            ->merge($same->sortDesc()->values())
+            ->push($older->id)
+            ->map(fn (int $id) => 'u_'.$id)
+            ->all();
+
+        $this->assertSame($expected, $seen, 'newest first, and the same-second rows by id descending, across every page');
+    }
+
+    /* ---------- any door, not just the original (asked 2026-09-30) ---------- */
+
+    // The building card shows on every door's page, so "add apartments" is
+    // pressed from whichever door the partner has open. These pin what that
+    // means: any door works, the count is still the building's total, and the
+    // new apartments copy THE DOOR THEY WERE ADDED FROM — there is no fixed
+    // "source" in a building once it exists.
+
+    public function test_any_door_in_the_building_can_add_apartments(): void
+    {
+        $original = $this->licensed(5);
+        $this->expand($original, 2)->assertOk();
+        $door2 = $this->door($original, 2);
+
+        // Still under review from the first expansion — and that does not
+        // stop it either: the lock is on editing a door, not on this.
+        $this->assertSame('pending', $door2->approval_status);
+
+        $this->expand($door2, 4)
+            ->assertOk()
+            ->assertJsonPath('groupId', $original->fresh()->unit_group_id)
+            ->assertJsonPath('groupSize', 4)
+            ->assertJsonPath('added', 2);
+    }
+
+    public function test_count_is_the_building_total_whichever_door_sends_it(): void
+    {
+        $original = $this->licensed(5);
+        $this->expand($original, 3)->assertOk();
+
+        $this->expand($this->door($original, 3), 3)
+            ->assertOk()
+            ->assertJsonPath('groupSize', 3)
+            ->assertJsonPath('added', 0);
+    }
+
+    public function test_new_apartments_copy_the_door_they_were_added_from(): void
+    {
+        $original = $this->licensed(5);
+        $this->expand($original, 2)->assertOk();
+        $door2 = $this->door($original, 2);
+        $door2->forceFill(['price' => 900])->save();
+
+        $this->expand($door2, 3)->assertOk();
+
+        $door3 = $this->door($original, 3);
+        $this->assertEquals(900, (float) $door3->price, 'copied the original, not the door it was added from');
+        $this->assertEquals(500, (float) $original->fresh()->price);
+    }
+
+    public function test_an_incomplete_door_is_the_one_named_in_the_refusal(): void
+    {
+        // The completeness check runs on the door that was sent, so the
+        // refusal names THAT door — even when the original is complete.
+        $original = $this->licensed(5);
+        $this->expand($original, 2)->assertOk();
+        $door2 = $this->door($original, 2);
+        $door2->forceFill(['description' => null])->save();
+
+        $this->expand($door2, 3)
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'SOURCE_UNIT_INCOMPLETE')
+            ->assertJsonPath('error.meta.unit_id', 'u_'.$door2->id);
+    }
+
     /* ---------- fixtures ---------- */
+
+    /** The n-th door of the original's building, by creation order. */
+    private function door(Unit $original, int $n): Unit
+    {
+        return Unit::where('unit_group_id', $original->fresh()->unit_group_id)->orderBy('id')->skip($n - 1)->firstOrFail();
+    }
 
     private function expand(Unit $unit, int $count): TestResponse
     {
