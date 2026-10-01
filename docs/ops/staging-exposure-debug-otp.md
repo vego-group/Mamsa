@@ -6,7 +6,8 @@
 |---|---|
 | `APP_DEBUG=false` on staging | ✅ **done 2026-10-01**. A rate-limited request showed `trace`/`file`/`exception` before and a clean message after |
 | Anonymise every real person's account on staging (identity only; bookings and payments kept) | ✅ **done 2026-10-01: 16 accounts.** 16 names, 13 emails and 9 phones replaced; 0 original real phones or emails left; 86 bookings and 37 payments untouched; all 9 UAT allowlist phones intact |
-| **B:** `debug_otp` behind an env flag, default OFF | ⏳ **before UAT**, not yet built |
+| **B:** `debug_otp` behind an env flag, default OFF | ✅ **built and on staging 2026-10-01** (`1eaef82`): `OTP_DEBUG_RESPONSE`, default off, never on production. **Staging = `true`**, a deliberate per-environment choice for UAT (Ahmed's option A; deployment approved by the backend session's operator). **Not deployed to production** (no behaviour change there: production never returned the code) |
+| `national_id` of two UAT test partners (users 19, 22) | ✅ **anonymised 2026-10-01** (Ahmed, written); backup chmod 600, **delete 2026-10-08** |
 
 ## What is true today (verified by real calls, 2026-10-01)
 
@@ -48,7 +49,7 @@ emails differ. The other 14 don't exist on production. The one production copy e
 
 **Kept, with a fixed end (Ahmed, written, 2026-10-01):** a backup of the 16 original rows sits on the staging
 server only (`~/backups/staging-users-before-anon-20261001-180724.json`, chmod 600).
-**🗓 Delete on 2026-10-08.** After that the original identities are gone from staging for good.
+**🗓 Delete on 2026-10-08** (both backups: the 16 user rows and the 2 `national_id` rows; the deletion is a server action, so the backend session asks first). After that the original identities are gone from staging for good.
 
 ## Options, before UAT (Ahmed decides)
 
