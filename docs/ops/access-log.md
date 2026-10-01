@@ -68,8 +68,12 @@ user`. Only `token` is credential-like. There's nothing named signature, key, ha
 **Limits of this audit:**
 - It covers **matched routes**. A request to a path that matches no route is logged as sent. The calendar
   pattern is masked even then, but an unknown future secret in an unmatched path would not be.
-- It's a snapshot. **Re-run it whenever a public or signed route is added**, and name any credential
-  parameter `{token}`, so the existing mask covers it.
+- It's a snapshot, **now enforced by a test**: `tests/Feature/PathCredentialAuditTest.php` walks the router
+  and fails if the set of routes that have a path parameter and no sign-in (signed routes included) differs
+  from the reviewed list. A new public or signed route with a path parameter fails the suite until someone
+  answers the question for it, names any credential parameter `{token}` (so the mask covers it), and
+  updates the list here and in the test. Mutation-checked 2026-10-01: a new public `{invite}` route, a
+  `{id}` route outside the sign-in group, and a detector broken either way all fail it.
 
 ## 🔴 The limit: it only sees requests that reach PHP
 
