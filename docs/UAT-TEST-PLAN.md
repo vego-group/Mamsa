@@ -19,6 +19,10 @@ Printable/repo version of the interactive plan (`Mamsa-UAT-Test-Plan.html`) — 
 | Moyasar test card | `4111 1111 1111 1111` · future expiry · CVC `123` · 3-DS: pick success/failure |
 | Fresh phones | use `05971xxxxx` for registrations |
 
+> **Reporting a failure (timeout, 5xx, "the API didn't answer"):** note the **UTC time to the minute** and
+> the path. Both servers keep an access log, and [its absence table](ops/access-log.md#reading-an-absence)
+> tells us whether the request ever reached the app. Without the time, the log can't answer.
+
 ---
 
 ## 1 · Visitor — browse & discover  `staging`

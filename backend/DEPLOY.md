@@ -180,6 +180,10 @@ git pull --ff-only origin main               # --ff-only = fail loudly, never me
 
 ## Troubleshooting
 
+**"The API timed out / didn't answer":** read `storage/logs/access-YYYY-MM-DD.log` for that minute first,
+with [the absence table](../docs/ops/access-log.md#reading-an-absence). No line from that client, but lines from
+others in the same minute, means the request died before PHP.
+
 | Symptom | Cause / fix |
 | --- | --- |
 | `Could not open input file: /usr/...` | Two binary paths concatenated. Run **one** php binary + script: `php84 artisan ...`. |

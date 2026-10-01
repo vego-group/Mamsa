@@ -17,6 +17,11 @@ a partner side (Individuals & Companies), and a Super-Admin back office.
 - Provider abstractions: `SmsGateway` (OTP — FCG in prod, `log` driver in dev) and `PaymentGateway` (Moyasar).
 - Unit **status lifecycle** state machine (`Draft → Pending → Approved | Rejected`) with an audit log.
 
+## Operations
+
+- Fault reports (timeouts, 5xx, "the API was down"): start with the access log and its
+  [absence table](docs/ops/access-log.md#reading-an-absence). Host quirks: [`docs/ops/HOST-NOTES-hostinger-shared.md`](docs/ops/HOST-NOTES-hostinger-shared.md).
+
 ## Running locally (WSL `ubuntu22`)
 
 ```bash

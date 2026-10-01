@@ -48,7 +48,8 @@ with **403**, while a missing application route returns 404.
 ```
 
 So a 403 on a storage path usually means **the file is not there**, not that
-permissions are wrong. Diagnosing it as a storage-configuration problem sends
+permissions are wrong. Paths ending in `.log` or `.env` additionally get a 403 from the
+host's filter, with the header `x-rasp-block: 1`, whether or not anything is there. Diagnosing it as a storage-configuration problem sends
 you to the wrong place — it did once, and the real cause was five database rows
 pointing at a file that had never been uploaded.
 
@@ -66,6 +67,12 @@ Only `~/.logs/mail.log` exists at shell level. HTTP access logs live in the
 Consequence for any incident question of the form "was this URL ever fetched":
 the honest answer is usually **not provable either way**, and that absence is
 part of the answer rather than a gap to apologise for.
+
+**Since 2026-10-01 there is an application access log** on both servers
+(`app_core/storage/logs/access-YYYY-MM-DD.log`, 14 days). It answers the question for every
+request that **reached PHP**. For one that didn't, the absence of its line next to other lines from
+the same minute is the evidence. **Before answering any "the API was down / timed out" report, read
+[the absence table in access-log.md](access-log.md#reading-an-absence).**
 
 ---
 
