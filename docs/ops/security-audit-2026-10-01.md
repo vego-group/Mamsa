@@ -31,7 +31,7 @@ configuration, headers, SSH keys and backups.
 | **M3** | Medium | **`~/backups`**: 30 files, mostly world-readable, including **3 `.env` copies** (live keys) and the personal-data backups | account | `chmod 600` everything. Delete old `.env` copies (decision); personal-data backups are due for deletion 2026-10-08 |
 | **M4** | Medium | **Staging `app_core` holds 2 old `.env.bak-*` copies** | staging | Delete (or move into `~/backups` with `chmod 600`) |
 | **M5** | Medium | **No security headers:** HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` | both | A Laravel middleware (in git, tested) → staging → production |
-| **M6** | Medium | **Two SSH keys have shell access:** `mamsa-deploy-wsl` (the backend machine) and **`ashraf@DESKTOP-LMURV69`** (RSA) | account | Operator confirms the second key is theirs and still needed; remove it if not |
+| ~~**M6**~~ | ✅ resolved | Two SSH keys: `mamsa-deploy-wsl` (the backend machine) and `ashraf@DESKTOP-LMURV69` (RSA) | account | **Operator confirmed 2026-10-01: both are theirs and needed.** No change |
 | **L1** | Low | **`expose_php` on** → `x-powered-by: PHP/8.4.19` tells attackers the exact version | both | Strip the header in the same middleware as M5 |
 | **L2** | Low | **Logs:** `laravel.log` 2.5 MB (prod) / 6.3 MB (staging), single file with no rotation, and may hold personal data. Old `error_log` files (last written July) | both | Daily rotation with a retention period (as the access log has); archive or remove the old `error_log` |
 | **L3** | Info | `trusted_proxies` unset; production sits behind Hostinger's CDN (`server: hcdn`). The access log shows real client IPs, so no change is needed now | production | Watch only |
