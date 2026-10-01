@@ -49,7 +49,7 @@ final class AccessLog
             Log::channel('access')->info((string) json_encode([
                 't' => now('UTC')->format('Y-m-d\TH:i:s.v\Z'),
                 'ip' => $request->ip(),
-                'path' => '/'.ltrim($request->path(), '/'),
+                'path' => self::path($request),
                 'status' => $response->getStatusCode(),
                 'ms' => (int) round((microtime(true) - $start) * 1000),
                 'uid' => $request->user()?->getAuthIdentifier(),
@@ -58,5 +58,27 @@ final class AccessLog
             // A log line must never turn a served request into an error.
             report($e);
         }
+    }
+
+    /**
+     * The path with any credential carried IN it replaced by `***`.
+     *
+     * The query string is never logged, but some secrets live in the path
+     * itself: the iCal feed is `/api/v1/calendar/{token}.ics`, where the token
+     * opens a unit's calendar to whoever holds it. Masked by route parameter
+     * name, so a future `{token}` route is covered, and by pattern for the
+     * feed, so a request that matched no route (a malformed token) is too.
+     * Owner-approved 2026-10-01.
+     */
+    private static function path(Request $request): string
+    {
+        $path = '/'.ltrim($request->path(), '/');
+
+        $token = $request->route()?->parameter('token');
+        if (is_string($token) && $token !== '') {
+            $path = str_replace($token, '***', $path);
+        }
+
+        return (string) preg_replace('#^(/api/v1/calendar/)[^/]+(\.ics)$#', '$1***$2', $path);
     }
 }

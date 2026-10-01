@@ -14,7 +14,7 @@
 |---|---|
 | `t` | When the response finished, UTC, milliseconds |
 | `ip` | Client IP as Laravel resolves it (trusted proxies applied) |
-| `path` | Path only, **no query string** |
+| `path` | Path only, **no query string**. A credential carried in the path is replaced by `***` (the iCal feed logs as `/api/v1/calendar/***.ics`) |
 | `status` | HTTP status sent |
 | `ms` | From PHP receiving the request to the response being sent |
 | `uid` | Authenticated user id, or `null` |
@@ -33,7 +33,10 @@ and they're never sent to any third party.
 - **Retention is 14 days**, enforced by the log channel itself (`ACCESS_LOG_DAYS`). Older daily files
   are deleted automatically, with no manual step that could be forgotten.
 - **Minimised by design:** no query string, body or headers (so no tokens, passwords, OTPs or user
-  agent), and the path only.
+  agent), and the path only. **A token carried in the path itself is masked:** the iCal feed
+  `/api/v1/calendar/{token}.ics` is logged as `/api/v1/calendar/***.ics`, as is any route parameter
+  named `token`. That gap was found on 2026-10-01, the day the log went live. Before the fix, 9 staging
+  lines (a test unit) held a real feed token; they were redacted in place. Production had none.
 - **Not reachable from the web.** The files live in `app_core/storage/logs`, outside the docroot.
   Verified by real HTTP requests on both servers on 2026-10-01: `/storage/logs/access-2026-10-01.log`,
   `/storage/logs/access.log`, `/app_core/storage/logs/…`, `/../app_core/…`, `/logs/…` and `/access-….log`
