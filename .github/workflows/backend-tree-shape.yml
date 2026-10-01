@@ -14,6 +14,10 @@ on:
 
 jobs:
   shape:
+    # This file reaches the monorepo too (vego-group/Mamsa), where backend/ is
+    # SUPPOSED to be a subfolder; there the check would fail every PR. It only
+    # means something in the backend-only repository.
+    if: github.repository == 'vego-group/mamsaa-backend-api'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
