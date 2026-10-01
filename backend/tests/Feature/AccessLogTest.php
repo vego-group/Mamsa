@@ -93,6 +93,23 @@ class AccessLogTest extends TestCase
         $this->assertSame(404, $this->lines()[0]['status']);
     }
 
+    public function test_the_calendar_token_in_the_path_is_masked(): void
+    {
+        config()->set('logging.access_log.enabled', true);
+        $token = str_repeat('Ab1', 20);
+
+        $this->get("/api/v1/calendar/{$token}.ics");
+        // Malformed: matches no route, and is still never written out.
+        $this->get('/api/v1/calendar/short-SECRETISH.ics');
+
+        $this->assertSame('/api/v1/calendar/***.ics', $this->lines()[0]['path']);
+        $this->assertSame('/api/v1/calendar/***.ics', $this->lines()[1]['path']);
+
+        $raw = implode('', array_map(File::get(...), File::glob($this->dir.'/access-*.log')));
+        $this->assertStringNotContainsString($token, $raw);
+        $this->assertStringNotContainsString('SECRETISH', $raw);
+    }
+
     public function test_nothing_is_written_when_disabled(): void
     {
         config()->set('logging.access_log.enabled', false);
