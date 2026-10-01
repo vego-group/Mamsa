@@ -3,7 +3,7 @@
 **الأساس:** `docs/backend/permits-frontend-contract-phases-1-3.md`
 **والملحق:** `docs/backend/permits-frontend-contract-phases-4-6.md` (وضع أ + المرحلة ٦)
 **الكود المنشور:** `prod-2026-09-27` — **الاتنين بيوصفوا الإنتاج دلوقتي**
-**التاريخ:** 22/09/2026 · **محدَّث 28/09/2026** بعد النشرة الموحّدة
+**التاريخ:** 22/09/2026 · **آخر تحديث 01/10/2026** (الإنتاج: `prod-2026-10-01-units`)
 
 > 🔴 **العَلَم هو الفرق الوحيد بين البيئتين:** `multiUnitEnabled` = `true` على staging
 > و**`false` على الإنتاج**. كل حاجة في الملف ده **منشورة**، بس **§٨ (وضع أ)** مقفول
@@ -371,7 +371,7 @@ const STEP: Record<string,string> = {
 
 ```ts
 if (code === 'SOURCE_UNIT_INCOMPLETE') {
-  // meta.unit_id = "u_24" → الوحدة الأصل، مش الشقق
+  // meta.unit_id = "u_24" → الباب اللي اتبعت في الطلب (أي باب في المبنى مقبول — الملحق §١.٣)
   router.push(`/units/${meta.unit_id}/edit?highlight=${Object.keys(fields).join(',')}`);
 }
 ```
