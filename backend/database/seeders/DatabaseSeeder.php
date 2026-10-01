@@ -2,12 +2,15 @@
 
 namespace Database\Seeders;
 
+use App\Support\ProductionSeedGuard;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        ProductionSeedGuard::assertAllowed($this);
+
         $this->call([
             RolesAndPermissionsSeeder::class,
             CancellationPolicySeeder::class,   // before units so they can reference a policy
