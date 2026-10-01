@@ -1,6 +1,12 @@
 # Staging exposure: `debug_otp` and `APP_DEBUG` — decision record
 
-**Written:** 2026-10-01 · **Status:** ⏸ **decision pending** (Ahmed). Nothing below has been changed.
+**Written:** 2026-10-01 · **Ahmed's decision (written, 2026-10-01):** do **A now** and **B before UAT**, both of them.
+
+| | Status |
+|---|---|
+| `APP_DEBUG=false` on staging | ✅ **done 2026-10-01**. A rate-limited request showed `trace`/`file`/`exception` before and a clean message after |
+| Anonymise every real person's account on staging (identity only; bookings and payments kept) | ✅ **done 2026-10-01: 16 accounts.** 16 names, 13 emails and 9 phones replaced; 0 original real phones or emails left; 86 bookings and 37 payments untouched; all 9 UAT allowlist phones intact |
+| **B:** `debug_otp` behind an env flag, default OFF | ⏳ **before UAT**, not yet built |
 
 ## What is true today (verified by real calls, 2026-10-01)
 
@@ -24,15 +30,24 @@ in `OtpAuthController` and `User\EmailController`, so it's on in every non-produ
 > That covers phone numbers, email addresses, names, identity or commercial-registration documents, bank
 > details, and real bookings or payments. Test data only.
 
-### ⚠️ The rule is broken on staging today
+### The rule was broken on staging until 2026-10-01 (fixed: see Status)
 
 - **Both real phone numbers on record** (`+966537486167`, `+966500433980`) have accounts on staging.
 - **9 accounts on staging use `gmail.com` addresses,** which may belong to real people. They haven't been
   checked one by one.
 - **Staging totals:** 28 users, 86 bookings, 37 payments (test-mode Moyasar).
 
-So today, anyone can request a code for one of those real numbers on staging and sign in as that person.
-**This was not tested against the real accounts.**
+Until the anonymisation, anyone could request a code for one of those real numbers on staging and sign in
+as that person. **This was never tested against the real accounts.**
+
+**How they got there:** self-registration on staging during testing, 2026-07-16 to 07-19 (plus one on
+2026-08-19). It was **not** a copy of production. The two real phones are staging ids 23/24, created
+2026-07-16/17. On production they're different ids (19/20), created **later** (2026-08-14), and their
+emails differ. The other 14 don't exist on production. The one production copy ever made (the
+2026-09-27 rehearsal) went into a **local** container, not staging; see `known-risks-local-copies.md`.
+
+**Kept:** a backup of the 16 original rows is on the staging server only (`~/backups/`, chmod 600).
+Ahmed decides whether to delete it, since it holds the original personal data.
 
 ## Options, before UAT (Ahmed decides)
 
