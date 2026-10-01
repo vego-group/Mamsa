@@ -11,13 +11,14 @@ Printable/repo version of the interactive plan (`Mamsa-UAT-Test-Plan.html`) — 
 | User website (staging data) | Next.js dev/preview → `https://staging.mamsaa.com/api/v1` |
 | Partner dashboard | `partner.mamsaa.com` (or local) → `https://staging.mamsaa.com` (root, no /api/v1) |
 | Admin panel | `testvue.mamsaa.com/admin` = ⚠ production · staging admin: local Vue → staging API |
-| OTP on staging | fixed `<staging-otp>` (echoed as `debug_otp`) · caps 100/phone/day, 300/IP/day, 5/min burst |
+| OTP on staging | fixed `<staging-otp>` (ask the owner, never written down) **only for allowlisted phones**. Every phone in this table is allowlisted on staging (2026-10-01), on the guest app, partner dashboard and admin. A phone NOT on the list gets a real OTP: the guest app returns it as `debug_otp`, but **the partner dashboard does not**, so off-list phones can't sign in there · caps 100/phone/day, 300/IP/day, 5/min burst |
 | Approved partner | `0512345678` — units in all 4 states, bookings, iCal feed |
 | Approved individual | `0577777777` — clean, no units |
-| Pending partners | `0533333333`, `0599999999` — keep pending (they test the review screen) |
+| Pending partners | `0533333333`, `0599999999` — ⚠ **both are APPROVED on staging as of 2026-10-01**, so the review-screen tests have no pending account until they're reset or replaced (owner decision pending) |
 | Admin (staging) | `admin@mamsaa.sa` / `Password1` |
 | Moyasar test card | `4111 1111 1111 1111` · future expiry · CVC `123` · 3-DS: pick success/failure |
 | Fresh phones | use `05971xxxxx` for registrations |
+| Payments for the phones above | **real Moyasar test mode**: payment simulation (`TEST_PAYMENTS_MODE`) is OFF on staging, so the allowlist affects sign-in only |
 
 > **Reporting a failure (timeout, 5xx, "the API didn't answer"):** note the **UTC time to the minute** and
 > the path. Both servers keep an access log, and [its absence table](ops/access-log.md#reading-an-absence)
