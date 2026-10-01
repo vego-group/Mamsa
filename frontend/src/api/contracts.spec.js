@@ -116,10 +116,10 @@ describe('authApi — auth endpoints', () => {
   })
 
   it('maps admin login and refresh', () => {
-    authApi.adminLogin('admin@mamsaa.sa', 'Password1')
+    authApi.adminLogin('admin@mamsaa.sa', 'not-a-real-password')
     expect(http.post).toHaveBeenCalledWith('/auth/admin/login', {
       email: 'admin@mamsaa.sa',
-      password: 'Password1',
+      password: 'not-a-real-password',
       device: 'admin-web',
     })
 

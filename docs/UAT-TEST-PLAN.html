@@ -126,7 +126,7 @@
         <tr><td>Approved partner (staging)</td><td><code>0512345678</code> — units in all 4 states, bookings, iCal feed</td></tr>
         <tr><td>Approved individual (staging)</td><td><code>0577777777</code> — clean account, no units</td></tr>
         <tr><td>Pending partners (staging)</td><td><code>0533333333</code>, <code>0599999999</code> — keep pending; they test the review screen</td></tr>
-        <tr><td>Admin (staging)</td><td><code>admin@mamsaa.sa</code> / <code>Password1</code></td></tr>
+        <tr><td>Admin (staging)</td><td><code>admin@mamsaa.sa</code> / password: ask the owner (never written in any file)</td></tr>
         <tr><td>Moyasar test card</td><td><code>4111 1111 1111 1111</code> · any future expiry · CVC <code>123</code> · 3-DS page: choose success or failure</td></tr>
         <tr><td>Fresh phones</td><td>use <code>05971xxxxx</code> numbers for registration tests — never a teammate's real number</td></tr>
       </table></div>
@@ -183,7 +183,7 @@ const SUITES=[
  {id:"6.5",t:"Pending partner CAN use the user site",s:["As the fresh pending partner, log into the user website"],e:"Login works — only the partner DASHBOARD is gated by approval, not the website."}]},
 
 {id:"s7",title:"7 · Admin panel",env:"staging",note:"Test against the staging admin. On testvue.mamsaa.com/admin you are touching production.",tests:[
- {id:"7.1",t:"Admin login",s:["Log in with admin@mamsaa.sa / Password1"],e:"Admin dashboard loads with KPI cards."},
+ {id:"7.1",t:"Admin login",s:["Log in with admin@mamsaa.sa and the password the owner gives you"],e:"Admin dashboard loads with KPI cards."},
  {id:"7.2",t:"Partner review screen exists",s:["Open sidebar → <span class='ar'>طلبات الشركاء</span>"],e:"List defaults to pending tab; stats row; search by name/phone/email works; individual vs company badge with ID/CR shown."},
  {id:"7.3",t:"Approve a partner",s:["Approve the partner you registered in 6.1"],e:"Toast confirms; row moves to approved; applicant receives an in-app notification."},
  {id:"7.4",t:"Reject with reason",s:["Reject the company from 6.2 with a reason"],e:"Reason required; row shows rejected + the reason text."},

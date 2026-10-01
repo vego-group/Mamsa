@@ -15,7 +15,7 @@ Printable/repo version of the interactive plan (`Mamsa-UAT-Test-Plan.html`) — 
 | Approved partner | `0512345678` — units in all 4 states, bookings, iCal feed |
 | Approved individual | `0577777777` — clean, no units |
 | Pending partners | `0533333333`, `0599999999` — ⚠ **both are APPROVED on staging as of 2026-10-01**, so the review-screen tests have no pending account until they're reset or replaced (owner decision pending) |
-| Admin (staging) | `admin@mamsaa.sa` / `Password1` |
+| Admin (staging) | `admin@mamsaa.sa` / password: **ask the owner**. It's never written in any file |
 | Moyasar test card | `4111 1111 1111 1111` · future expiry · CVC `123` · 3-DS: pick success/failure |
 | Fresh phones | use `05971xxxxx` for registrations |
 | Payments for the phones above | **real Moyasar test mode**: payment simulation (`TEST_PAYMENTS_MODE`) is OFF on staging, so the allowlist affects sign-in only |
@@ -235,7 +235,7 @@ Printable/repo version of the interactive plan (`Mamsa-UAT-Test-Plan.html`) — 
 > Test against the staging admin. On testvue.mamsaa.com/admin you are touching production.
 
 ### [ ] T-7.1 — Admin login
-1. Log in with admin@mamsaa.sa / Password1
+1. Log in with admin@mamsaa.sa and the password the owner gives you
 
 **Expected:** Admin dashboard loads with KPI cards.
 

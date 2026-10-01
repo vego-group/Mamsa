@@ -89,6 +89,7 @@ and a PHP process that never started.
 | Lines from the failing client, with 5xx or a large `ms` | The app received it and was slow or failed. Look in the code or `laravel.log` |
 | No line from that client, **but lines from others in the same minute** | The request died **before** the app: network, host, or web server. Not the code |
 | No lines from anyone for that minute | The app received nothing: the host or PHP was down. Check whether `ACCESS_LOG_ENABLED` was on before concluding that |
+| **A sign-in problem:** `/auth/otp/verify` (or `/admin/auth/verify-otp`, `/api/v1/auth/verify-otp`) shows `"uid":null` even when the sign-in **succeeded** | **Expected, not the fault.** The request started with no user, and the line records who was signed in when it started. Judge by `status` (200 = signed in), then read the **next** line from that IP: it carries the `uid`. `/auth/logout` is also `null`. Seen live on staging 2026-10-01: verify `uid:null` 200, then `/units` `uid:33` |
 
 Example: the 30/09 23:05–23:11 UTC `CONNECT_TIMEOUT`s on staging. Under this log they would have
 shown up as the second row.
