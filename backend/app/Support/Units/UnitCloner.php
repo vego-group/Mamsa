@@ -41,6 +41,9 @@ final class UnitCloner
      * means "the same listing", so a column added next month should be copied
      * by default. Only the ones that are *identity* or *history* are dropped.
      */
+    /** The door a standalone unit takes when it becomes a building (decision 2026-10-01). */
+    public const ORIGINAL_DOOR = '1';
+
     private const NOT_COPIED = [
         // Identity — both are UNIQUE. Copying `calendar_token` would hand every
         // apartment one iCal feed, so an external sync on 402 would rewrite the
@@ -125,7 +128,7 @@ final class UnitCloner
                 self::cloneOne($source, $groupId, $number, $copyDocuments);
             }
 
-            return Unit::where('unit_group_id', $groupId)->orderBy('apartment_no')->get();
+            return DoorName::order(Unit::where('unit_group_id', $groupId)->get());
         });
     }
 
@@ -169,7 +172,7 @@ final class UnitCloner
 
         if ($needed <= 0) {
             return $source->unit_group_id
-                ? Unit::where('unit_group_id', $source->unit_group_id)->orderBy('apartment_no')->get()
+                ? DoorName::order(Unit::where('unit_group_id', $source->unit_group_id)->get())
                 : collect([$source]);
         }
 
@@ -190,19 +193,24 @@ final class UnitCloner
      */
     private static function numbersFor(array $existing, Unit $source, int $needed, array $names): array
     {
+        // The original takes "1" whatever the cards are named — option (a),
+        // 2026-10-01. A card named "1" is refused before this runs
+        // ({@see ApartmentExpansion::nameErrors()}), so the two cannot collide.
         $names = array_values(array_unique(array_filter(array_map(fn ($n) => trim((string) $n), $names), fn ($n) => $n !== '')));
 
         if ($names === []) {
             return self::nextNumbers($existing, $source, $needed);
         }
 
-        $sourceNeedsOne = blank($source->apartment_no);
-        $autoCount = $needed - count($names);
-        $auto = self::nextNumbers(array_merge($existing, $names), $source, $autoCount, skipOnly: $names);
+        if (blank($source->apartment_no)) {
+            $auto = self::nextNumbers(array_merge($existing, $names, [self::ORIGINAL_DOOR]), $source, $needed - count($names) - 1, skipOnly: $names);
 
-        return $sourceNeedsOne
-            ? array_merge([array_shift($auto)], $names, $auto)
-            : array_merge($names, $auto);
+            return array_merge([self::ORIGINAL_DOOR], $names, $auto);
+        }
+
+        $auto = self::nextNumbers(array_merge($existing, $names), $source, $needed - count($names), skipOnly: $names);
+
+        return array_merge($names, $auto);
     }
 
     /**
