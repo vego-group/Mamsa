@@ -154,7 +154,7 @@ in `OtpAuthController` and `User\EmailController`, so it's on in every non-produ
 
 ### The rule was broken on staging until 2026-10-01 (fixed: see Status)
 
-- **Both real phone numbers on record** (`+966537486167`, `+966500433980`) have accounts on staging.
+- **Both real phone numbers on record** (`+96653*****67`, `+96650*****80`) have accounts on staging.
 - **9 accounts on staging use `gmail.com` addresses,** which may belong to real people. They haven't been
   checked one by one.
 - **Staging totals:** 28 users, 86 bookings, 37 payments (test-mode Moyasar).

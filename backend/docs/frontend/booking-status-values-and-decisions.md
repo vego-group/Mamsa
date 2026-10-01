@@ -177,7 +177,7 @@ testing, it does not: **one unit, and the accounts below.**
 the blocker that had prevented it was resolved.
 
 **What made it safe to close:**
-- A **real-phone SuperAdmin** now exists — `+966537486167` (previously every admin phone was synthetic
+- A **real-phone SuperAdmin** now exists — `+96653*****67` (previously every admin phone was synthetic
   and could not receive an SMS, so disabling test mode would have locked everyone out permanently).
 - **Real SMS sending was confirmed working** on production.
 
@@ -192,7 +192,7 @@ If you need working production logins for testing, use the real-phone accounts:
 
 | Phone | Roles |
 |---|---|
-| `+966537486167` | SuperAdmin |
+| `+96653*****67` | SuperAdmin |
 | `+9665XXXXXXXX` | Individual (partner, approved) + User |
 
 Reverting is possible in ~30 seconds if it turns out to be needed, but the security posture is much
