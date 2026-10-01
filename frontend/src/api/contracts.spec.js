@@ -116,10 +116,10 @@ describe('authApi — auth endpoints', () => {
   })
 
   it('maps admin login and refresh', () => {
-    authApi.adminLogin('admin@mamsaa.sa', 'Password1')
+    authApi.adminLogin('admin@mamsaa.sa', 'not-a-real-password')
     expect(http.post).toHaveBeenCalledWith('/auth/admin/login', {
       email: 'admin@mamsaa.sa',
-      password: 'Password1',
+      password: 'not-a-real-password',
       device: 'admin-web',
     })
 
@@ -147,5 +147,71 @@ describe('partnerApi — unit gallery', () => {
 
     partnerApi.setMainImage(5, 9)
     expect(http.post).toHaveBeenCalledWith('/partner/units/5/images/9/main')
+  })
+})
+
+describe('endpoints that existed on the backend but were never called', () => {
+  it('sets the apartment count on a unit', () => {
+    partnerApi.setApartmentCount(42, 5)
+    expect(http.post).toHaveBeenCalledWith('/partner/units/42/apartments', { count: 5 })
+  })
+
+  it('reads a unit\'s blocked nights and public reviews', () => {
+    publicApi.blockedDates(42, { from: '2026-09-01', to: '2026-10-01' })
+    expect(http.get).toHaveBeenCalledWith('/units/42/blocked-dates', {
+      params: { from: '2026-09-01', to: '2026-10-01' },
+    })
+
+    publicApi.unitReviews(42)
+    expect(http.get).toHaveBeenCalledWith('/units/42/reviews')
+  })
+
+  it('fetches the ZATCA tax invoice for a booking', () => {
+    bookingApi.invoice(7)
+    expect(http.get).toHaveBeenCalledWith('/bookings/7/invoice')
+  })
+
+  it('polls a payment record by id', () => {
+    paymentApi.get('pay_123')
+    expect(http.get).toHaveBeenCalledWith('/payments/pay_123')
+  })
+
+  it('changes the phone in two steps, sending the new number BOTH times', () => {
+    userApi.changePhone('0512345678')
+    expect(http.post).toHaveBeenCalledWith('/user/change-phone', { new_phone: '0512345678' })
+
+    // The server does not carry the number between the two calls, so verify
+    // must send it again alongside the code. Sending only the code fails.
+    userApi.verifyChangePhone('0512345678', '111111')
+    expect(http.post).toHaveBeenCalledWith('/user/change-phone/verify', {
+      new_phone: '0512345678',
+      code: '111111',
+    })
+  })
+
+  it('deletes the account', () => {
+    userApi.deleteAccount()
+    expect(http.delete).toHaveBeenCalledWith('/user/account')
+  })
+})
+
+describe('unit documents — licence and ownership proof', () => {
+  it('uploads a document as multipart with the type in the body', () => {
+    const file = new File(['x'], 'deed.pdf', { type: 'application/pdf' })
+    partnerApi.uploadUnitDocument(9, 'ownership_doc', file)
+
+    const [url, body, opts] = http.post.mock.calls.at(-1)
+    expect(url).toBe('/partner/units/9/documents')
+    expect(body).toBeInstanceOf(FormData)
+    expect(body.get('type')).toBe('ownership_doc')
+    expect(body.get('file')).toBe(file)
+    // Unset, not set: the browser must add its own multipart boundary, and the
+    // client's default JSON header would break the upload.
+    expect(opts.headers['Content-Type']).toBeUndefined()
+  })
+
+  it('deletes a document by type', () => {
+    partnerApi.deleteUnitDocument(9, 'tourism_permit')
+    expect(http.delete).toHaveBeenCalledWith('/partner/units/9/documents/tourism_permit')
   })
 })

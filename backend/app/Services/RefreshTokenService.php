@@ -43,6 +43,16 @@ class RefreshTokenService
             return null;
         }
 
+        // Suspending an account has to end the session it already has, not just
+        // block the next login — otherwise a live refresh token renews itself
+        // indefinitely and the suspension never takes effect.
+        if (! $user->is_active) {
+            $record->update(['revoked_at' => now()]);
+            $user->tokens()->delete();
+
+            return null;
+        }
+
         $record->update(['revoked_at' => now()]);
 
         if ($record->access_token_id) {

@@ -139,6 +139,23 @@
                 <h2 class="font-title-sm text-title-sm text-on-surface">{{ unit.avg_rating || '—' }} · {{ unit.reviews_count || 0 }} تقييماً</h2>
               </div>
               <p v-if="!unit.reviews_count" class="text-body-sm text-on-surface-variant">كن أول من يقيّم هذه الوحدة بعد إقامتك.</p>
+
+                <!-- GET /units/{id}/reviews — the aggregate above was the only
+                     thing shown before, so a unit with 43 reviews displayed a
+                     number and nothing to read. -->
+                <ul v-else class="space-y-4">
+                  <li v-for="r in unitReviews" :key="r.id" class="pb-4 border-b border-outline-variant last:border-0 last:pb-0">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="font-bold text-body-sm text-on-surface">{{ r.user_name || 'ضيف' }}</span>
+                      <span class="flex items-center gap-0.5 text-amber-500 text-[13px]">
+                        <span class="material-symbols-outlined text-[15px]" style="font-variation-settings:'FILL' 1">star</span>
+                        {{ r.rating }}
+                      </span>
+                      <span class="text-[12px] text-on-surface-variant">{{ reviewDate(r.created_at) }}</span>
+                    </div>
+                    <p v-if="r.comment" class="text-body-sm text-on-surface-variant leading-relaxed">{{ r.comment }}</p>
+                  </li>
+                </ul>
             </section>
 
             <!-- Map -->
@@ -175,16 +192,21 @@
               </div>
 
               <div class="space-y-3 mb-4">
+                <p v-if="scarce" class="flex items-center gap-1 text-[12px] font-bold text-error">
+                  <span class="material-symbols-outlined text-[16px]">local_fire_department</span>
+                  {{ scarceLabel }}
+                </p>
+
                 <div class="grid grid-cols-2 gap-2">
                   <div>
                     <label class="block text-[12px] font-bold text-on-surface-variant mb-1.5">تسجيل الوصول</label>
                     <!-- Custom Gregorian picker: the native date input follows the
                          macOS calendar setting (Hijri for ar-SA) which no attribute overrides. -->
-                    <GregorianDatePicker v-model="booking.start_date" :min="today" />
+                    <GregorianDatePicker v-model="booking.start_date" :min="today" :blocked="blockedNights" />
                   </div>
                   <div>
                     <label class="block text-[12px] font-bold text-on-surface-variant mb-1.5">تسجيل المغادرة</label>
-                    <GregorianDatePicker v-model="booking.end_date" :min="booking.start_date || today" />
+                    <GregorianDatePicker v-model="booking.end_date" :min="booking.start_date || today" :max="maxCheckout" />
                   </div>
                 </div>
                 <div>
@@ -260,6 +282,7 @@ import CancellationPolicyTiers from '@/components/public/CancellationPolicyTiers
 import GregorianDatePicker from '@/components/public/GregorianDatePicker.vue'
 import EmailVerifyModal from '@/components/user/EmailVerifyModal.vue'
 import { publicApi, bookingApi } from '@/api/public'
+import { useScarcity } from '@/composables/useScarcity'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -277,6 +300,33 @@ const bookError = ref(false)
 
 const today = new Date().toISOString().slice(0, 10)
 
+// Nights already taken. Fetched with the unit so the picker can grey them out,
+// instead of letting a guest choose a taken night and only learn at submit.
+const blockedNights = ref([])
+const unitReviews = ref([])
+
+// Check-out is capped at the FIRST blocked night on or after check-in. A stay
+// start..end occupies nights start..end-1, so checking out ON that night is
+// legal — it is the nights from it onward that are taken. Without the cap a
+// guest could span straight over a booked night and be refused at submit.
+// Gregorian, Arabic — matching the picker, so the page never mixes calendars.
+const reviewFmt = new Intl.DateTimeFormat('ar-u-ca-gregory', { year: 'numeric', month: 'long' })
+function reviewDate(s) {
+  if (!s) return ''
+  const d = new Date(s)
+  return isNaN(d) ? '' : reviewFmt.format(d)
+}
+
+
+const maxCheckout = computed(() => {
+  if (!booking.start_date) return ''
+  const after = blockedNights.value
+    .map((b) => b.start)
+    .filter((s) => s >= booking.start_date)
+    .sort()
+  return after.length ? after[0] : ''
+})
+
 const booking = reactive({ start_date: '', end_date: '', guests: 1 })
 
 const images = computed(() => (unit.value?.images || []).map((i) => i.url))
@@ -289,16 +339,32 @@ watch(() => booking.start_date, (start) => {
 })
 
 const quote = ref(null)
+// How many apartments are free for the CHOSEN nights, as opposed to how many
+// this building lists. Null until dates are picked, when the page falls back to
+// the unit's own (undated) count.
+const datedCount = ref(null)
 watch(() => [booking.start_date, booking.end_date], async () => {
   quote.value = null
+  datedCount.value = null
   if (!unit.value || !booking.start_date || !booking.end_date || nights.value <= 0) return
   try {
     const { data: avail } = await publicApi.checkAvailability(unit.value.id, booking.start_date, booking.end_date)
     if (avail.available && avail.pricing) quote.value = avail.pricing
+    // The probe counts across the whole building, so this is the number that
+    // must be on screen once a guest has chosen their nights — showing the
+    // listing-wide count next to specific dates is the disagreement in a
+    // quieter place.
+    if (typeof avail.available_count === 'number') datedCount.value = avail.available_count
   } catch {
     /* quote is cosmetic here — booking still re-checks availability */
   }
 })
+
+// Scarcity for whichever count is authoritative right now.
+const { scarce, scarceLabel } = useScarcity(() => ({
+  ...(unit.value || {}),
+  available_count: datedCount.value ?? unit.value?.available_count,
+}))
 
 const nights = computed(() => {
   if (!booking.start_date || !booking.end_date) return 0
@@ -426,6 +492,19 @@ onMounted(async () => {
     const { data } = await publicApi.getUnit(route.params.id)
     unit.value = data.data ?? data
     booking.guests = 1
+
+    // Neither is essential to render the page, so a failure here must not blank
+    // the unit — the picker falls back to server-side validation.
+    const uid = unit.value?.id ?? route.params.id
+    const [blocked, reviews] = await Promise.allSettled([
+      publicApi.blockedDates(uid),
+      publicApi.unitReviews(uid),
+    ])
+    if (blocked.status === 'fulfilled') blockedNights.value = blocked.value.data?.blocked ?? []
+    if (reviews.status === 'fulfilled') {
+      const r = reviews.value.data
+      unitReviews.value = r.data ?? r.items ?? (Array.isArray(r) ? r : [])
+    }
   } catch (e) {
     unit.value = null
   } finally {

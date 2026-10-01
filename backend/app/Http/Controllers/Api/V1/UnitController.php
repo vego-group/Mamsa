@@ -6,10 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\Booking;
 use App\Models\Unit;
+use App\Support\Booking\Availability;
+use App\Support\City;
+use App\Support\Dashboard\Maps;
+use App\Support\Media;
+use App\Support\Permits\PermitExpiry;
 use App\Support\Pricing;
+use App\Support\Sql;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 
 class UnitController extends Controller
 {
@@ -40,22 +49,44 @@ class UnitController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Unit::with(['images', 'features', 'cancellationPolicy.tiers'])
+        // `owner.partnerDetail` is loaded here too: without it every unit card
+        // rendered from this list showed a blank host and an unlit verification
+        // badge, because UnitResource only emits `owner` when the relation is
+        // present.
+        $query = Unit::with(['images', 'features', 'cancellationPolicy.tiers', 'owner.partnerDetail'])
+            ->withCount('reviews')
+            ->withAvg('reviews as reviews_avg_rating', 'rating')
             ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available');
 
         // Free-text search across name / city / district (hero search box + category chips).
         if ($request->filled('q')) {
-            $term = '%' . $request->q . '%';
+            $term = '%'.$request->q.'%';
             $query->where(function ($sub) use ($term) {
                 $sub->where('unit_name', 'like', $term)
                     ->orWhere('city', 'like', $term)
                     ->orWhere('district', 'like', $term);
             });
         }
+        // Slug (`riyadh`), English (`Riyadh`) or Arabic (`الرياض`) all resolve to
+        // the stored Arabic value. An exact match on the raw input worked only
+        // for clients that already spoke the stored spelling, and failed as
+        // "no results" rather than as an error — indistinguishable, from the
+        // outside, from a city with nothing listed in it.
         if ($request->filled('city')) {
-            $query->where('city', $request->city);
+            City::filter($query, 'city', (string) $request->city);
+        }
+        // Fetch a known set — the favourites page. Capped at the maximum page
+        // size so one request with `per_page=50` always returns everything it
+        // asked for; a longer list is the caller's to chunk.
+        if ($request->filled('ids')) {
+            $ids = $request->validate([
+                'ids' => ['array', 'max:50'],
+                'ids.*' => ['integer'],
+            ])['ids'];
+
+            $query->whereIn('units.id', $ids);
         }
         if ($request->filled('type')) {
             $query->where('unit_type', $request->type);
@@ -99,12 +130,92 @@ class UnitController extends Controller
         // the right set; raw labels still work as a fallback.
         if ($request->filled('features')) {
             foreach ((array) $request->features as $feature) {
-                $labels = \App\Support\Dashboard\Maps::filterLabels((string) $feature);
+                $labels = Maps::filterLabels((string) $feature);
                 $query->whereHas('features', fn ($q) => $q->whereIn('name', $labels));
             }
         }
 
-        return UnitResource::collection($query->paginate(12));
+        // Availability window (§2.1). Previously accepted and ignored, so a
+        // search could show a fully booked unit under a banner promising it was
+        // free for those exact nights.
+        // `nullable`, not `sometimes`: `sometimes` skips a field that is absent,
+        // which skips `required_with` with it — so half a window passed
+        // validation and was then silently ignored, which is exactly the
+        // failure this section exists to remove.
+        $dates = $request->validate([
+            'start_date' => ['nullable', 'required_with:end_date', 'date'],
+            'end_date' => ['nullable', 'required_with:start_date', 'date', 'after:start_date'],
+        ]);
+
+        // A listing whose permit has run out is not on the storefront, and one
+        // whose permit ends before the requested check-out is not offered for
+        // those dates. Computed from the permit — nothing has to run at
+        // midnight for it to hold — and applied whether or not dates were
+        // given, because a lapsed permit hides the listing either way.
+        PermitExpiry::covering($query, $dates['end_date'] ?? null);
+
+        if (isset($dates['start_date'], $dates['end_date'])) {
+            Availability::onlyFree($query, $dates['start_date'], $dates['end_date']);
+        }
+
+        // Collapse a multi-unit building into ONE card.
+        //
+        // A tower of 100 identical apartments is 100 rows -- each separately
+        // bookable, which is the point -- but showing 100 identical cards would
+        // bury every other partner on the page. So the listing shows one member
+        // per group and says how many are free.
+        //
+        // Done as a second query over the SAME filtered builder rather than a
+        // GROUP BY on this one: the representative still has to come back as a
+        // full model with its images, features, host and review aggregates, and
+        // a grouped select cannot carry those.
+        $representatives = (clone $query)->reorder()
+            ->select(DB::raw('MIN(units.id) as id'))
+            ->groupBy(DB::raw(Sql::groupKey('units.unit_group_id', 'units.id')))
+            ->pluck('id');
+
+        $query->whereIn('units.id', $representatives);
+
+        self::applySort($query, (string) $request->query('sort', ''));
+
+        // Caller-controlled page size, capped: an uncapped one is a way to ask
+        // for the entire table in a single query.
+        $perPage = min(max((int) $request->query('per_page', 12), 1), 50);
+
+        $page = $query->paginate($perPage);
+
+        Availability::attachCounts(
+            $page->getCollection(),
+            $dates['start_date'] ?? null,
+            $dates['end_date'] ?? null,
+        );
+
+        return UnitResource::collection($page);
+    }
+
+    /**
+     * Ordering for the search listing.
+     *
+     * Every branch ends with `id`, including the default. Without a unique
+     * tiebreaker the database is free to return rows in any order it likes for
+     * equal keys — and it need not pick the same order twice, so paging through
+     * results could show one unit on two pages and never show another at all.
+     */
+    private static function applySort(Builder $query, string $sort): void
+    {
+        match ($sort) {
+            'price_asc' => $query->orderBy('price'),
+            'price_desc' => $query->orderByDesc('price'),
+            'newest' => $query->orderByDesc('created_at'),
+            'rating' => $query->orderByDesc(
+                DB::raw('(select coalesce(avg(rating), 0) from reviews where reviews.unit_id = units.id)')
+            ),
+            // Unrecognised or absent → featured first, then newest. This is the
+            // shape the storefront calls "موصى به".
+            default => $query->orderByDesc('is_featured')->orderByDesc('created_at'),
+        };
+
+        $query->orderBy('units.id');
     }
 
     /**
@@ -115,10 +226,12 @@ class UnitController extends Controller
     {
         $limit = min((int) $request->input('limit', 8), 12);
 
-        $units = Unit::with(['images', 'features', 'cancellationPolicy.tiers'])
+        $units = Unit::with(['images', 'features', 'cancellationPolicy.tiers', 'owner.partnerDetail'])
             ->whereIn('unit_type', Unit::SUPPORTED_TYPES) // #3 — only apartment|studio|villa
             ->where('approval_status', 'approved')
             ->where('status', 'available')
+            ->withCount('reviews')
+            ->withAvg('reviews as reviews_avg_rating', 'rating')
             ->withCount(['bookings' => fn ($q) => $q->where('status', 'confirmed')])
             ->orderByDesc('bookings_count')
             ->orderByDesc('id')
@@ -143,12 +256,12 @@ class UnitController extends Controller
 
         $data = array_map(function (array $cat) use ($counts) {
             return [
-                'key'       => $cat['key'],
-                'label'     => $cat['label'],
-                'icon'      => $cat['icon'],
-                'count'     => collect($cat['types'])->sum(fn ($t) => (int) ($counts[$t] ?? 0)),
+                'key' => $cat['key'],
+                'label' => $cat['label'],
+                'icon' => $cat['icon'],
+                'count' => collect($cat['types'])->sum(fn ($t) => (int) ($counts[$t] ?? 0)),
                 // Single bundled default image for every category.
-                'image_url' => \App\Support\Media::defaultImageUrl(),
+                'image_url' => Media::defaultImageUrl(),
             ];
         }, self::CATEGORIES);
 
@@ -194,28 +307,47 @@ class UnitController extends Controller
             }
 
             return [
-                'key'       => $bucket['key'],
-                'label'     => $bucket['label'],
-                'min'       => $bucket['min'],
-                'max'       => $bucket['max'],
-                'count'     => $query->count(),
+                'key' => $bucket['key'],
+                'label' => $bucket['label'],
+                'min' => $bucket['min'],
+                'max' => $bucket['max'],
+                'count' => $query->count(),
                 // Single bundled default image for every budget bucket.
-                'image_url' => \App\Support\Media::defaultImageUrl(),
+                'image_url' => Media::defaultImageUrl(),
             ];
         }, self::BUDGET_BUCKETS);
 
         return response()->json(['data' => $data]);
     }
 
-    public function show(Unit $unit): UnitResource|JsonResponse
+    public function show(Request $request, Unit $unit): UnitResource|JsonResponse
     {
         if (! in_array($unit->unit_type, Unit::SUPPORTED_TYPES, true)
             || $unit->approval_status !== 'approved'
-            || $unit->status !== 'available') {
+            || $unit->status !== 'available'
+            // Same answer as an unapproved listing, and for the same reason:
+            // it may not be sold, so it may not be opened.
+            || PermitExpiry::lapsed($unit)) {
             return response()->json(['message' => 'الوحدة غير متاحة'], 404);
         }
 
         $unit->load(['images', 'features', 'owner.partnerDetail', 'reviews.user', 'cancellationPolicy.tiers']);
+
+        // Dates are OPTIONAL but honoured, so arriving here from a dated search
+        // does not flash "5 available" before the probe corrects it to 2. The
+        // same validation shape as the listing: `nullable` with `required_with`,
+        // because `sometimes` skips an absent field and takes `required_with`
+        // with it, letting half a window through to be silently ignored.
+        $dates = $request->validate([
+            'start_date' => ['nullable', 'required_with:end_date', 'date'],
+            'end_date' => ['nullable', 'required_with:start_date', 'date', 'after:start_date'],
+        ]);
+
+        Availability::attachCounts(
+            collect([$unit]),
+            $dates['start_date'] ?? null,
+            $dates['end_date'] ?? null,
+        );
 
         return new UnitResource($unit);
     }
@@ -224,28 +356,31 @@ class UnitController extends Controller
     {
         $request->validate([
             'start_date' => ['required', 'date', 'after_or_equal:today'],
-            'end_date'   => ['required', 'date', 'after:start_date'],
+            'end_date' => ['required', 'date', 'after:start_date'],
         ]);
 
-        $conflict = Booking::where('unit_id', $unit->id)
-            ->whereIn('status', ['pending', 'confirmed'])
-            ->where(function ($q) use ($request) {
-                $q->whereBetween('start_date', [$request->start_date, $request->end_date])
-                  ->orWhereBetween('end_date', [$request->start_date, $request->end_date])
-                  ->orWhere(function ($inner) use ($request) {
-                      $inner->where('start_date', '<=', $request->start_date)
-                            ->where('end_date', '>=', $request->end_date);
-                  });
-            })
-            ->exists();
+        // Same predicate POST /bookings enforces — see Availability. A probe
+        // that disagreed with the create is how a guest loses a booking at the
+        // last step, so there is one definition and both read it.
+        // Counted across the building, not just the apartment the card showed:
+        // a probe answering for one unit told a guest the whole building was
+        // full while four of five apartments sat free — and the create endpoint
+        // would then have accepted the booking it had just refused.
+        // The permit caps the calendar: a stay that ends after the permit does
+        // is refused by the create, so the probe must say so too rather than
+        // promising a booking that is about to be turned down.
+        if (! PermitExpiry::anyCovers($unit, $request->end_date)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'تصريح هذه الوحدة لا يغطي هذه التواريخ',
+                'code' => PermitExpiry::CODE,
+                'meta' => ['permit_expires_at' => PermitExpiry::on($unit)?->toDateString()],
+            ], 409);
+        }
 
-        // Partner manual closures + external (iCal) bookings count as unavailable.
-        $blocked = $conflict ? false : $unit->blockedDates()
-            ->overlapping($request->start_date, $request->end_date)
-            ->exists();
-
-        $available = ! $conflict && ! $blocked;
-        $payload   = ['available' => $available];
+        $free = Availability::freeCount($unit, $request->start_date, $request->end_date);
+        $available = $free > 0;
+        $payload = ['available' => $available, 'available_count' => $free];
 
         // Server-computed breakdown for the checkout page — the exact same
         // math POST /bookings freezes, so the frontend never does money math.
@@ -253,9 +388,11 @@ class UnitController extends Controller
         if ($available) {
             $nights = (int) now()->parse($request->start_date)->diffInDays($request->end_date);
 
-            $payload['pricing'] = \Illuminate\Support\Arr::except(
+            // Internal settlement figures stay out of this public payload
+            // (contract §1.7, §7): a guest never sees the platform's margin.
+            $payload['pricing'] = Arr::except(
                 Pricing::breakdown((float) $unit->price, $nights),
-                ['commission_rate', 'commission_amount'],
+                ['commission_rate', 'commission_amount', 'partner_share'],
             );
         }
 
@@ -273,16 +410,110 @@ class UnitController extends Controller
             ->latest()
             ->get()
             ->map(fn ($r) => [
-                'id'         => (string) $r->id,
+                'id' => (string) $r->id,
                 'booking_id' => (string) $r->booking_id,
-                'unit_id'    => (string) $r->unit_id,
-                'user_id'    => (string) $r->user_id,
-                'user_name'  => $r->user?->name,
-                'rating'     => $r->rating,
-                'comment'    => $r->comment,
+                'unit_id' => (string) $r->unit_id,
+                'user_id' => (string) $r->user_id,
+                'user_name' => $r->user?->name,
+                'rating' => $r->rating,
+                'comment' => $r->comment,
                 'created_at' => $r->created_at,
             ]);
 
         return response()->json($reviews);
+    }
+
+    /**
+     * GET /units/sitemap
+     *
+     * Every publicly reachable unit, as `{ id, updated_at }`. No pagination and
+     * no other field: a sitemap builder needs a complete list in one pass, and
+     * paging it would mean the last page decides whether a unit gets indexed.
+     */
+    public function sitemap(): JsonResponse
+    {
+        // ONE row per listing, not per apartment.
+        //
+        // A building of eight doors is eight rows in this table and ONE page on
+        // the site — every door resolves to the same representative. Emitting a
+        // row each published eight URLs for one page, which is duplicate content
+        // that splits the ranking between them. Collapsed on the same key the
+        // public payload calls `listing_id`.
+        //
+        // And the permit filter runs here too. Without it the feed advertised
+        // listings whose permit had lapsed, which `show()` answers with 404 — a
+        // sitemap is a promise that the URL exists, and handing a crawler a page
+        // that 404s is worse than omitting it.
+        $query = Unit::query()
+            ->whereIn('unit_type', Unit::SUPPORTED_TYPES)
+            ->where('approval_status', 'approved')
+            ->where('status', 'available');
+
+        PermitExpiry::covering($query);
+
+        return response()->json(
+            $query->get(['id', 'unit_group_id', 'updated_at'])
+                ->groupBy(fn (Unit $u) => $u->unit_group_id ?: 'u'.$u->id)
+                ->map(fn ($doors, string $key) => [
+                    // The stable URL. `<loc>` should be built from this.
+                    'listing_id' => $key,
+                    // The representative the key resolves to — the lowest id
+                    // among sellable doors, same as the search and the router.
+                    // Kept so a client that has not switched yet still works.
+                    'id' => (int) $doors->min('id'),
+                    // The NEWEST door in the building: editing apartment 405
+                    // changes the page, and dating it by the representative
+                    // alone would tell a crawler the page had not moved.
+                    'updated_at' => $doors->max('updated_at')?->toIso8601ZuluString(),
+                ])
+                ->sortBy('id')
+                ->values()
+                ->all(),
+        );
+    }
+
+    /**
+     * GET /units/{unit}/blocked-dates?from=&to=
+     *
+     * The dates a guest cannot pick, so the calendar can grey them out instead
+     * of letting someone choose them, fill in their details, and be refused at
+     * checkout. Ranges are INCLUSIVE of both ends and already merged.
+     *
+     * Bookings and partner closures are deliberately not distinguished: the
+     * guest only needs to know a date is unavailable, and saying which would
+     * publish how busy a partner's unit is to anyone who asks.
+     */
+    public function blockedDates(Request $request, Unit $unit): JsonResponse
+    {
+        $data = $request->validate([
+            'from' => ['sometimes', 'date'],
+            'to' => ['sometimes', 'date', 'after_or_equal:from'],
+        ]);
+
+        // Defaults cover the window a picker can realistically show; a wider
+        // one is allowed but capped so a single call cannot scan years.
+        $from = isset($data['from']) ? now()->parse($data['from']) : now();
+        $to = isset($data['to']) ? now()->parse($data['to']) : (clone $from)->addMonths(6);
+
+        if ($to->diffInDays($from) > 400) {
+            $to = (clone $from)->addDays(400);
+        }
+
+        // Flat, like the sibling /availability endpoint — two envelopes on
+        // adjacent routes is a needless branch on the client.
+        $blocked = Availability::blockedRanges($unit, $from->toDateString(), $to->toDateString());
+
+        // The days after the permit runs out are closed like any other closed
+        // days, carrying a reason so a client can say WHY if it wants to. The
+        // picker needs no change to honour it.
+        if ($expired = PermitExpiry::blockedRange($unit, $from->toDateString(), $to->toDateString())) {
+            $blocked[] = $expired;
+        }
+
+        return response()->json([
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'blocked' => $blocked,
+        ]);
     }
 }

@@ -31,7 +31,7 @@ class CalendarController extends DashboardController
         $last  = $first->endOfMonth();
 
         $bookings = $unit->bookings()
-            ->whereIn('status', ['confirmed', 'pending'])
+            ->whereIn('status', ['confirmed', 'pending_payment'])
             ->where('start_date', '<=', $last->toDateString())
             ->where('end_date', '>', $first->toDateString())
             ->get(['id', 'start_date', 'end_date', 'status']);
@@ -142,7 +142,7 @@ class CalendarController extends DashboardController
         $next = CarbonImmutable::parse($date)->addDay()->toDateString();
 
         $booked = $unit->bookings()
-            ->whereIn('status', ['confirmed', 'pending'])
+            ->whereIn('status', ['confirmed', 'pending_payment'])
             ->where('start_date', '<', $next)->where('end_date', '>', $date)->exists();
 
         $external = $unit->blockedDates()

@@ -69,7 +69,7 @@ While debugging I made a mistake and wiped the staging database; I rebuilt it fr
 - **Any test data you created by hand is gone** — including the `test` and `Airbnb` iCal feeds
   visible in your screenshots, and any properties you added through the wizard. Sorry — you'll need
   to re-create them.
-- **Login is unchanged:** phone `0512345678`, OTP `111222`.
+- **Login is unchanged:** phone `0512345678`, OTP `<staging-otp>`.
 - `u_12` deliberately has a feed + manual block + `external` days, so the calendar has something real
   to render.
 

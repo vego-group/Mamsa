@@ -14,6 +14,9 @@ export const partnerApi = {
   getUnit: (id) => http.get(`/partner/units/${id}`),
   createUnit: (payload) => http.post('/partner/units', payload),
   updateUnit: (id, payload) => http.put(`/partner/units/${id}`, payload),
+  // Multi-unit buildings: turn one listing into `count` identical apartments,
+  // each separately bookable, grouped so the storefront shows a single card.
+  setApartmentCount: (id, count) => http.post(`/partner/units/${id}/apartments`, { count }),
   deleteUnit: (id) => http.delete(`/partner/units/${id}`),
   submitUnit: (id) => http.post(`/partner/units/${id}/submit`),
 
@@ -24,6 +27,16 @@ export const partnerApi = {
     for (const f of files) fd.append('images[]', f)
     return http.post(`/partner/units/${id}/images`, fd, { headers: { 'Content-Type': undefined } })
   },
+  // Unit documents — tourism licence and ownership proof (deed or lease).
+  // Content-Type unset so the browser supplies the multipart boundary.
+  uploadUnitDocument: (id, type, file) => {
+    const fd = new FormData()
+    fd.append('type', type)
+    fd.append('file', file)
+    return http.post(`/partner/units/${id}/documents`, fd, { headers: { 'Content-Type': undefined } })
+  },
+  deleteUnitDocument: (id, type) => http.delete(`/partner/units/${id}/documents/${type}`),
+
   deleteUnitImage: (id, imageId) => http.delete(`/partner/units/${id}/images/${imageId}`),
   setMainImage: (id, imageId) => http.post(`/partner/units/${id}/images/${imageId}/main`),
 
@@ -35,6 +48,9 @@ export const partnerApi = {
 
   // Bookings
   listBookings: (page = 1) => http.get('/partner/bookings', { params: { page } }),
+  // Host cancellation — the guest is refunded 100% and the partner forfeits
+  // their share. Irreversible, so the UI confirms before calling.
+  cancelBooking: (id, reason) => http.post(`/partner/bookings/${id}/cancel`, { reason }),
 
   // Profile
   getProfile: () => http.get('/partner/profile'),

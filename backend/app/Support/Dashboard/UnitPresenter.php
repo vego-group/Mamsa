@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Support\Dashboard;
 
+use App\Models\CancellationPolicy;
+use App\Models\Permit;
 use App\Models\Unit;
+use App\Support\Permits\PermitExpiry;
+use App\Support\Units\UnitLicense;
 
 /**
  * Maps a Unit model to the partner-dashboard contract shape (§4). Kept separate
@@ -19,61 +23,126 @@ class UnitPresenter
 
         $cover = $unit->images->firstWhere('is_main', true) ?? $unit->images->first();
 
+        // Read once: the Hijri text and the printed address come from the same
+        // row that supplies the expiry, never from two separate lookups.
+        $permit = Permit::currentFor($unit);
+
         // Prefer eager-loaded aggregates (withCount/withAvg) to avoid N+1 on
         // list endpoints; fall back to the model accessors for single fetches.
         $reviewsCount = $unit->reviews_count ?? $unit->reviews()->count();
-        $avgRating    = $unit->reviews_avg_rating ?? $unit->avg_rating;
+        $avgRating = $unit->reviews_avg_rating ?? $unit->avg_rating;
 
         return [
-            'id'                   => 'u_'.$unit->id,
-            'code'                 => $unit->code,
-            'name'                 => $unit->unit_name,
-            'type'                 => $unit->unit_type,
-            'status'               => $unit->approval_status,
+            'id' => 'u_'.$unit->id,
+            'code' => $unit->code,
+            'name' => $unit->unit_name,
+            'type' => $unit->unit_type,
+            'status' => $unit->approval_status,
             // Draft fields can be null (partial body) — don't coerce to 0.
-            'pricePerNight'        => $unit->price !== null ? (float) $unit->price : null,
+            'pricePerNight' => $unit->price !== null ? (float) $unit->price : null,
             // Preset slug; units that never chose one inherit the platform
             // default (moderate) — echo what the engine would actually apply.
-            'cancellationPolicy'   => $unit->cancellationPolicy?->key ?? self::defaultPolicyKey(),
-            'bedrooms'             => $unit->bedrooms !== null ? (int) $unit->bedrooms : null,
+            'cancellationPolicy' => $unit->cancellationPolicy?->key ?? self::defaultPolicyKey(),
+            'bedrooms' => $unit->bedrooms !== null ? (int) $unit->bedrooms : null,
             // Number of beds (عدد الأسرّة) — distinct from bedrooms.
-            'beds'                 => $unit->beds !== null ? (int) $unit->beds : null,
-            'capacity'             => $unit->capacity !== null ? (int) $unit->capacity : null,
-            'bathrooms'            => $unit->bathrooms !== null ? (int) $unit->bathrooms : null,
-            'rating'               => $reviewsCount > 0 ? round((float) $avgRating, 1) : null,
-            'reviewsCount'         => (int) $reviewsCount,
-            'city'                 => Maps::cityToSlug($unit->city),
-            'district'             => $unit->district,
-            'description'          => $unit->description,
-            'amenities'            => Maps::amenitiesToKeys($unit->features->pluck('name')),
-            'checkIn'              => self::hm($unit->checkin_time),
-            'checkOut'             => self::hm($unit->checkout_time),
-            'lat'                  => $unit->lat !== null ? (float) $unit->lat : null,
-            'lng'                  => $unit->lng !== null ? (float) $unit->lng : null,
-            'address'              => $unit->address,
+            'beds' => $unit->beds !== null ? (int) $unit->beds : null,
+            'capacity' => $unit->capacity !== null ? (int) $unit->capacity : null,
+            'bathrooms' => $unit->bathrooms !== null ? (int) $unit->bathrooms : null,
+            'rating' => $reviewsCount > 0 ? round((float) $avgRating, 1) : null,
+            'reviewsCount' => (int) $reviewsCount,
+            'city' => Maps::cityToSlug($unit->city),
+            'district' => $unit->district,
+            'description' => $unit->description,
+            'amenities' => Maps::amenitiesToKeys($unit->features->pluck('name')),
+            'checkIn' => self::hm($unit->checkin_time),
+            'checkOut' => self::hm($unit->checkout_time),
+            'lat' => $unit->lat !== null ? (float) $unit->lat : null,
+            'lng' => $unit->lng !== null ? (float) $unit->lng : null,
+            'address' => $unit->address,
             'tourismLicenseNumber' => $unit->tourism_permit_no,
             'tourismLicenseFileId' => $unit->tourism_permit_file,
-            'photos'               => $unit->images->map(fn ($img) => [
-                // The source fileId (stable, re-sendable in photoFileIds on edit)
-                // when the photo came via the presign flow; else the row id.
-                'id'      => $img->file_id ?: 'ph'.$img->id,
-                'url'     => $img->url,
-                'isCover' => $cover && $img->id === $cover->id,
-            ])->values(),
-            'rejectionReason'      => $unit->approval_status === 'rejected' ? $unit->rejection_reason : null,
-            'publicUrl'            => $unit->approval_status === 'approved'
-                ? rtrim((string) config('dashboard.public_site_url'), '/').'/units/'.$unit->code
+            // The permit's own dates. `permitStatus` is derived — valid ·
+            // expiring · expired · unknown — so the dashboard renders the
+            // banner without doing date arithmetic, and the two surfaces
+            // cannot disagree about what "expiring" means.
+            'permitExpiresAt' => PermitExpiry::on($unit)?->toDateString(),
+            'permitStatus' => PermitExpiry::status($unit),
+            // The expiry as the partner typed it in Hijri, verbatim — or null
+            // when it was typed in Gregorian or predates 2026-09-30. Always
+            // present, like permitAddress, so the client never branches on it.
+            'permitExpiresAtHijri' => $permit?->expires_at_hijri,
+            'permitAddress' => self::permitAddress($permit),
+            // The reviewer's job on a building is to check the number the
+            // partner TYPED against the number written on the permit they
+            // uploaded. The system already refuses a group larger than the
+            // declared count, so the human check is on the declaration itself —
+            // which is only possible if the screen shows both, and the size of
+            // the group the claim is being made for.
+            'licenseType' => $unit->license_type,
+            'licensedUnitsCount' => $unit->licensed_units_count !== null
+                ? (int) $unit->licensed_units_count : null,
+            'groupSize' => UnitLicense::groupSize($unit),
+            // The building this listing belongs to, and which door it is.
+            //
+            // Without these the partner's list is five rows that look like five
+            // separate listings they do not remember creating — the grouping
+            // exists in the data and nowhere in the response. `groupId` is the
+            // key to group by; `apartmentNo` is what the partner calls the door.
+            //
+            // Both null for a standalone listing, deliberately: a building of
+            // one is not a thing, and `null` lets the client branch on presence
+            // rather than compare a size to 1.
+            'groupId' => $unit->unit_group_id,
+            'apartmentNo' => $unit->apartment_no,
+            'ownershipDocFileId' => $unit->ownership_doc_file,
+            'photos' => $unit->images
+                ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
+                ->map(fn ($img) => [
+                    // The source fileId (stable, re-sendable in photoFileIds on edit)
+                    // when the photo came via the presign flow; else the row id.
+                    'id' => $img->file_id ?: 'ph'.$img->id,
+                    'url' => $img->url,
+                    'isCover' => $cover && $img->id === $cover->id,
+                    'width' => $img->width !== null ? (int) $img->width : null,
+                    'height' => $img->height !== null ? (int) $img->height : null,
+                    'variants' => $img->variant_urls,
+                ])->values(),
+            'rejectionReason' => $unit->approval_status === 'rejected' ? $unit->rejection_reason : null,
+            'publicUrl' => $unit->approval_status === 'approved'
+                // The LISTING key, not the code. This link has pointed at
+                // /units/{code} since 14/07 and the public API has never
+                // resolved a code — so every partner who copied it from their
+                // dashboard has been sharing a page that does not open. The key
+                // is also stable across the building, unlike an apartment id.
+                ? rtrim((string) config('dashboard.public_site_url'), '/').'/units/'.($unit->unit_group_id ?: 'u'.$unit->id)
                 : null,
-            'updatedAt'            => $unit->updated_at?->toIso8601ZuluString(),
+            'updatedAt' => $unit->updated_at?->toIso8601ZuluString(),
         ];
     }
 
     /** Per-request memo so unit lists don't re-query the default policy N times. */
     private static ?string $defaultPolicyKey = null;
 
+    /**
+     * The address printed on the listing's permit, or nulls when none is
+     * recorded. Always the same four keys so a client never branches on
+     * whether the object is there.
+     *
+     * @return array<string, string|null>
+     */
+    private static function permitAddress(?Permit $permit): array
+    {
+        return [
+            'city' => $permit?->addr_city,
+            'district' => $permit?->addr_district,
+            'building' => $permit?->addr_building,
+            'unitNo' => $permit?->addr_unit_no,
+        ];
+    }
+
     private static function defaultPolicyKey(): ?string
     {
-        return self::$defaultPolicyKey ??= \App\Models\CancellationPolicy::query()
+        return self::$defaultPolicyKey ??= CancellationPolicy::query()
             ->orderByDesc('is_default')->value('key');
     }
 

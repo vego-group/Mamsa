@@ -43,7 +43,7 @@ class UsersController extends Controller
             };
         }
         if ($city = $this->cleanParam($request->query('city'))) {
-            $query->whereHas('bookings', fn ($b) => $b->whereHas('unit', fn ($u) => $u->where('city', $city)));
+            $query->whereHas('bookings', fn ($b) => $b->whereHas('unit', fn ($u) => \App\Support\City::filter($u, 'city', $city)));
         }
 
         $page = $this->queryList($query, $args, ['name', 'phone', 'email'], self::SORT, ['created_at', 'desc']);
@@ -100,7 +100,7 @@ class UsersController extends Controller
     {
         $user = $this->guest($id);
 
-        if ($user->bookings()->whereIn('status', ['pending', 'confirmed'])->exists()) {
+        if ($user->bookings()->whereIn('status', ['pending_payment', 'confirmed'])->exists()) {
             $this->fail('USER_HAS_ACTIVE_BOOKINGS', 'لا يمكن حذف مستخدم لديه حجوزات نشطة', 409);
         }
 
@@ -182,7 +182,7 @@ class UsersController extends Controller
     {
         return User::query()->role('User', 'web')
             ->withCount('bookings')
-            ->withCount(['bookings as active_bookings_count' => fn ($q) => $q->whereIn('status', ['pending', 'confirmed'])])
+            ->withCount(['bookings as active_bookings_count' => fn ($q) => $q->whereIn('status', ['pending_payment', 'confirmed'])])
             ->withSum(['bookings as total_spent' => fn ($q) => $q->whereIn('status', Booking::REVENUE_STATUSES)], 'total_amount')
             ->addSelect(['city' => Booking::query()
                 ->select('units.city')

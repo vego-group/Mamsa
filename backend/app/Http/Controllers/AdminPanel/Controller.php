@@ -50,13 +50,44 @@ abstract class Controller extends BaseController
         }
 
         [$col, $dir] = $default;
+
+        // What was ACTUALLY applied, echoed back in the envelope. An
+        // unrecognised sortBy is ignored rather than rejected, and a sort that
+        // silently ran the default order is indistinguishable from one that
+        // worked — which is how `sortBy=commission` survived in a live client
+        // for months. Clamping and saying so is the pattern; this extends it.
+        $this->appliedSort = null;
+
         if ($args['sortBy'] !== null && isset($sortMap[$args['sortBy']])) {
             $col = $sortMap[$args['sortBy']];
             $dir = $args['sortDir'];
+            $this->appliedSort = ['sortBy' => $args['sortBy'], 'sortDir' => $dir];
         }
         $query->orderBy($col, $dir);
 
         return $query->paginate($args['pageSize'], ['*'], 'page', $args['page']);
+    }
+
+    /** Set by queryList(); null when the request's sortBy was not honoured. */
+    private ?array $appliedSort = null;
+
+    /**
+     * The applied sort, for controllers that build their own envelope.
+     *
+     * The echo is UNCONDITIONAL: both keys are present on every paginated list
+     * response, sort requested or not. A client distinguishes an absent key
+     * ("this build cannot tell me") from an explicit null ("your column was
+     * ignored"), so dropping it anywhere would silently return them to
+     * trusting a sort that did nothing.
+     */
+    protected function appliedSortBy(): ?string
+    {
+        return $this->appliedSort['sortBy'] ?? null;
+    }
+
+    protected function appliedSortDir(): ?string
+    {
+        return $this->appliedSort['sortDir'] ?? null;
     }
 
     /** Mutation response — BACKEND_SPEC §2.8. */
@@ -73,13 +104,21 @@ abstract class Controller extends BaseController
             'total'    => $paginator->total(),
             'page'     => $paginator->currentPage(),
             'pageSize' => $paginator->perPage(),
+            // null = your sortBy was not recognised and the default order was
+            // used. Additive; existing clients ignore it.
+            'sortBy'   => $this->appliedSort['sortBy'] ?? null,
+            'sortDir'  => $this->appliedSort['sortDir'] ?? null,
         ]);
     }
 
-    /** @return never */
-    protected function fail(string $code, string $message, int $status = 400): void
+    /**
+     * @param  array<string, string>|null  $fields
+     * @param  array<string, mixed>|null  $meta
+     * @return never
+     */
+    protected function fail(string $code, string $message, int $status = 400, ?array $fields = null, ?array $meta = null): void
     {
-        throw new AdminPanelException($code, $message, $status);
+        throw new AdminPanelException($code, $message, $status, $fields, $meta);
     }
 
     /**
@@ -98,6 +137,10 @@ abstract class Controller extends BaseController
                 'VALIDATION_ERROR',
                 (string) $validator->errors()->first(),
                 422,
+                // Additive: `message` is unchanged, so existing screens keep
+                // working; `fields` lets a multi-step form point at the step
+                // that actually failed instead of showing one toast.
+                array_map(fn (array $msgs) => (string) ($msgs[0] ?? ''), $validator->errors()->messages()),
             );
         }
 
@@ -120,6 +163,36 @@ abstract class Controller extends BaseController
             'sortBy'   => $this->cleanParam($request->query('sortBy')),
             'sortDir'  => $sortDir === 'asc' ? 'asc' : 'desc',
         ];
+    }
+
+    /**
+     * The comparable tail of a phone number a human typed, or null.
+     *
+     * An admin reads `0551234567` off a note and the column holds
+     * `+966551234567`; a literal LIKE misses. Reducing both to the last nine
+     * digits makes every KSA form match every other.
+     */
+    protected function phoneTerm(string $term): ?string
+    {
+        $digits = preg_replace('/\D+/', '', $term) ?? '';
+
+        return strlen($digits) >= 9 ? substr($digits, -9) : null;
+    }
+
+    /**
+     * A displayed entity code reduced to its numeric id, e.g. BKG-0231 → 231.
+     *
+     * List rows render `BKG-0231` / `UNT-014`, which is what an admin copies —
+     * but that string is derived from the id and exists in no column, so
+     * searching for exactly what is on screen would otherwise find nothing.
+     */
+    protected function codeTerm(string $term): ?int
+    {
+        if (preg_match('/^[A-Za-z]{2,4}-0*(\d+)$/', trim($term), $m)) {
+            return (int) $m[1];
+        }
+
+        return ctype_digit(trim($term)) ? (int) trim($term) : null;
     }
 
     /**

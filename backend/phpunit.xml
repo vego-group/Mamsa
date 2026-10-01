@@ -19,12 +19,86 @@
     </source>
     <php>
         <!--
-            force="true" is REQUIRED here: in Docker/CI the real environment
-            already sets DB_CONNECTION=mysql, DB_HOST=mysql, etc. Without force,
-            PHPUnit will NOT override an already-set env var, so RefreshDatabase
-            would run migrate:fresh against the live MySQL and wipe it. Forcing
-            these keeps the test DB hermetic (sqlite :memory:) everywhere.
+            The database MUST be declared with <server>, not <env>.
+
+            <env force="true"> writes $_ENV and putenv() but NOT $_SERVER, and
+            Laravel's env repository reads $_SERVER FIRST (ServerConstAdapter
+            precedes EnvConstAdapter). In Docker the real DB_CONNECTION=mysql
+            lives in $_SERVER, so an <env> override loses and RefreshDatabase
+            runs migrate:fresh against the dev MySQL and wipes it. That is not
+            hypothetical: it happened on 2026-07-28 and again on 2026-09-06,
+            the second time with force="true" already in place.
+
+            <server force="true"> writes the same superglobal Laravel reads, so
+            it wins outright. Tests/TestCase.php additionally refuses to run if
+            the resolved connection is not sqlite :memory: — belt and braces,
+            because a comment that turns out to be wrong costs a database.
         -->
+        <server name="DB_CONNECTION" value="sqlite" force="true"/>
+        <server name="DB_DATABASE" value=":memory:" force="true"/>
+        <server name="DB_HOST" value="127.0.0.1" force="true"/>
+        <server name="DB_URL" value="" force="true"/>
+
+        <!--
+            The same $_SERVER precedence applies to every other service the
+            container configures, and it bit us the same way: CACHE_STORE,
+            SESSION_DRIVER and QUEUE_CONNECTION all resolve to `redis` here, so
+            tests were sharing one real Redis. Rate-limit counters survived
+            between tests AND between runs, which is why a handful of suites
+            failed with 429 for no reason anyone could reproduce locally.
+            Declaring them as <server> is what actually makes a test run
+            hermetic; the <env> block below cannot.
+        -->
+        <server name="CACHE_STORE" value="array" force="true"/>
+        <server name="SESSION_DRIVER" value="array" force="true"/>
+        <server name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <server name="MAIL_MAILER" value="array" force="true"/>
+        <server name="BROADCAST_CONNECTION" value="null" force="true"/>
+        <server name="REDIS_HOST" value="127.0.0.1" force="true"/>
+        <server name="REDIS_PORT" value="6379" force="true"/>
+        <server name="APP_ENV" value="testing" force="true"/>
+
+        <!--
+            OUTBOUND SERVICES. Not container-defined, but the app's own .env
+            supplies live values, and phpunit.xml declared none of them — so the
+            suite was calling https://cnc.fgc.sa/authenticate, the real SMS
+            gateway, on every OTP test. It usually failed fast; occasionally it
+            timed out differently and the suite "flaked".
+            Tests\TestCase now also calls Http::preventStrayRequests(), so a
+            missing entry here fails loudly at the call site instead.
+        -->
+        <server name="SMS_DRIVER" value="log" force="true"/>
+        <server name="MOYASAR_SECRET_KEY" value="" force="true"/>
+        <server name="MOYASAR_WEBHOOK_SECRET" value="" force="true"/>
+        <server name="RESEND_API_KEY" value="" force="true"/>
+
+        <!--
+            INVENTORY — every key this container defines, and what tests get.
+            A key the container sets can only be overridden from <server>, so a
+            new one appearing here without a <server> line is a silent leak.
+            Regenerate with:  docker compose exec -T backend printenv
+
+              APP_ENV                  -> testing   (container says `local`)
+              APP_KEY                  -> container value, harmless
+              APP_URL                  -> container value, harmless
+              CACHE_STORE              -> array     (container says `redis`)
+              SESSION_DRIVER           -> array     (container says `redis`)
+              QUEUE_CONNECTION         -> sync      (container says `redis`)
+              REDIS_HOST / REDIS_PORT  -> loopback, so nothing reaches the
+                                          shared Redis even if something asks
+              DB_CONNECTION/DATABASE   -> sqlite / :memory:
+              DB_HOST/PORT/USERNAME/PASSWORD -> unused once sqlite is forced
+              SANCTUM_STATEFUL_DOMAINS -> container value, harmless
+              PHPIZE_DEPS              -> not read by Laravel
+
+            CORRECTION (later the same day): the note that used to sit here
+            claimed MOYASAR_* and SMS_* were "sufficient" because the container
+            does not define them. That was wrong — being undefined by the
+            container does not matter if phpunit.xml never declares them either.
+            The app's .env supplied SMS_DRIVER=fgc, and the suite called the
+            real SMS gateway. They are declared explicitly above now.
+        -->
+
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
@@ -33,7 +107,6 @@
         <env name="DB_CONNECTION" value="sqlite" force="true"/>
         <env name="DB_DATABASE" value=":memory:" force="true"/>
         <env name="DB_HOST" value="127.0.0.1" force="true"/>
-        <env name="DB_URL" value="" force="true"/>
         <env name="MAIL_MAILER" value="array" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync" force="true"/>
         <env name="SESSION_DRIVER" value="array" force="true"/>

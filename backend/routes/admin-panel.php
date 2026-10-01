@@ -21,6 +21,8 @@ Route::prefix('admin')->group(function () {
         ->middleware('throttle:ap-otp')->name('ap.otp.request');
     Route::post('auth/verify-otp', [AdminPanel\AuthController::class, 'verifyOtp'])
         ->middleware('throttle:10,1')->name('ap.otp.verify');
+    Route::get('config', \App\Http\Controllers\RuntimeConfigController::class)->name('ap.config');
+
     Route::post('auth/logout', [AdminPanel\AuthController::class, 'logout'])->name('ap.logout');
 
     /* ---- Authenticated admin session ---- */
@@ -29,67 +31,122 @@ Route::prefix('admin')->group(function () {
         Route::get('me', [AdminPanel\AuthController::class, 'me'])->name('ap.me');
 
         /* Dashboard — §5.3 */
-        Route::get('dashboard/summary', [AdminPanel\DashboardController::class, 'summary'])->name('ap.dashboard.summary');
+        Route::get('dashboard/summary', [AdminPanel\DashboardController::class, 'summary'])->middleware('admin.can:dashboard.view')->name('ap.dashboard.summary');
+
+        /* Cities — the vocabulary for every city filter. Neither side
+         * hardcodes a list, and adding one is a row rather than two releases. */
+        Route::get('cities', [AdminPanel\DashboardController::class, 'cities'])->middleware('admin.can:dashboard.view')->name('ap.cities');
 
         /* Reports — §5.10 */
-        Route::get('reports/summary', [AdminPanel\ReportsController::class, 'summary'])->name('ap.reports.summary');
+        Route::get('reports/summary', [AdminPanel\ReportsController::class, 'summary'])->middleware('admin.can:reports.financial')->name('ap.reports.summary');
 
         /* Notifications (admin feed) — §5.11 */
-        Route::get('notifications', [AdminPanel\NotificationsController::class, 'index'])->name('ap.notifications.index');
-        Route::get('notifications/unread-count', [AdminPanel\NotificationsController::class, 'unreadCount'])->name('ap.notifications.unread-count');
-        Route::post('notifications/read-all', [AdminPanel\NotificationsController::class, 'readAll'])->name('ap.notifications.read-all');
-        Route::post('notifications/{id}/read', [AdminPanel\NotificationsController::class, 'read'])->name('ap.notifications.read');
+        Route::get('notifications', [AdminPanel\NotificationsController::class, 'index'])->middleware('admin.can:notifications.view')->name('ap.notifications.index');
+        Route::get('notifications/unread-count', [AdminPanel\NotificationsController::class, 'unreadCount'])->middleware('admin.can:notifications.view')->name('ap.notifications.unread-count');
+        Route::post('notifications/read-all', [AdminPanel\NotificationsController::class, 'readAll'])->middleware('admin.can:notifications.view')->name('ap.notifications.read-all');
+        Route::post('notifications/{id}/read', [AdminPanel\NotificationsController::class, 'read'])->middleware('admin.can:notifications.view')->name('ap.notifications.read');
 
         /* Profile — BACKEND_SPEC §5.2 */
-        Route::get('profile', [AdminPanel\ProfileController::class, 'show'])->name('ap.profile.show');
-        Route::patch('profile', [AdminPanel\ProfileController::class, 'update'])->name('ap.profile.update');
-        Route::get('profile/sessions', [AdminPanel\ProfileController::class, 'sessions'])->name('ap.profile.sessions');
-        Route::delete('profile/sessions/{id}', [AdminPanel\ProfileController::class, 'revokeSession'])->name('ap.profile.sessions.revoke');
+        Route::get('profile', [AdminPanel\ProfileController::class, 'show'])->middleware('admin.can:profile.view')->name('ap.profile.show');
+        Route::patch('profile', [AdminPanel\ProfileController::class, 'update'])->middleware('admin.can:profile.view')->name('ap.profile.update');
+        Route::get('profile/sessions', [AdminPanel\ProfileController::class, 'sessions'])->middleware('admin.can:profile.view')->name('ap.profile.sessions');
+        Route::delete('profile/sessions/{id}', [AdminPanel\ProfileController::class, 'revokeSession'])->middleware('admin.can:profile.view')->name('ap.profile.sessions.revoke');
 
         /* Users (guests) — §5.4 */
-        Route::get('users', [AdminPanel\UsersController::class, 'index'])->name('ap.users.index');
-        Route::get('users/stats', [AdminPanel\UsersController::class, 'stats'])->name('ap.users.stats');
-        Route::post('users/invite', [AdminPanel\UsersController::class, 'invite'])->name('ap.users.invite');
-        Route::get('users/{id}', [AdminPanel\UsersController::class, 'show'])->name('ap.users.show');
-        Route::patch('users/{id}/status', [AdminPanel\UsersController::class, 'status'])->name('ap.users.status');
-        Route::delete('users/{id}', [AdminPanel\UsersController::class, 'destroy'])->name('ap.users.destroy');
+        Route::get('users', [AdminPanel\UsersController::class, 'index'])->middleware('admin.can:users.view')->name('ap.users.index');
+        Route::get('users/stats', [AdminPanel\UsersController::class, 'stats'])->middleware('admin.can:users.view')->name('ap.users.stats');
+        Route::post('users/invite', [AdminPanel\UsersController::class, 'invite'])->middleware('admin.can:users.manage')->name('ap.users.invite');
+        Route::get('users/{id}', [AdminPanel\UsersController::class, 'show'])->middleware('admin.can:users.view')->name('ap.users.show');
+        Route::patch('users/{id}/status', [AdminPanel\UsersController::class, 'status'])->middleware('admin.can:users.manage')->name('ap.users.status');
+        Route::delete('users/{id}', [AdminPanel\UsersController::class, 'destroy'])->middleware('admin.can:users.manage')->name('ap.users.destroy');
 
         /* Partners (hosts) — §5.5 */
-        Route::get('partners', [AdminPanel\PartnersController::class, 'index'])->name('ap.partners.index');
-        Route::get('partners/stats', [AdminPanel\PartnersController::class, 'stats'])->name('ap.partners.stats');
-        Route::post('partners/invite', [AdminPanel\PartnersController::class, 'invite'])->name('ap.partners.invite');
-        Route::get('partners/{id}', [AdminPanel\PartnersController::class, 'show'])->name('ap.partners.show');
-        Route::post('partners/{id}/approve', [AdminPanel\PartnersController::class, 'approve'])->name('ap.partners.approve');
-        Route::post('partners/{id}/reject', [AdminPanel\PartnersController::class, 'reject'])->name('ap.partners.reject');
-        Route::post('partners/{id}/suspend', [AdminPanel\PartnersController::class, 'suspend'])->name('ap.partners.suspend');
-        Route::post('partners/{id}/verify', [AdminPanel\PartnersController::class, 'verify'])->name('ap.partners.verify');
-        Route::post('partners/{id}/revoke-verification', [AdminPanel\PartnersController::class, 'revokeVerification'])->name('ap.partners.revoke-verification');
-        Route::post('partners/{partnerId}/documents/{documentId}/verify', [AdminPanel\PartnersController::class, 'verifyDocument'])->name('ap.partners.documents.verify');
+        Route::get('partners', [AdminPanel\PartnersController::class, 'index'])->middleware('admin.can:partners.view')->name('ap.partners.index');
+        Route::get('partners/stats', [AdminPanel\PartnersController::class, 'stats'])->middleware('admin.can:partners.view')->name('ap.partners.stats');
+        Route::post('partners/invite', [AdminPanel\PartnersController::class, 'invite'])->middleware('admin.can:partners.manage')->name('ap.partners.invite');
+        Route::get('partners/{id}', [AdminPanel\PartnersController::class, 'show'])->middleware('admin.can:partners.view')->name('ap.partners.show');
+        Route::post('partners/{id}/approve', [AdminPanel\PartnersController::class, 'approve'])->middleware('admin.can:partners.manage')->name('ap.partners.approve');
+        Route::post('partners/{id}/reject', [AdminPanel\PartnersController::class, 'reject'])->middleware('admin.can:partners.manage')->name('ap.partners.reject');
+        Route::post('partners/{id}/suspend', [AdminPanel\PartnersController::class, 'suspend'])->middleware('admin.can:partners.manage')->name('ap.partners.suspend');
+        Route::post('partners/{id}/reactivate', [AdminPanel\PartnersController::class, 'reactivate'])->middleware('admin.can:partners.manage')->name('ap.partners.reactivate');
+        Route::post('partners/{id}/verify', [AdminPanel\PartnersController::class, 'verify'])->middleware('admin.can:partners.manage')->name('ap.partners.verify');
+        Route::post('partners/{id}/revoke-verification', [AdminPanel\PartnersController::class, 'revokeVerification'])->middleware('admin.can:partners.manage')->name('ap.partners.revoke-verification');
+        Route::post('partners/{partnerId}/documents/{documentId}/verify', [AdminPanel\PartnersController::class, 'verifyDocument'])->middleware('admin.can:partners.manage')->name('ap.partners.documents.verify');
 
         /* Units (properties) — §5.6 */
-        Route::get('units', [AdminPanel\UnitsController::class, 'index'])->name('ap.units.index');
-        Route::get('units/stats', [AdminPanel\UnitsController::class, 'stats'])->name('ap.units.stats');
-        Route::post('units', [AdminPanel\UnitsController::class, 'store'])->name('ap.units.store');
-        Route::get('units/{id}', [AdminPanel\UnitsController::class, 'show'])->name('ap.units.show');
-        Route::post('units/{id}/unpublish', [AdminPanel\UnitsController::class, 'unpublish'])->name('ap.units.unpublish');
+        Route::get('units', [AdminPanel\UnitsController::class, 'index'])->middleware('admin.can:units.view')->name('ap.units.index');
+        Route::get('units/stats', [AdminPanel\UnitsController::class, 'stats'])->middleware('admin.can:units.view')->name('ap.units.stats');
+        Route::post('units', [AdminPanel\UnitsController::class, 'store'])->middleware('admin.can:units.manage')->name('ap.units.store');
+        Route::get('units/{id}', [AdminPanel\UnitsController::class, 'show'])->middleware('admin.can:units.view')->name('ap.units.show');
+        Route::patch('units/{id}', [AdminPanel\UnitsController::class, 'update'])->middleware('admin.can:units.manage')->name('ap.units.update');
+        Route::delete('units/{id}', [AdminPanel\UnitsController::class, 'destroy'])->middleware('admin.can:units.manage')->name('ap.units.destroy');
+        Route::post('units/{id}/submit', [AdminPanel\UnitsController::class, 'submit'])->middleware('admin.can:units.manage')->name('ap.units.submit');
+        Route::post('units/{id}/apartments', [AdminPanel\UnitsController::class, 'apartments'])->middleware('admin.can:units.manage')->name('ap.units.apartments');
+
+        /* Permits — what is about to lapse, and the renewals awaiting a
+         * decision. A queue of their own rather than rows in /admin/approvals:
+         * that list is a list of LISTINGS, and a document review is a
+         * different question with different columns. */
+        Route::get('permits', [AdminPanel\PermitsController::class, 'index'])->middleware('admin.can:units.view')->name('ap.permits.index');
+        Route::get('permit-renewals', [AdminPanel\PermitsController::class, 'renewals'])->middleware('admin.can:approvals.view')->name('ap.permits.renewals');
+        Route::post('permit-renewals/{id}/approve', [AdminPanel\PermitsController::class, 'approve'])->middleware('admin.can:approvals.manage')->name('ap.permits.renewals.approve');
+        Route::post('permit-renewals/{id}/reject', [AdminPanel\PermitsController::class, 'reject'])->middleware('admin.can:approvals.manage')->name('ap.permits.renewals.reject');
+        Route::post('units/{id}/unpublish', [AdminPanel\UnitsController::class, 'unpublish'])->middleware('admin.can:units.manage')->name('ap.units.unpublish');
+
+        /* Uploads (presign → signed PUT) — the partner flow on an admin session */
+        Route::post('uploads/presign', [AdminPanel\UploadsController::class, 'presign'])->middleware('admin.can:units.manage')->name('ap.uploads.presign');
 
         /* Bookings (read-only) — §5.8 */
-        Route::get('bookings', [AdminPanel\BookingsController::class, 'index'])->name('ap.bookings.index');
-        Route::get('bookings/counts', [AdminPanel\BookingsController::class, 'counts'])->name('ap.bookings.counts');
-        Route::get('bookings/stats', [AdminPanel\BookingsController::class, 'stats'])->name('ap.bookings.stats');
-        Route::get('bookings/{id}', [AdminPanel\BookingsController::class, 'show'])->name('ap.bookings.show');
+        Route::get('bookings', [AdminPanel\BookingsController::class, 'index'])->middleware('admin.can:bookings.view')->name('ap.bookings.index');
+        Route::get('bookings/counts', [AdminPanel\BookingsController::class, 'counts'])->middleware('admin.can:bookings.view')->name('ap.bookings.counts');
+        Route::get('bookings/stats', [AdminPanel\BookingsController::class, 'stats'])->middleware('admin.can:bookings.view')->name('ap.bookings.stats');
+        Route::get('bookings/{id}', [AdminPanel\BookingsController::class, 'show'])->middleware('admin.can:bookings.view')->name('ap.bookings.show');
 
         /* Cancellations — §5.9 */
-        Route::get('cancellations', [AdminPanel\CancellationsController::class, 'index'])->name('ap.cancellations.index');
-        Route::get('cancellations/stats', [AdminPanel\CancellationsController::class, 'stats'])->name('ap.cancellations.stats');
-        Route::get('cancellations/high-risk-partners', [AdminPanel\CancellationsController::class, 'highRiskPartners'])->name('ap.cancellations.high-risk');
-        Route::post('cancellations/{id}/retry-refund', [AdminPanel\CancellationsController::class, 'retryRefund'])->name('ap.cancellations.retry-refund');
+        Route::get('cancellations', [AdminPanel\CancellationsController::class, 'index'])->middleware('admin.can:cancellations.view')->name('ap.cancellations.index');
+        Route::get('cancellations/stats', [AdminPanel\CancellationsController::class, 'stats'])->middleware('admin.can:cancellations.view')->name('ap.cancellations.stats');
+        Route::get('cancellations/high-risk-partners', [AdminPanel\CancellationsController::class, 'highRiskPartners'])->middleware('admin.can:cancellations.view')->name('ap.cancellations.high-risk');
+        Route::post('cancellations/{id}/retry-refund', [AdminPanel\CancellationsController::class, 'retryRefund'])->middleware('admin.can:cancellations.manage')->name('ap.cancellations.retry-refund');
 
         /* Approvals (unit review queue) — §5.7 */
-        Route::get('approvals', [AdminPanel\ApprovalsController::class, 'index'])->name('ap.approvals.index');
-        Route::get('approvals/stats', [AdminPanel\ApprovalsController::class, 'stats'])->name('ap.approvals.stats');
-        Route::get('approvals/{id}', [AdminPanel\ApprovalsController::class, 'show'])->name('ap.approvals.show');
-        Route::post('approvals/{id}/approve', [AdminPanel\ApprovalsController::class, 'approve'])->name('ap.approvals.approve');
-        Route::post('approvals/{id}/reject', [AdminPanel\ApprovalsController::class, 'reject'])->name('ap.approvals.reject');
+        Route::get('approvals', [AdminPanel\ApprovalsController::class, 'index'])->middleware('admin.can:approvals.view')->name('ap.approvals.index');
+        Route::get('approvals/stats', [AdminPanel\ApprovalsController::class, 'stats'])->middleware('admin.can:approvals.view')->name('ap.approvals.stats');
+        Route::get('approvals/{id}', [AdminPanel\ApprovalsController::class, 'show'])->middleware('admin.can:approvals.view')->name('ap.approvals.show');
+        Route::post('approvals/{id}/approve', [AdminPanel\ApprovalsController::class, 'approve'])->middleware('admin.can:approvals.manage')->name('ap.approvals.approve');
+        Route::post('approvals/{id}/reject', [AdminPanel\ApprovalsController::class, 'reject'])->middleware('admin.can:approvals.manage')->name('ap.approvals.reject');
+
+        /* ---- Wallets & Payouts (contract v2.2 §5.1/§5.2) ----
+         * Real and database-backed; replaced the non-prod fixture stubs. */
+        Route::get('payouts', [AdminPanel\PayoutsController::class, 'index'])->middleware('admin.can:payouts.view')->name('ap.payouts.index');
+        Route::get('payouts/eligible', [AdminPanel\PayoutsController::class, 'eligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.eligible');
+        Route::get('payouts/ineligible', [AdminPanel\PayoutsController::class, 'ineligible'])->middleware('admin.can:payouts.view')->name('ap.payouts.ineligible');
+        Route::post('payouts/record', [AdminPanel\PayoutsController::class, 'record'])->middleware('admin.can:payouts.execute')->name('ap.payouts.record');
+
+        /* Complaints — spec §5.2 as amended by v1.2 §D5.
+         *
+         * Four verbs, two roles. `approve` fixes the amount and is superadmin
+         * only; `refund` executes exactly that amount and is finance only.
+         * Neither role holds both permissions — that separation is the control,
+         * so read the two different middleware strings as deliberate. */
+        Route::get('complaints', [AdminPanel\ComplaintsController::class, 'index'])->middleware('admin.can:complaints.view')->name('ap.complaints.index');
+        Route::get('complaints/{id}', [AdminPanel\ComplaintsController::class, 'show'])->middleware('admin.can:complaints.view')->name('ap.complaints.show');
+        Route::patch('complaints/{id}/status', [AdminPanel\ComplaintsController::class, 'status'])->middleware('admin.can:complaints.review')->name('ap.complaints.status');
+        Route::post('complaints/{id}/approve', [AdminPanel\ComplaintsController::class, 'approve'])->middleware('admin.can:complaints.approve')->name('ap.complaints.approve');
+        Route::patch('complaints/{id}/approval', [AdminPanel\ComplaintsController::class, 'amendApproval'])->middleware('admin.can:complaints.approve')->name('ap.complaints.approval');
+        Route::post('complaints/{id}/refund', [AdminPanel\ComplaintsController::class, 'refund'])->middleware('admin.can:complaints.execute_refund')->name('ap.complaints.refund');
+        Route::post('complaints/{id}/reject', [AdminPanel\ComplaintsController::class, 'reject'])->middleware('admin.can:complaints.approve')->name('ap.complaints.reject');
+
+        // Approving a payout DESTINATION is wallets.adjust, not wallets.view:
+        // finance records transfers, so it must not also approve where they go.
+        Route::post('wallets/{partnerId}/bank/verify', [AdminPanel\WalletsController::class, 'verifyBank'])->middleware('admin.can:wallets.adjust')->name('ap.wallets.bank.verify');
+        Route::post('wallets/{partnerId}/bank/reject', [AdminPanel\WalletsController::class, 'rejectBank'])->middleware('admin.can:wallets.adjust')->name('ap.wallets.bank.reject');
+
+        Route::get('wallets', [AdminPanel\WalletsController::class, 'index'])->middleware('admin.can:wallets.view')->name('ap.wallets.index');
+        // BEFORE wallets/{partnerId} — otherwise "stats" is read as a partner id
+        // and 404s *after* auth, which looks alive from outside and dies quietly
+        // for a signed-in admin.
+        Route::get('wallets/stats', [AdminPanel\WalletsController::class, 'stats'])->middleware('admin.can:wallets.view')->name('ap.wallets.stats');
+        Route::get('wallets/{partnerId}/ledger', [AdminPanel\WalletsController::class, 'ledger'])->middleware('admin.can:wallets.view')->name('ap.wallets.ledger');
+        Route::get('wallets/{partnerId}', [AdminPanel\WalletsController::class, 'show'])->middleware('admin.can:wallets.view')->name('ap.wallets.show');
     });
 });

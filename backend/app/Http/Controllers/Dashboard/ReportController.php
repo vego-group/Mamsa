@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dashboard;
 
+use App\Support\Sql;
 use App\Models\Booking;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -13,7 +14,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Reports (contract §7). Gross revenue = sum of paid totals (non-cancelled)
- * in range; commission = 2%; netProfit = gross − commission (a real SAR
+ * in range; commission = 2% of the VAT-exclusive base; netProfit is the
+ * frozen partner share (a real SAR
  * amount). from/to only — shortcuts are computed on the frontend.
  */
 class ReportController extends DashboardController
@@ -26,15 +28,40 @@ class ReportController extends DashboardController
             ->whereIn('status', [Booking::STATUS_CONFIRMED, Booking::STATUS_COMPLETED])
             ->whereBetween('start_date', [$from->toDateString(), $to->toDateString()]);
 
-        $gross      = (float) $base()->sum('total_amount');
-        $commission = (float) $base()->selectRaw('COALESCE(SUM(COALESCE(commission_amount, ROUND(total_amount*0.02,2))),0) as v')->value('v');
-        $count      = $base()->count();
+        // Every money figure is read from the FROZEN per-booking columns — never
+        // recomputed from gross at query time. Deriving them would agree with
+        // the wallet on modern rows and drift on pre-conversion ones, which is
+        // the failure mode hardest to notice.
+        $gross = (float) $base()->sum('total_amount');
+        $net   = (float) $base()->sum('subtotal');       // VAT-exclusive base
+        $vat   = (float) $base()->sum('taxes');
+        $count = $base()->count();
+
+        // Commission is 2% of the VAT-EXCLUSIVE base, matching the wallet and
+        // the payout engine. VAT is remitted to ZATCA and was never Mamsa's to
+        // take a percentage of.
+        $commission = (float) $base()
+            ->selectRaw('COALESCE(SUM('.Booking::commissionExpr().'),0) as v')
+            ->value('v');
+
+        // What the partner is actually owed, frozen per booking — the same
+        // column the wallet credits, so the two screens cannot disagree.
+        $netProfit = (float) $base()->sum('partner_share');
+
+        // Abolished service/cleaning fees, still present on historical rows.
+        // Exposed so the tiles add up: netRevenue + vat + fees === grossRevenue.
+        // Without it a partner reading gross 110,226 beside net 88,582 and VAT
+        // 6,263 sees 15,380 unaccounted for. Zero on every modern range.
+        $fees = round($gross - $net - $vat, 2);
 
         return response()->json([
             'grossRevenue'    => round($gross, 2),
+            'netRevenue'      => round($net, 2),
+            'vat'             => round($vat, 2),
+            'fees'            => $fees,
             'bookingsCount'   => $count,
             'commission'      => round($commission, 2),
-            'netProfit'       => round($gross - $commission, 2),
+            'netProfit'       => round($netProfit, 2),
             'revenueByMonth'  => $this->series($base(), 'amount'),
             'bookingsByMonth' => $this->series($base(), 'count'),
             'perUnit'         => $this->perUnit($base()),
@@ -103,7 +130,7 @@ class ReportController extends DashboardController
             ? 'COALESCE(SUM(total_amount),0) as v'
             : 'COUNT(*) as v';
 
-        $rows = $query->selectRaw("DATE_FORMAT(start_date,'%Y-%m') as ym")
+        $rows = $query->selectRaw(Sql::ym('start_date').' as ym')
             ->selectRaw($expr)->groupBy('ym')->pluck('v', 'ym');
 
         return $rows->map(fn ($v, $ym) => [
@@ -128,6 +155,28 @@ class ReportController extends DashboardController
             ])->all();
     }
 
+    /**
+     * Per-booking commission — frozen where captured, else 2% of the
+     * VAT-EXCLUSIVE base. Never 2% of gross: that would charge the partner
+     * commission on the guest's VAT.
+     */
+    private static function commissionOfBooking($b): float
+    {
+        $frozen = (float) ($b->commission_amount ?? 0);
+
+        // Frozen at creation; a zero here means zero commission, not a
+        // missing value to guess at.
+        return $frozen;
+    }
+
+    /** What the partner is owed — the frozen share, matching the wallet. */
+    private static function netOfBooking($b): float
+    {
+        return $b->partner_share !== null
+            ? (float) $b->partner_share
+            : round((float) $b->subtotal - self::commissionOfBooking($b), 2);
+    }
+
     private function csv($rows, string $filename): StreamedResponse
     {
         return response()->streamDownload(function () use ($rows) {
@@ -135,7 +184,7 @@ class ReportController extends DashboardController
             fprintf($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel renders Arabic
             fputcsv($out, ['Code', 'Unit', 'Guest', 'Check-in', 'Check-out', 'Nights', 'Total (SAR)', 'Commission', 'Net', 'Status']);
             foreach ($rows as $b) {
-                $commission = (float) ($b->commission_amount ?? round($b->total_amount * 0.02, 2));
+                $commission = self::commissionOfBooking($b);
                 fputcsv($out, [
                     'BK-'.$b->id,
                     $b->unit?->unit_name,
@@ -145,7 +194,7 @@ class ReportController extends DashboardController
                     $b->nights,
                     number_format((float) $b->total_amount, 2, '.', ''),
                     number_format($commission, 2, '.', ''),
-                    number_format((float) $b->total_amount - $commission, 2, '.', ''),
+                    number_format(self::netOfBooking($b), 2, '.', ''),
                     $b->status,
                 ]);
             }
@@ -156,14 +205,15 @@ class ReportController extends DashboardController
     private function reportHtml($rows, CarbonImmutable $from, CarbonImmutable $to): string
     {
         $gross = $rows->sum('total_amount');
-        $commission = $rows->sum(fn ($b) => (float) ($b->commission_amount ?? round($b->total_amount * 0.02, 2)));
+        $commission = $rows->sum(fn ($b) => self::commissionOfBooking($b));
+        $net        = $rows->sum(fn ($b) => self::netOfBooking($b));
         $body = '';
         foreach ($rows as $b) {
-            $c = (float) ($b->commission_amount ?? round($b->total_amount * 0.02, 2));
+            $c = self::commissionOfBooking($b);
             $body .= '<tr><td>BK-'.$b->id.'</td><td>'.e($b->unit?->unit_name).'</td><td>'.e($b->user?->name)
                 .'</td><td>'.$b->start_date?->toDateString().'</td><td>'.$b->end_date?->toDateString().'</td>'
                 .'<td>'.number_format((float) $b->total_amount, 2).'</td><td>'.number_format($c, 2).'</td>'
-                .'<td>'.number_format((float) $b->total_amount - $c, 2).'</td></tr>';
+                .'<td>'.number_format(self::netOfBooking($b), 2).'</td></tr>';
         }
 
         return '<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">'
@@ -177,7 +227,7 @@ class ReportController extends DashboardController
             .'<table><thead><tr><th>الكود</th><th>الوحدة</th><th>الضيف</th><th>الوصول</th><th>المغادرة</th>'
             .'<th>الإجمالي</th><th>العمولة</th><th>الصافي</th></tr></thead><tbody>'.$body.'</tbody></table>'
             .'<p class="tot">الإجمالي: '.number_format((float) $gross, 2).' ر.س · العمولة: '
-            .number_format((float) $commission, 2).' ر.س · الصافي: '.number_format((float) $gross - $commission, 2).' ر.س</p>'
+            .number_format((float) $commission, 2).' ر.س · الصافي: '.number_format((float) $net, 2).' ر.س</p>'
             .'</body></html>';
     }
 }

@@ -108,7 +108,10 @@ class Analytics
 
         $slices = ['pending_payment' => 0, 'confirmed' => 0, 'completed' => 0, 'cancelled' => 0];
         foreach ($counts as $status => $c) {
-            $slices[$this->bookingStatus($status)] += (int) $c;
+            // DB values are the spec literals; ignore anything unexpected.
+            if (array_key_exists($status, $slices)) {
+                $slices[$status] += (int) $c;
+            }
         }
 
         return array_map(fn ($status, $count) => ['status' => $status, 'count' => $count], array_keys($slices), array_values($slices));
@@ -117,7 +120,10 @@ class Analytics
     /** Top partners by (range-scoped) revenue from paid stays. */
     public function topPartners(int $limit = 5, ?CarbonInterface $since = null): array
     {
-        // Paid stays (confirmed + completed); commission = 2% of subtotal.
+        // Paid stays (confirmed + completed). Commission is read per booking from its
+        // frozen commission_amount — never recomputed from a rate. The rate has
+        // been 10% since 2026-08-27 (2% before), and Mamsa-owned listings freeze
+        // at 100%; a mix of all three totals correctly only this way.
         $revenue = fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)
             ->when($since, fn ($b) => $b->where('bookings.created_at', '>=', $since));
 
@@ -126,6 +132,8 @@ class Analytics
             ->withCount(['unitBookings as bookings_count'])
             ->withSum(['unitBookings as revenue' => $revenue], 'total_amount')
             ->withSum(['unitBookings as subtotal_sum' => $revenue], 'subtotal')
+            // Per-booking commission, so a mix of rates totals correctly.
+            ->withSum(['unitBookings as commission_sum' => $revenue], \Illuminate\Support\Facades\DB::raw(Booking::commissionExpr()))
             ->addSelect(['city' => Unit::query()->select('city')->whereColumn('units.user_id', 'users.id')->latest()->limit(1)])
             ->orderByDesc('revenue')->limit($limit)->get()
             ->map(fn (User $u) => [
@@ -135,7 +143,7 @@ class Analytics
                 'units'      => (int) $u->units_count,
                 'bookings'   => (int) $u->bookings_count,
                 'revenue'    => $this->money($u->revenue),
-                'commission' => $this->money((float) $u->subtotal_sum * Booking::COMMISSION_RATE),
+                'commission' => $this->money((float) $u->commission_sum),
             ])->all();
     }
 

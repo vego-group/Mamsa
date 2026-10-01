@@ -59,7 +59,7 @@ Exactly the shape you're sending (five fields, no `complete` — it's server-com
 ```jsonc
 {
   "cr": "1234567890",
-  "iban": "SA0380000000608010167519",
+  "iban": "SA2480000000000000000000",
   "authorizationLetterFileId": "file_1",
   "vatCertificateFileId": "file_2",
   "operatorLicenseFileId": "file_3"

@@ -60,7 +60,7 @@ class MutationsTest extends TestCase
             'type'        => 'individual',
             'status'      => $status,
             'national_id' => '1098765432',
-            'iban'        => 'SA0380000000608010167519',
+            'iban'        => 'SA2480000000000000000000',
         ]);
 
         return $u;
@@ -228,16 +228,24 @@ class MutationsTest extends TestCase
 
     public function test_create_mamsa_owned_unit_starts_draft(): void
     {
+        // Returns the created unit, not { ok: true }: without an id the caller
+        // cannot submit it, open it, or link to it.
         $this->as()->postJson('/admin/units', [
-            'name' => 'شاليه ممسى', 'type' => 'chalet', 'city' => 'أبها', 'district' => 'السد',
+            'name' => 'شاليه ممسى', 'type' => 'villa', 'city' => 'أبها', 'district' => 'السد',
             'pricePerNight' => 750, 'bedrooms' => 3, 'bathrooms' => 2, 'capacity' => 8, 'sizeSqm' => 200,
-        ])->assertStatus(201)->assertExactJson(['ok' => true]);
+        ])->assertStatus(201)
+            ->assertJsonPath('mamsaOwned', true)
+            ->assertJsonPath('status', 'draft')
+            ->assertJsonStructure(['id', 'code', 'name']);
 
         $unit = Unit::where('unit_name', 'شاليه ممسى')->first();
         $this->assertNotNull($unit);
         $this->assertTrue($unit->mamsa_owned);
         $this->assertSame('draft', $unit->approval_status);
-        $this->assertSame($this->adminUser->id, $unit->user_id);
+        // Owned by the platform account, not by the admin who typed it in —
+        // that admin's name was reaching the storefront as the unit's host.
+        $this->assertSame(User::platform()->id, $unit->user_id);
+        $this->assertNotSame($this->adminUser->id, $unit->user_id);
 
         // Its card shows mamsaOwned + partnerName "ممسى".
         $row = $this->as()->getJson('/admin/units/'.$unit->id)->json();

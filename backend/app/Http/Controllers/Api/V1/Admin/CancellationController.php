@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Support\Sql;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\PartnerDetail;
@@ -74,6 +75,14 @@ class CancellationController extends Controller
             'city'          => $b->unit?->city,
             'date'          => $b->cancelled_at?->toIso8601String(),
             'refund'        => round($refunded, 2),
+            // The frozen split, so no client reconstructs it from a
+            // VAT-inclusive total at today's rate. snake_case here to match the
+            // rest of this v1 surface; the admin panel uses camelCase.
+            'net_base'      => round((float) $b->subtotal, 2),
+            'commission'    => round((float) $b->commission_amount, 2),
+            'partner_share' => round((float) $b->partner_share, 2),
+            // The FROZEN rate — never today's. 1.0 on a Mamsa-owned unit.
+            'commission_rate' => (float) $b->commission_rate,
             // Lost Mamsa commission on the cancelled booking (shown negative).
             'impact'        => -round((float) $b->commission_amount, 2),
             'refund_status' => $this->refundStatus($refunded, (float) $b->total_amount),
@@ -109,7 +118,9 @@ class CancellationController extends Controller
 
         return [
             'total_refunds'    => round($totalRefunds, 2),
-            'financial_impact' => round((float) (clone $cancelled)->sum('commission_amount'), 2),
+            // Per-row via the shared expression, so a booking that predates the
+            // frozen columns still counts instead of reading as zero.
+            'financial_impact' => round((float) (clone $cancelled)->sum(\Illuminate\Support\Facades\DB::raw(\App\Models\Booking::commissionExpr())), 2),
             'host_cancellations' => (clone $cancelled)->where(fn ($q) => $q->where('cancelled_by', '!=', 'customer')->orWhereNull('cancelled_by'))->count(),
         ];
     }
@@ -121,9 +132,11 @@ class CancellationController extends Controller
      */
     private function trend(): array
     {
+        $ym = Sql::ym('cancelled_at');
+
         $rows = Booking::where('status', 'cancelled')
             ->where('cancelled_at', '>=', now()->subMonths(5)->startOfMonth())
-            ->selectRaw("DATE_FORMAT(cancelled_at, '%Y-%m') as ym,
+            ->selectRaw("{$ym} as ym,
                 SUM(CASE WHEN cancelled_by = 'customer' THEN 1 ELSE 0 END) as guest,
                 SUM(CASE WHEN cancelled_by = 'customer' THEN 0 ELSE 1 END) as host")
             ->groupBy('ym')
@@ -169,7 +182,12 @@ class CancellationController extends Controller
             ->withCount(['unitBookings as bookings_count'])
             ->withCount(['unitBookings as cancellations_count' => fn ($q) => $q->where('bookings.status', 'cancelled')])
             ->addSelect(['city' => \App\Models\Unit::query()->select('city')->whereColumn('units.user_id', 'users.id')->latest()->limit(1)])
-            ->having('cancellations_count', '>', 0)
+            // A HAVING with no GROUP BY is a MySQL extension; sqlite rejects it
+            // outright ("HAVING clause on a non-aggregate query"), which is the
+            // second reason this endpoint could never run under test. The
+            // predicate is just "has at least one cancelled booking", which
+            // whereHas states directly and both drivers accept.
+            ->whereHas('unitBookings', fn ($q) => $q->where('bookings.status', 'cancelled'))
             ->orderByDesc('cancellations_count')
             ->limit(3)
             ->get()

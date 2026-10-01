@@ -9,16 +9,21 @@ declare(strict_types=1);
  */
 return [
 
-    'paths' => [
-        'api/*',
-        'sanctum/csrf-cookie',
-        // Partner-dashboard contract API (root-mounted, cookie-credentialed).
-        'auth/*', 'me', 'me/*', 'overview', 'units', 'units/*',
-        'bookings', 'bookings/*', 'reports/*', 'notifications',
-        'notifications/*', 'uploads/*', 'webhooks/*',
-        // Admin-panel (Next.js) BFF — root-mounted under /admin/*, cookie-credentialed.
-        'admin/*',
-    ],
+    /*
+     * Every path, so an UNMATCHED route still answers with CORS headers.
+     *
+     * With an explicit list, a request to a path that has no route skipped this
+     * middleware entirely and the 404 came back bare — so the browser blocked
+     * it and reported a CORS failure instead of the 404. A missing endpoint then
+     * looks like an infrastructure fault, which is the most expensive kind of
+     * misdiagnosis to hand a client team.
+     *
+     * Widening this is not a widening of access: `allowed_origins` below is the
+     * control, and it is an explicit allowlist. The surfaces are api/*,
+     * sanctum/csrf-cookie, the root-mounted partner dashboard (/me, /units,
+     * /wallet, /payouts, …) and the admin BFF under /admin/*.
+     */
+    'paths' => ['*'],
 
     'allowed_methods' => ['*'],
 

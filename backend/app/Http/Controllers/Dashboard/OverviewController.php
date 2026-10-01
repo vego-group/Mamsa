@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dashboard;
 
+use App\Support\Sql;
 use App\Models\Booking;
 use App\Models\Unit;
 use Carbon\CarbonImmutable;
@@ -26,7 +27,12 @@ class OverviewController extends DashboardController
         $nonCancelled = fn ($q) => $q->whereIn('status', [Booking::STATUS_CONFIRMED, Booking::STATUS_COMPLETED]);
 
         // partner share = total - commission (fallback 2% for legacy rows).
-        $shareExpr = 'COALESCE(SUM(total_amount - COALESCE(commission_amount, ROUND(total_amount * 0.02, 2))), 0)';
+        // Uses the shared expression rather than a literal rate: with the
+        // commission no longer fixed at 2%, an inline number here would quietly
+        // disagree with every other report. It also imputed from
+        // `total_amount` (VAT-inclusive) where commission is charged on the
+        // subtotal, which overstated the deduction on legacy rows.
+        $shareExpr = 'COALESCE(SUM(total_amount - '.Booking::commissionExpr().'), 0)';
 
         $bookingsCount = Booking::whereIn('unit_id', $unitIds)->where($nonCancelled)->count();
         $totalRevenue  = (float) Booking::whereIn('unit_id', $unitIds)->where($nonCancelled)
@@ -36,13 +42,13 @@ class OverviewController extends DashboardController
         $start = CarbonImmutable::now()->startOfMonth()->subMonths(11);
         $rows = Booking::whereIn('unit_id', $unitIds)->where($nonCancelled)
             ->where('start_date', '>=', $start->toDateString())
-            ->selectRaw("DATE_FORMAT(start_date, '%Y-%m') as ym")
+            ->selectRaw(Sql::ym('start_date').' as ym')
             ->selectRaw('COUNT(*) as cnt')
             ->selectRaw("{$shareExpr} as amt")
             ->groupBy('ym')->pluck('amt', 'ym');
         $counts = Booking::whereIn('unit_id', $unitIds)->where($nonCancelled)
             ->where('start_date', '>=', $start->toDateString())
-            ->selectRaw("DATE_FORMAT(start_date, '%Y-%m') as ym")
+            ->selectRaw(Sql::ym('start_date').' as ym')
             ->selectRaw('COUNT(*) as cnt')
             ->groupBy('ym')->pluck('cnt', 'ym');
 

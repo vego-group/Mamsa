@@ -59,7 +59,13 @@ class ReadEndpointsTest extends TestCase
             'type'        => 'individual',
             'status'      => PartnerDetail::STATUS_APPROVED,
             'national_id' => '1098765432',
-            'iban'        => 'SA0380000000608010167519',
+            // An individual's KYC now also needs the identity scan on file.
+            'national_id_file' => 'file_test_identity',
+            // `documentsComplete` folds over the rows the admin actually sees,
+            // and the authorization letter is one of them for BOTH partner
+            // types — so a fixture without it is legitimately incomplete.
+            'authorization_letter_file' => 'file_test_authorization',
+            'iban'        => 'SA2480000000000000000000',
             'reviewed_at' => now(),
         ]);
 
@@ -231,5 +237,32 @@ class ReadEndpointsTest extends TestCase
 
         $this->actingAs($this->admin(), 'admin-panel')->getJson('/admin/cancellations/high-risk-partners')
             ->assertOk();
+    }
+
+    /**
+     * `total` is VAT-inclusive gross and the VAT belongs to ZATCA, so the
+     * partner's share cannot be total − commission: that pays them the VAT and
+     * contradicts what the wallet actually transfers.
+     */
+    public function test_booking_partner_share_excludes_vat(): void
+    {
+        $booking = \App\Models\Booking::query()->first();
+        $booking->update([
+            'subtotal'          => 782.61,   // netBase
+            'taxes'             => 117.39,   // vat
+            'commission_amount' => 15.65,
+            'partner_share'     => 766.96,
+            'total_amount'      => 900.00,
+        ]);
+
+        $row = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/bookings/'.$booking->id)->assertOk()->json();
+
+        $this->assertEqualsWithDelta(900.00, $row['total'], 0.001);
+        $this->assertEqualsWithDelta(15.65, $row['commission'], 0.001);
+        $this->assertEqualsWithDelta(766.96, $row['partnerShare'], 0.001);
+
+        // The old derivation would have produced 884.35 — the VAT handed over.
+        $this->assertNotEqualsWithDelta(884.35, $row['partnerShare'], 0.001);
     }
 }

@@ -8,7 +8,8 @@ use App\Models\Booking;
 
 /**
  * Maps a Booking to the partner-dashboard contract shape (§6). Financials use
- * the frozen 2% commission (commission + partnerShare === total).
+ * the commission frozen on the booking (commission + partnerShare === total).
+ * The rate is not fixed — it is whatever was live when the booking was taken.
  */
 class BookingPresenter
 {
@@ -17,7 +18,9 @@ class BookingPresenter
         $booking->loadMissing(['unit.images', 'user', 'payment', 'refunds']);
 
         $total      = (float) $booking->total_amount;
-        $commission = (float) ($booking->commission_amount ?? round($total * 0.02, 2));
+        // Frozen at creation; never imputed. `?:` treated a legitimate zero
+        // commission as a missing value and substituted the legacy rate.
+        $commission = (float) $booking->commission_amount;
 
         $cover = $booking->unit?->images->firstWhere('is_main', true) ?? $booking->unit?->images->first();
 
@@ -36,7 +39,8 @@ class BookingPresenter
             'status'     => $booking->status,
             'financials' => [
                 'total'        => $total,
-                'commission'   => $commission,
+                'commission'     => $commission,
+                'commissionRate' => (float) $booking->commission_rate,
                 'partnerShare' => round($total - $commission, 2),
             ],
             // Guest-facing invoice lines, frozen at booking time. Standing
@@ -74,6 +78,21 @@ class BookingPresenter
         $pricing = [
             'nightlyRate' => (float) ($booking->nightly_rate ?? ($booking->nights ? round($total / $booking->nights, 2) : 0)),
             'nights'      => $booking->nights,
+            // Contract §1.7 names — the same frozen numbers as the legacy keys
+            // below (subtotal IS the net base, taxes IS the VAT, total IS the
+            // gross), exposed under the contract's vocabulary. camelCase because
+            // this is a BFF surface (§9.4).
+            'gross'        => $total,
+            'netBase'      => (float) ($booking->subtotal ?? $total),
+            'vat'          => (float) $booking->taxes,
+            'vatRate'      => round((float) ($booking->tax_percent ?? 0) / 100, 4),
+            // Partner-facing: this is the partner's OWN booking, so the split
+            // that determines their payout is legitimately theirs to see.
+            'commission'     => (float) $booking->commission_amount,
+            'commissionRate' => (float) $booking->commission_rate,
+            'partnerShare' => (float) ($booking->partner_share
+                ?: round(($booking->subtotal ?? $total) - $booking->commission_amount, 2)),
+
             'subtotal'    => (float) ($booking->subtotal ?? $total),
             'taxes'       => (float) $booking->taxes,
             'taxPercent'  => (float) ($booking->tax_percent ?? (($base = $booking->subtotal + $booking->cleaning_fee + $booking->service_fee) > 0 ? round($booking->taxes / $base * 100, 2) : 0)),

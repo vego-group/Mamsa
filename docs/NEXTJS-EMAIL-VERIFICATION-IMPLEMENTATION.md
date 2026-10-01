@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-19 · Companion to `NEXTJS-EMAIL-VERIFICATION.md` (the contract/answers doc). This one is the build guide.
 **Surface:** user app only — `https://api.mamsaa.com/api/v1`, Bearer token. Nothing here touches the partner dashboard.
-**Staging:** everything is live on `https://staging.mamsaa.com/api/v1`, booking gate **ON**, email OTP fixed to **`111222`** (not 123456).
+**Staging:** everything is live on `https://staging.mamsaa.com/api/v1`, booking gate **ON**, email OTP fixed to **`<staging-otp>`** (not 123456).
 
 The mental model: **login stays phone-OTP; email is a verified contact channel** the server requires before booking. You never send any email yourself — you only collect the address, submit the code, and react to machine codes.
 
@@ -130,9 +130,9 @@ try {
 
 ## 6. Testing on staging
 
-1. Login with any phone (fixed phone OTP `111222`, `debug_otp` echoed).
+1. Login with any phone (fixed phone OTP `<staging-otp>`, `debug_otp` echoed).
 2. `POST /user/email` with any inbox (no real email needed — staging's mailer writes to server logs).
-3. Verify with **`111222`**.
+3. Verify with **`<staging-otp>`**.
 4. Booking on a bookable unit before verifying → expect the 422 gate; after verifying → gate opens.
 5. Wrong-code path: submit `000000` up to 5× to see `remaining_attempts` count down → `OTP_MAX_ATTEMPTS`.
 

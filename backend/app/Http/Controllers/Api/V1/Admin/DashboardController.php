@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Support\Sql;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Unit;
@@ -73,7 +74,9 @@ class DashboardController extends Controller
 
         return [
             'total'     => (int) $byStatus->sum(),
-            'pending'   => (int) ($byStatus['pending'] ?? 0),
+            // Response key stays `pending` for the existing /api/v1 consumers;
+            // the DB value is now `pending_payment` (renamed 2026-08-13).
+            'pending'   => (int) ($byStatus[Booking::STATUS_PENDING] ?? 0),
             'confirmed' => (int) ($byStatus['confirmed'] ?? 0),
             'completed' => (int) ($byStatus['completed'] ?? 0),
             'cancelled' => (int) ($byStatus['cancelled'] ?? 0),
@@ -129,7 +132,7 @@ class DashboardController extends Controller
     {
         $rows = Booking::query()->revenue()
             ->where('created_at', '>=', now()->subMonths(11)->startOfMonth())
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, SUM(total_amount) as total, SUM(".Booking::commissionExpr().") as commission")
+            ->selectRaw(Sql::ym('created_at')." as ym, SUM(total_amount) as total, SUM(".Booking::commissionExpr().") as commission")
             ->groupBy('ym')
             ->get()
             ->keyBy('ym');
@@ -233,9 +236,9 @@ class DashboardController extends Controller
      */
     private function weeklyBookings(): array
     {
-        // MySQL DAYOFWEEK: 1 = Sunday … 7 = Saturday
+        // 1 = Sunday … 7 = Saturday on both drivers (see Sql::dayOfWeek).
         $rows = Booking::where('created_at', '>=', now()->subDays(6)->startOfDay())
-            ->selectRaw('DAYOFWEEK(created_at) as dow, COUNT(*) as c')
+            ->selectRaw(Sql::dayOfWeek('created_at').' as dow, COUNT(*) as c')
             ->groupBy('dow')
             ->pluck('c', 'dow');
 

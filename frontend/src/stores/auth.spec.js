@@ -55,7 +55,7 @@ describe('auth store — session lifecycle', () => {
     })
 
     const store = useAuthStore()
-    await store.adminLogin('admin@mamsaa.sa', 'Password1')
+    await store.adminLogin('admin@mamsaa.sa', 'not-a-real-password')
 
     expect(store.isAuthenticated).toBe(true)
     expect(store.isAdmin).toBe(true)

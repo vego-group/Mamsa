@@ -51,13 +51,19 @@ class CancellationsController extends Controller
             $query->whereHas('unit', fn ($u) => $u->where('user_id', $partnerId));
         }
         if ($args['search'] !== null) {
-            $s = $args['search'];
-            $query->where(function ($q) use ($s) {
-                if (ctype_digit($s)) {
-                    $q->orWhere('id', (int) $s);
-                }
+            $s  = $args['search'];
+            $id = $this->codeTerm($s);          // accepts BKG-0231 as well as 231
+
+            $query->where(function ($q) use ($s, $id) {
+                // The displayed code is derived from the id; no `code` column
+                // exists on bookings.
+                $id !== null
+                    ? $q->where('bookings.id', $id)
+                    : $q->whereRaw('1 = 0');
+
                 $q->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$s}%"))
-                  ->orWhereHas('unit', fn ($u) => $u->where('unit_name', 'like', "%{$s}%"));
+                    ->orWhereHas('unit', fn ($u) => $u->where('unit_name', 'like', "%{$s}%")
+                        ->orWhereHas('owner', fn ($o) => $o->where('name', 'like', "%{$s}%")));
             });
         }
 

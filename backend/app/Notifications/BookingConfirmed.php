@@ -49,14 +49,44 @@ class BookingConfirmed extends Notification
                 'checkinTime' => substr((string) ($this->booking->unit->checkin_time ?? '15:00'), 0, 5),
                 'policyName'  => $snapshot['policy_name'] ?? '',
                 'tiers'       => $snapshot['tiers'] ?? [],
+                'invoiceUrl'  => $this->invoiceUrl(),
             ]);
+    }
+
+    /**
+     * Where the guest goes to read their tax invoice.
+     *
+     * NOT the invoice endpoint itself: that is `GET /bookings/{id}/invoice`,
+     * authenticated with a Bearer token, and a token does not survive a mail
+     * client. The link points at the storefront's reservation page, which
+     * fetches the invoice once the guest is signed in.
+     *
+     * The host comes from config so staging mail lands on staging — a build
+     * that pointed every guest at production would look identical to a
+     * working one right up until someone clicked.
+     */
+    private function invoiceUrl(): string
+    {
+        return rtrim((string) config('app.frontend_url'), '/')
+            .'/my-reservations/'.$this->booking->id;
     }
 
     public function toSms(object $notifiable): string
     {
+        $this->booking->loadMissing('unit');
         $unit = $this->booking->unit->unit_name ?? '';
 
-        return 'ممسى: تم تأكيد حجزك لوحدة "' . $unit . '" من ' . $this->booking->start_date
-            . ' إلى ' . $this->booking->end_date . '. رقم الحجز: #' . $this->booking->id;
+        // start_date/end_date are cast to `date`, so interpolating them printed
+        // "2026-10-01 00:00:00". That midnight is not the check-in time and not
+        // anything the guest chose — it is the cast leaking into a message a
+        // person reads. Print the day, and put the real arrival time beside it,
+        // which is what the guest was looking for in the first place.
+        $start   = $this->booking->start_date->format('Y-m-d');
+        $end     = $this->booking->end_date->format('Y-m-d');
+        $checkin = substr((string) ($this->booking->unit->checkin_time ?? '15:00'), 0, 5);
+
+        return 'ممسى: تم تأكيد حجزك لوحدة "'.$unit.'" من '.$start
+            .' إلى '.$end.'، وقت الدخول '.$checkin
+            .'. رقم الحجز: #'.$this->booking->id;
     }
 }

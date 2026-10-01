@@ -8,6 +8,15 @@
 # Catch dot-less env dumps (e.g. env.prod) — may hold real secrets.
 env.*
 env.prod
+
+# Every dotted env variant: backups, disabled copies, dated dumps. The named
+# rules above missed the shapes people actually create -- 19 files matching
+# .env.bak* were found sitting in the production working tree on 2026-09-01,
+# each holding live DB, Moyasar and Resend credentials, none of them ignored.
+# This remote is PUBLIC, so a single `git add -A` on that server would have
+# published all of them. Match broadly and re-admit the one file that belongs.
+.env*
+!.env.example
 .phpactor.json
 .phpunit.result.cache
 /.codex

@@ -9,27 +9,34 @@ use App\Http\Requests\Payment\InitiatePaymentRequest;
 use App\Http\Requests\Payment\PayPaymentRequest;
 use App\Models\Booking;
 use App\Models\Payment;
+use App\Models\Refund;
 use App\Models\SavedCard;
 use App\Models\User;
-use App\Models\WalletTransaction;
-use App\Notifications\BookingConfirmed;
-use App\Notifications\NewBooking;
+use App\Services\BookingPaymentSettler;
 use App\Services\CancellationPolicyService;
 use App\Services\MoyasarService;
+use App\Support\Booking\Availability;
 use App\Support\TestMode;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Notification;
 
 class PaymentController extends Controller
 {
     use ApiResponse;
 
+    /** Outcomes of claiming the nights for a payment that just succeeded. */
+    private const NIGHTS_HELD = 'held';    // confirmed — the stay is the guest's
+
+    private const PAID_TOO_LATE = 'lost';    // paid, but the nights are gone
+
+    private const NOTHING_TO_DO = 'noop';    // already settled, or not ours to settle
+
     public function __construct(
         private readonly MoyasarService $moyasar,
         private readonly CancellationPolicyService $cancellationPolicy,
+        private readonly BookingPaymentSettler $settler,
     ) {}
 
     /**
@@ -57,7 +64,7 @@ class PaymentController extends Controller
 
         $booking = Booking::where('id', $data['booking_id'])
             ->where('user_id', auth()->id())
-            ->where('status', 'pending')
+            ->where('status', Booking::STATUS_PENDING)
             ->with('unit.images')
             ->firstOrFail();
 
@@ -93,6 +100,20 @@ class PaymentController extends Controller
                 'cleaning_fee' => (float) $booking->cleaning_fee,
                 'taxes' => (float) $booking->taxes,
                 'unit' => [
+                    // The ALLOCATED apartment, which in a building is not the
+                    // listing the guest tapped: the server picks a free door.
+                    // Without these three the payment screen could name the
+                    // building but not say which id it is paying for, nor match
+                    // the booking back to the card the guest came from.
+                    'id' => $unit->id,
+                    // Stable across the whole building, so a client can tie this
+                    // payment to the listing it opened. `unit_group_id` for a
+                    // building, `u<id>` for a standalone one — the same value
+                    // UnitResource emits, so the two cannot disagree.
+                    'listing_id' => $unit->unit_group_id ?: 'u'.$unit->id,
+                    // Which door. Null on a standalone listing, and the key is
+                    // always present so a client reads it unconditionally.
+                    'apartment_no' => $unit->apartment_no,
                     'name' => $unit->unit_name,
                     'city' => $unit->city,
                     'district' => $unit->district,
@@ -140,7 +161,21 @@ class PaymentController extends Controller
             'description' => 'حجز وحدة #'.$payment->booking_id,
             // pid lets the frontend callback page verify after the 3-DS redirect.
             'callback_url' => $this->frontendCallbackUrl().'?pid='.$payment->id,
-            'metadata' => ['payment_id' => $payment->id, 'booking_id' => $payment->booking_id],
+            'metadata' => [
+                'payment_id' => $payment->id,
+                'booking_id' => $payment->booking_id,
+                // Which environment created this payment.
+                //
+                // Moyasar's webhook registry is account-level and its payment
+                // object carries no livemode/mode field, so a staging event and
+                // a production event are indistinguishable on arrival. Today
+                // they are told apart only by the id being absent from the
+                // other database — which stops being true the moment staging is
+                // seeded from a production dump. Stamping the environment into
+                // metadata, which IS echoed back on the webhook, gives the
+                // handler something to check that does not depend on that.
+                'env' => (string) config('app.env'),
+            ],
         ];
 
         if (! empty($data['apple_pay_token'])) {
@@ -363,64 +398,17 @@ class PaymentController extends Controller
     }
 
     /**
-     * Confirm a paid booking and notify whoever OWNS the unit (in-app + email):
-     * a partner listing → its partner owner only; a Mamsa-owned listing → all
-     * super admins. Single entry point for every payment success path.
+     * Confirm a paid booking.
+     *
+     * The work moved to BookingPaymentSettler when the reconciliation job
+     * needed the identical path — the locked availability re-check, the restore
+     * of a platform-cancelled booking, the refusal to reverse a guest's own
+     * cancellation, the refund when the nights are gone. Two copies of that
+     * would be two chances to sell the same nights twice.
      */
     private function confirmBooking(Booking $booking): void
     {
-        // Idempotency: a webhook + redirect can both land here. Freeze + notify once.
-        if ($booking->status === Booking::STATUS_CONFIRMED) {
-            return;
-        }
-
-        $booking->loadMissing('unit.cancellationPolicy.tiers');
-
-        // FR-036: freeze the cancellation policy onto the booking at payment time
-        // so later partner edits never alter this booking's refund terms.
-        $booking->update([
-            'status' => Booking::STATUS_CONFIRMED,
-            'cancellation_snapshot' => $this->cancellationPolicy->snapshotForBooking($booking),
-        ]);
-
-        $booking->loadMissing('unit.owner', 'user', 'payment');
-
-        // Wallet ledger (سجل المعاملات): one signed entry per paid booking.
-        // Inside the idempotency guard above, so duplicates are impossible.
-        try {
-            $booking->user?->walletTransactions()->create([
-                'ref_code' => 'PAY-'.now()->format('Y').'-'.str_pad((string) $booking->id, 6, '0', STR_PAD_LEFT),
-                'type' => WalletTransaction::TYPE_PAYMENT,
-                'amount' => -1 * (float) $booking->total_amount,
-                'description' => 'دفع حجز — '.($booking->unit?->unit_name ?? 'وحدة #'.$booking->unit_id),
-                'status' => 'completed',
-                'booking_id' => $booking->id,
-                'occurred_at' => now(),
-            ]);
-        } catch (\Throwable $e) {
-            report($e); // ledger is informational — never block a paid booking
-        }
-
-        // Best-effort: a mail/SMS failure must never break a paid booking.
-        try {
-            // Booking notifications go to whoever OWNS the unit:
-            //  - Partner listing     → the partner (unit owner) only.
-            //  - Mamsa-owned listing → all super admins (no external partner, so
-            //    the platform's super admins stand in as the owner).
-            $unit = $booking->unit;
-            $recipients = $unit?->mamsa_owned
-                ? User::role('SuperAdmin')->get()
-                : collect(array_filter([$unit?->owner]));
-
-            if ($recipients->isNotEmpty()) {
-                Notification::send($recipients, new NewBooking($booking));
-            }
-
-            // FR-034 / FR-100: SMS booking confirmation to the guest.
-            $booking->user?->notify(new BookingConfirmed($booking));
-        } catch (\Throwable $e) {
-            report($e);
-        }
+        $this->settler->confirm($booking);
     }
 
     /**

@@ -7,6 +7,7 @@ namespace App\Http\Controllers\AdminPanel\Concerns;
 use App\Models\Booking;
 use App\Models\PartnerDetail;
 use App\Models\User;
+use App\Support\Sql;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -32,11 +33,21 @@ trait MapsSpec
         return round((float) $v, 2);
     }
 
-    /** Commission is a frozen 2% of total; partner keeps the rest (§7). A stored
-     *  0/null means it was never frozen (historical booking) → compute 2%. */
-    protected function commissionOf(float $total, ?float $stored = null): float
+    /**
+     * Mamsa's 2%, on the VAT-EXCLUSIVE base (§7). A stored 0/null means it was
+     * never frozen (historical booking) → impute from the base.
+     *
+     * `$base` is the subtotal, never `total_amount`: the VAT is remitted to
+     * ZATCA and was never Mamsa's to take a percentage of. This must impute
+     * exactly what Booking::commissionExpr() does, or one booking's commission
+     * row disagrees with the commission total summed above it.
+     */
+    protected function commissionOf(float $base, ?float $stored = null): float
     {
-        return $this->money(($stored !== null && $stored > 0) ? $stored : round($total * 0.02, 2));
+        // Frozen at creation; no imputation. The old `> 0` test replaced a
+        // legitimate zero commission with 2% of the base — a wrong number that
+        // reads as a right one.
+        return $this->money((float) ($stored ?? 0));
     }
 
     /**
@@ -63,15 +74,9 @@ trait MapsSpec
 
     /* ---------- enums ---------- */
 
-    protected function bookingStatus(?string $s): string
-    {
-        return match ($s) {
-            'confirmed', 'paid' => 'confirmed',
-            'completed'         => 'completed',
-            'cancelled'         => 'cancelled',
-            default             => 'pending_payment', // internal 'pending'
-        };
-    }
+    // bookingStatus() shim REMOVED 2026-08-13: bookings.status now stores the
+    // spec literals natively (pending_payment|confirmed|completed|cancelled),
+    // so no translation is needed — read $booking->status directly.
 
     protected function paymentStatus(?string $s): string
     {
@@ -136,28 +141,27 @@ trait MapsSpec
     }
 
     /* ---------- driver-aware SQL (works on MySQL prod + sqlite tests) ---------- */
+    /*
+     * Delegated to App\Support\Sql so there is ONE implementation. These stayed
+     * protected on this trait, which is why controllers outside AdminPanel could
+     * not reuse them and hand-rolled the raw MySQL form instead.
+     */
 
     /** SUM of nights between two date columns. */
     protected function nightsSql(string $end = 'end_date', string $start = 'start_date'): string
     {
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "COALESCE(SUM(julianday({$end}) - julianday({$start})), 0)"
-            : "COALESCE(SUM(DATEDIFF({$end}, {$start})), 0)";
+        return Sql::sumNights($end, $start);
     }
 
     /** 'YYYY-MM' bucket for a datetime column. */
     protected function ymSql(string $col): string
     {
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "strftime('%Y-%m', {$col})"
-            : "DATE_FORMAT({$col}, '%Y-%m')";
+        return Sql::ym($col);
     }
 
     /** AVG hours between two datetime columns. */
     protected function avgHoursSql(string $start, string $end): string
     {
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "AVG((julianday({$end}) - julianday({$start})) * 24)"
-            : "AVG(TIMESTAMPDIFF(HOUR, {$start}, {$end}))";
+        return Sql::avgHours($start, $end);
     }
 }

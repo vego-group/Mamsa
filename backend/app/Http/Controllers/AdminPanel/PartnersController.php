@@ -81,8 +81,21 @@ class PartnersController extends Controller
 
         $d          = $u->partnerDetail;
         $revenue    = $this->money($u->revenue);
-        $commission = $this->money((float) $u->subtotal_sum * Booking::COMMISSION_RATE);
+        // Summed per booking, because the rate is no longer the same for all
+        // of them: multiplying total subtotal by one rate under-reports every
+        // booking taken since the commission changed.
+        $commission = $this->money((float) $u->commission_sum);
         $bookings   = (int) $u->bookings_count;
+
+        // The partner's earnings are the SUM of the frozen per-booking share,
+        // not revenue − commission. `revenue` is VAT-inclusive gross and the VAT
+        // is remitted to ZATCA, so subtracting only the commission credits the
+        // partner the guest's VAT. On one staging partner that reported
+        // 108,454.35 against a true 88,566.96 — a 19,887 SAR overstatement, and
+        // a number the wallet would never pay.
+        $earning = (float) Booking::query()->revenue()
+            ->whereHas('unit', fn ($q) => $q->where('user_id', $u->id))
+            ->sum('partner_share');
 
         return response()->json(array_merge($this->row($u), [
             'nationalId'       => $d->national_id,
@@ -92,9 +105,13 @@ class PartnersController extends Controller
             'documents'        => $this->documents($d),
             'documentsComplete'=> $this->documentsComplete($d),
             'commissionPaid'   => $commission,
-            'partnerEarning'   => $this->money($revenue - $commission),
+            'partnerEarning'   => $this->money($earning),
             'avgPerBooking'    => $bookings > 0 ? $this->money($revenue / $bookings) : 0.0,
             'rejectionReason'  => $d->rejection_reason,
+            // Recorded on suspend and never surfaced until now: an admin looking
+            // at a suspended partner could not see why, which is the one thing
+            // they open the page for. Cleared by /reactivate.
+            'suspensionReason' => $d->suspension_reason,
         ]));
     }
 
@@ -139,6 +156,32 @@ class PartnersController extends Controller
 
         $u->update(['is_active' => false]);
         $u->partnerDetail->update(['suspension_reason' => $data['reason']]);
+
+        return $this->ok();
+    }
+
+    /**
+     * POST /admin/partners/:id/reactivate — suspended → active.
+     *
+     * Exists because PATCH /admin/users/:id/status flips `is_active` and leaves
+     * the stored suspension reason behind, so a reactivated partner keeps a
+     * stale "why they were suspended" on their record forever and reads as
+     * suspended to the next admin who opens it. Clearing the reason is the
+     * whole point of a separate endpoint.
+     */
+    public function reactivate(string $id): JsonResponse
+    {
+        $u = $this->partner($id);
+
+        // Deliberately not a general "activate": an invited partner who never
+        // completed KYC is inactive too, and turning them on here would skip
+        // the review entirely.
+        if ($u->is_active || $u->partnerDetail->status !== PartnerDetail::STATUS_APPROVED) {
+            $this->fail('CONFLICT', 'لا يمكن إعادة تفعيل هذا الشريك في حالته الحالية', 409);
+        }
+
+        $u->update(['is_active' => true]);
+        $u->partnerDetail->update(['suspension_reason' => null]);
 
         return $this->ok();
     }
@@ -262,6 +305,8 @@ class PartnersController extends Controller
             ->withCount(['unitBookings as cancellations_12m' => fn ($q) => $q->where('bookings.status', 'cancelled')->where('bookings.created_at', '>=', $yearAgo)])
             ->withSum(['unitBookings as revenue' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'total_amount')
             ->withSum(['unitBookings as subtotal_sum' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], 'subtotal')
+            // Per-booking commission, so a mix of rates totals correctly.
+            ->withSum(['unitBookings as commission_sum' => fn ($q) => $q->whereIn('bookings.status', Booking::REVENUE_STATUSES)], \Illuminate\Support\Facades\DB::raw(Booking::commissionExpr()))
             ->withAvg(['unitReviews as rating'], 'rating')
             ->addSelect(['city' => Unit::query()->select('city')->whereColumn('units.user_id', 'users.id')->latest()->limit(1)]);
     }
@@ -299,6 +344,10 @@ class PartnersController extends Controller
             'rating'           => $u->rating !== null ? round((float) $u->rating, 1) : 0.0,
             'verified'         => $d?->verified_at !== null,
             'status'           => $this->partnerStatus($u, $d),
+            // Raw signal alongside the derived `status` (which folds both into one
+            // string): payout eligibility is `approved` AND `isActive`, so the
+            // client needs the flag, not just the label.
+            'isActive'         => (bool) $u->is_active,
             'cancellations12m' => $c12,
             'cancellationRate' => $rate,
             'flagged'          => $this->flagged($rate),
@@ -322,51 +371,100 @@ class PartnersController extends Controller
     /** @return array<int, array<string, mixed>> */
     private function documents(PartnerDetail $d): array
     {
-        // KYC-level status is the default; a doc explicitly checked via
-        // documents/:id/verify is 'verified' regardless of the KYC state.
-        $default = match ($d->status) {
-            PartnerDetail::STATUS_APPROVED => 'verified',
-            PartnerDetail::STATUS_REJECTED => 'rejected',
-            default                        => 'pending_review',
-        };
+        // `verified` now means ONE thing: an admin checked this document via
+        // documents/:id/verify. It used to fall back to the partner-level KYC
+        // status, so approving a partner turned every row green at once —
+        // including rows with no file behind them at all. A reviewer then read
+        // a badge that recorded somebody's decision about the *partner* as
+        // though it recorded a review of the *document*.
+        //
+        // A rejected partner still marks its documents rejected: that is not a
+        // false claim of review, and 'pending_review' on a rejected file would
+        // read as "still with us" when it is not.
+        $default = $d->status === PartnerDetail::STATUS_REJECTED
+            ? 'rejected'
+            : 'pending_review';
         $verified = (array) ($d->verified_documents ?? []);
 
-        $mk = fn (string $kind, string $label, ?string $value, ?string $file) => [
-            'id'      => $kind,
-            'kind'    => $kind,
-            'label'   => $label,
-            'fileUrl' => $this->fileUrl($file),
-            'value'   => $value,
-            'status'  => in_array($kind, $verified, true) ? 'verified' : $default,
-        ];
+        return array_map(fn (array $row) => [
+            'id'      => $row['kind'],
+            'kind'    => $row['kind'],
+            'label'   => $row['label'],
+            'fileUrl' => $this->fileUrl($row['file']),
+            'value'   => $row['value'],
+            'status'  => in_array($row['kind'], $verified, true) ? 'verified' : $default,
+        ], $this->documentRows($d));
+    }
+
+    /**
+     * The KYC rows, before presentation — `file` is the STORED reference, not a
+     * resolved URL.
+     *
+     * documentsComplete() folds over this rather than over the public shape on
+     * purpose: `fileUrl` is null both when nothing was uploaded and when an
+     * upload row has gone missing, and those are different facts. Completeness
+     * asks "was it supplied", which only the raw column can answer.
+     *
+     * @return list<array{kind: string, label: string, value: ?string, file: ?string}>
+     */
+    private function documentRows(PartnerDetail $d): array
+    {
+        // `expects` is DECLARED, never inferred from what happens to be filled.
+        // Inferring is how the individual rule was lost: `national_id` carries
+        // both a number and a scan, and an "either will do" fold let the typed
+        // number alone satisfy it — the exact thing the scan requirement exists
+        // to prevent.
+        $mk = fn (string $kind, string $label, ?string $value, ?string $file, array $expects) => compact('kind', 'label', 'value', 'file', 'expects');
 
         $docs = [];
         if ($d->type === 'company') {
-            $docs[] = $mk('commercial_registration', 'السجل التجاري', $d->cr_number, null);
-            $docs[] = $mk('vat_certificate', 'شهادة ضريبة القيمة المضافة', null, $d->vat_certificate_file);
-            $docs[] = $mk('operator_license', 'رخصة تشغيل', null, $d->operator_license_file);
+            // ⚠️ Expects the VALUE only. When a company can actually upload its
+            // CR (partner-side presign + PUT /me/company-docs { crFileId }),
+            // add 'file' here — one word, deliberately visible, and the moment
+            // every existing company flips to incomplete. Not before: an
+            // unclearable finding is one reviewers learn to scroll past.
+            $docs[] = $mk('commercial_registration', 'السجل التجاري', $d->cr_number, $d->cr_file, ['value']);
+            $docs[] = $mk('vat_certificate', 'شهادة ضريبة القيمة المضافة', null, $d->vat_certificate_file, ['file']);
+            $docs[] = $mk('operator_license', 'رخصة تشغيل', null, $d->operator_license_file, ['file']);
         } else {
-            $docs[] = $mk('national_id', 'الهوية الوطنية', $d->national_id, null);
+            // Both: a national ID is not reviewed on a typed number.
+            $docs[] = $mk('national_id', 'الهوية الوطنية', $d->national_id, $d->national_id_file, ['value', 'file']);
         }
-        $docs[] = $mk('authorization_letter', 'خطاب تفويض', null, $d->authorization_letter_file);
-        $docs[] = $mk('iban', 'رقم الآيبان', $d->iban, null);
+        $docs[] = $mk('authorization_letter', 'خطاب تفويض', null, $d->authorization_letter_file, ['file']);
+        $docs[] = $mk('iban', 'رقم الآيبان', $d->iban, null, ['value']);
 
         return $docs;
     }
 
+    /**
+     * "Has this partner SUBMITTED everything required?" — and nothing else.
+     *
+     * Derived from the very rows in `documents[]`: every kind that can carry a
+     * file has one, every value-backed kind has a value. The two therefore
+     * cannot contradict each other on screen, which they used to — this read
+     * unrelated columns AND required KYC approval, so `false` sat above five
+     * green rows and neither field was wrong about its own question.
+     *
+     * Approval status is deliberately NOT part of it: whether the documents
+     * were *reviewed* is a separate claim, folded client-side over
+     * `documents[].status`. One fact per field, each owned by the side that can
+     * establish it.
+     */
     private function documentsComplete(PartnerDetail $d): bool
     {
-        $required = $d->type === 'company' ? ['cr_number', 'iban'] : ['national_id', 'iban'];
-
-        $present = collect($required)->every(fn (string $c) => filled($d->{$c}));
-
-        return $present && $d->status === PartnerDetail::STATUS_APPROVED;
+        return collect($this->documentRows($d))->every(
+            // Every part the row DECLARES it expects must be present. A
+            // value-only kind (`iban`) needs its value; a file-only kind needs
+            // its file; `national_id` needs both, because a scan is what an
+            // admin actually reviews.
+            fn (array $doc) => collect($doc['expects'])->every(fn (string $part) => filled($doc[$part])),
+        );
     }
 
     private function fileUrl(?string $path): ?string
     {
         // KYC doc columns store a DashboardUpload id (file_...) → resolve to its
         // real public path.
-        return \App\Models\DashboardUpload::resolveUrl($path);
+        return \App\Models\DashboardUpload::signedUrl($path);
     }
 }

@@ -97,11 +97,15 @@
                 <p class="text-[11px] text-gray-400">{{ tile.label }}</p>
               </div>
             </div>
-            <div class="bg-gray-50 rounded-xl py-8 text-center">
-              <span class="material-symbols-outlined text-[28px] text-gray-400">location_on</span>
-              <p class="text-[13px] font-semibold text-gray-600 mt-1">{{ [unit.district, unit.city].filter(Boolean).join(', ') }}</p>
-              <p class="text-[11px] text-gray-400">{{ t('approvals.mapPreview') }}</p>
-            </div>
+            <!-- Was a static placeholder reading "معاينة الخريطة (تتطلب تكاملاً)".
+                 A reviewer approving a listing has to see WHERE it is; a pin
+                 icon and a district name is not a location. -->
+            <LocationMap
+              :lat="unit.lat"
+              :lng="unit.lng"
+              :place="[unit.district, unit.city].filter(Boolean).join(', ')"
+              height-class="h-64"
+            />
           </div>
 
           <!-- Amenities -->
@@ -120,7 +124,14 @@
               <li v-for="doc in documents" :key="doc.key" class="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-3">
                 <span class="material-symbols-outlined text-[18px] text-gray-400">description</span>
                 <span class="flex-1 text-[13px] text-gray-700">{{ docLabel(doc.key) }}</span>
-                <span class="text-[12px] font-semibold" :class="docMeta(doc.status).cls">{{ docMeta(doc.status).label }}</span>
+                  <!-- A reviewer approving a listing needs to OPEN the document,
+                       not read a badge that stands in for one. -->
+                  <a v-if="doc.fileUrl" :href="doc.fileUrl" target="_blank" rel="noopener"
+                     class="text-[12px] font-semibold text-primary hover:underline inline-flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+                    فتح
+                  </a>
+                  <span class="text-[12px] font-semibold" :class="docMeta(doc.status).cls">{{ docMeta(doc.status).label }}</span>
               </li>
             </ul>
             <p v-else class="text-[13px] text-gray-400 py-6 text-center">{{ t('approvals.noDocuments') }}</p>
@@ -183,6 +194,7 @@
 </template>
 
 <script setup>
+import LocationMap from '@/components/LocationMap.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AdminLayout from '@/layouts/AdminLayout.vue'

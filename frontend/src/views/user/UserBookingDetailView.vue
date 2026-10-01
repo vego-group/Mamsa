@@ -190,6 +190,19 @@
                   تم التقييم
                 </div>
 
+                <!-- GET /bookings/{id}/invoice — the ZATCA tax invoice. The API
+                     answers 409 INVOICE_NOT_AVAILABLE until the booking is paid,
+                     so the button is shown only for revenue-bearing stays. -->
+                <button
+                  v-if="['confirmed', 'ended'].includes(st.key)"
+                  class="w-full h-11 flex items-center justify-center gap-2 border border-outline-variant text-on-surface rounded-xl font-bold hover:bg-surface-container transition-colors"
+                  :disabled="invoiceBusy"
+                  @click="openInvoice"
+                >
+                  <span class="material-symbols-outlined text-[20px]">receipt_long</span>
+                  {{ invoiceBusy ? 'جارٍ التحميل…' : 'الفاتورة الضريبية' }}
+                </button>
+
                 <RouterLink
                   v-if="['ended', 'cancelled'].includes(st.key)"
                   :to="{ name: 'unit-detail', params: { id: unit?.id } }"
@@ -326,6 +339,55 @@
       </div>
     </Transition>
 
+    <!-- Tax invoice -->
+    <Transition name="fade">
+      <div v-if="invoiceOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" @click.self="invoiceOpen = false">
+        <div class="bg-white rounded-2xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto" dir="rtl">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-title-sm text-title-sm text-on-surface">فاتورة ضريبية</h3>
+            <button class="text-on-surface-variant hover:text-on-surface" @click="invoiceOpen = false">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <template v-if="invoice">
+            <div class="text-body-sm space-y-1 pb-3 mb-3 border-b border-outline-variant">
+              <div class="font-bold text-on-surface">{{ invoice.seller.name }}</div>
+              <div class="text-on-surface-variant">الرقم الضريبي: {{ invoice.seller.vatNumber || '—' }}</div>
+              <div class="text-on-surface-variant">السجل التجاري: {{ invoice.seller.crNumber || '—' }}</div>
+            </div>
+
+            <div class="text-body-sm space-y-1 pb-3 mb-3 border-b border-outline-variant">
+              <div class="flex justify-between"><span class="text-on-surface-variant">رقم الفاتورة</span><span class="font-bold">{{ invoice.invoiceNumber }}</span></div>
+              <div class="flex justify-between"><span class="text-on-surface-variant">التاريخ</span><span>{{ invoiceDate(invoice.issuedAt) }}</span></div>
+              <div class="flex justify-between"><span class="text-on-surface-variant">العميل</span><span>{{ invoice.buyerName || '—' }}</span></div>
+            </div>
+
+            <div v-for="(l, idx) in invoice.lines" :key="idx" class="text-body-sm pb-3 mb-3 border-b border-outline-variant">
+              <div class="font-bold text-on-surface mb-1">{{ l.description }}</div>
+              <div class="text-on-surface-variant">{{ l.checkIn }} → {{ l.checkOut }} · {{ l.nights }} ليلة</div>
+            </div>
+
+            <!-- Every figure is the server's. The base is VAT-EXCLUSIVE and the
+                 VAT is derived by subtraction, so these three always reconcile
+                 exactly; recomputing any of them here would reintroduce drift. -->
+            <div class="text-body-sm space-y-1">
+              <div class="flex justify-between"><span class="text-on-surface-variant">الإجمالي قبل الضريبة</span><span>{{ money(invoice.totalNetBase) }}</span></div>
+              <div class="flex justify-between"><span class="text-on-surface-variant">ضريبة القيمة المضافة</span><span>{{ money(invoice.totalVat) }}</span></div>
+              <div class="flex justify-between font-bold text-on-surface pt-1 border-t border-outline-variant"><span>الإجمالي</span><span>{{ money(invoice.totalGross) }}</span></div>
+            </div>
+
+            <div v-if="invoice.qrCode" class="mt-4 pt-3 border-t border-outline-variant">
+              <div class="text-[12px] text-on-surface-variant mb-1">رمز الاستجابة السريعة (ZATCA)</div>
+              <div class="text-[10px] font-mono break-all text-on-surface-variant bg-surface-container-low rounded-lg p-2">{{ invoice.qrCode }}</div>
+            </div>
+          </template>
+
+          <p v-else-if="invoiceError" class="text-body-sm text-on-surface-variant">{{ invoiceError }}</p>
+        </div>
+      </div>
+    </Transition>
+
     <Transition name="fade">
       <div v-if="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-white font-bold text-body-sm" :class="toast.type === 'error' ? 'bg-error' : 'bg-primary'">
         {{ toast.msg }}
@@ -341,6 +403,7 @@ import PublicHeader from '@/components/public/PublicHeader.vue'
 import PublicFooter from '@/components/public/PublicFooter.vue'
 import CancellationPolicyTiers from '@/components/public/CancellationPolicyTiers.vue'
 import { userApi } from '@/api/user'
+import { bookingApi } from '@/api/public'
 
 // Small presentational row for the "تفاصيل الحجز" list.
 const Row = (props) =>
@@ -506,6 +569,38 @@ async function confirmCancel() {
 
 /* ---- Review ---- */
 const reviewOpen = ref(false)
+const invoiceOpen = ref(false)
+const invoiceBusy = ref(false)
+const invoice = ref(null)
+const invoiceError = ref('')
+
+const invoiceFmt = new Intl.DateTimeFormat('ar-u-ca-gregory', { dateStyle: 'medium' })
+function invoiceDate(s) {
+  if (!s) return ''
+  const d = new Date(s)
+  return isNaN(d) ? '' : invoiceFmt.format(d)
+}
+function money(v) {
+  return `${Number(v ?? 0).toFixed(2)} ${invoice.value?.currency || 'SAR'}`
+}
+
+async function openInvoice() {
+  invoiceBusy.value = true
+  invoiceError.value = ''
+  invoice.value = null
+  try {
+    const { data } = await bookingApi.invoice(booking.value.id)
+    invoice.value = data
+  } catch (e) {
+    // 409 INVOICE_NOT_AVAILABLE is a state, not a failure — the stay simply is
+    // not paid yet, and the server's message already says so in Arabic.
+    invoiceError.value = e.response?.data?.message || 'تعذّر تحميل الفاتورة'
+  } finally {
+    invoiceBusy.value = false
+    invoiceOpen.value = true
+  }
+}
+
 const reviewRating = ref(0)
 const reviewComment = ref('')
 const reviewBusy = ref(false)

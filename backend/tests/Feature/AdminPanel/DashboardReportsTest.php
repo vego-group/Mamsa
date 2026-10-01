@@ -22,6 +22,7 @@ class DashboardReportsTest extends TestCase
     use RefreshDatabase;
 
     private User $adminUser;
+
     private User $partner;
 
     protected function setUp(): void
@@ -141,5 +142,97 @@ class DashboardReportsTest extends TestCase
         // 1y → 12-month series.
         $y = $this->actingAs($this->admin(), 'admin-panel')->getJson('/admin/reports/summary?range=1y')->assertOk()->json();
         $this->assertCount(12, $y['revenueSeries']);
+    }
+
+    /**
+     * The admin money basis must be the partner's money basis.
+     *
+     * netRevenue used to be `gross − taxes`, which is `subtotal + fees` on a
+     * legacy row — so an admin and a partner reading the same period saw
+     * different net figures and neither screen said why.
+     */
+    public function test_admin_reports_read_the_frozen_vat_exclusive_base(): void
+    {
+        // Legacy shape: gross 1300 = base 1000 + VAT 150 + abolished fees 150.
+        Booking::create([
+            'unit_id' => $this->partner->units()->value('id'), 'user_id' => User::factory()->create()->id,
+            'code' => 'BK-'.fake()->unique()->numerify('####'),
+            'start_date' => now()->subDays(5), 'end_date' => now()->subDays(2), 'guests' => 2,
+            'subtotal' => 1000.00, 'taxes' => 150.00,
+            'service_fee' => 100.00, 'cleaning_fee' => 50.00,
+            'commission_amount' => 20.00, 'partner_share' => 980.00,
+            'total_amount' => 1300.00, 'status' => Booking::STATUS_COMPLETED,
+        ]);
+
+        $json = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/reports/summary?range=1y')->assertOk()->json();
+
+        $this->assertEqualsWithDelta(
+            $json['totalRevenue'],
+            $json['netRevenue'] + $json['vatCollected'] + $json['fees'],
+            0.01,
+            'netRevenue + vatCollected + fees must equal totalRevenue, or the tiles do not add up',
+        );
+
+        // Seeded booking: subtotal 900. This one adds 1000 of base, 150 of VAT
+        // and 150 of abolished fees.
+        $this->assertEqualsWithDelta(150.00, $json['fees'], 0.01, 'the abolished fees, not tax');
+        $this->assertEqualsWithDelta(1900.00, $json['netRevenue'], 0.01, 'Σ frozen subtotal, not gross − taxes');
+
+        // The old basis would have reported gross − taxes = 2050.00 here.
+        $this->assertNotEqualsWithDelta(2050.00, $json['netRevenue'], 0.01);
+    }
+
+    public function test_commission_is_split_by_who_owns_the_unit(): void
+    {
+        // A Mamsa-owned unit freezes commission at 100% of the net base, so its
+        // "commission" is the platform's own rental income, not a fee earned on
+        // a partner's stay. Summing both under one key is right as a total and
+        // wrong as a signal: commission growth is the marketplace's health
+        // metric, and platform revenue mixed in moves it the reassuring way.
+        Role::findOrCreate('SuperAdmin', 'web');
+        $admin = User::factory()->create();
+        $admin->assignRole('SuperAdmin');
+
+        $mamsaUnit = $admin->units()->create([
+            'unit_name' => 'وحدة ممسى', 'unit_type' => 'apartment', 'code' => 'MRN'.fake()->unique()->numerify('#####'),
+            'price' => 1000, 'capacity' => 2, 'bedrooms' => 1, 'city' => 'الرياض',
+            'approval_status' => 'approved', 'status' => 'available', 'checkout_time' => '12:00',
+            'calendar_token' => str()->random(60), 'mamsa_owned' => true,
+        ]);
+
+        // Partner stay: base 1000, 10% commission.
+        Booking::create([
+            'unit_id' => $this->partner->units()->value('id'), 'user_id' => User::factory()->create()->id,
+            'code' => 'BK-'.fake()->unique()->numerify('####'),
+            'start_date' => now()->subDays(5), 'end_date' => now()->subDays(2), 'guests' => 2,
+            'subtotal' => 1000.00, 'taxes' => 150.00, 'commission_rate' => 0.10,
+            'commission_amount' => 100.00, 'partner_share' => 900.00,
+            'total_amount' => 1150.00, 'status' => Booking::STATUS_COMPLETED,
+        ]);
+
+        // Mamsa stay: base 1000, the whole base is "commission".
+        Booking::create([
+            'unit_id' => $mamsaUnit->id, 'user_id' => User::factory()->create()->id,
+            'code' => 'BK-'.fake()->unique()->numerify('####'),
+            'start_date' => now()->subDays(5), 'end_date' => now()->subDays(2), 'guests' => 2,
+            'subtotal' => 1000.00, 'taxes' => 150.00, 'commission_rate' => 1.0,
+            'commission_amount' => 1000.00, 'partner_share' => 0.00,
+            'total_amount' => 1150.00, 'status' => Booking::STATUS_COMPLETED,
+        ]);
+
+        $json = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/reports/summary?range=1y')->assertOk()->json();
+
+        // The seeded booking contributes its own commission to the partner side;
+        // what matters is the split and that it still sums to the total.
+        $this->assertEqualsWithDelta(1000.00, $json['mamsaOwnedRevenue'], 0.01, 'platform rental income, alone');
+        $this->assertGreaterThanOrEqual(100.00, $json['partnerCommission'], 'the partner fee, without platform revenue in it');
+        $this->assertEqualsWithDelta(
+            $json['totalCommission'],
+            $json['partnerCommission'] + $json['mamsaOwnedRevenue'],
+            0.01,
+            'the split must add back up to the unchanged total',
+        );
     }
 }

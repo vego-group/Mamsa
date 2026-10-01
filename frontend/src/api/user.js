@@ -30,4 +30,13 @@ export const userApi = {
   removeFavorite: (unitId) => http.delete(`/user/favorites/${unitId}`),
   // Wallet — read-only transaction ledger.
   transactions: () => http.get('/user/transactions'),
+  // Change phone — two steps. The OTP goes to the NEW number, and the same
+  // number must be sent again on verify; the server does not hold it between
+  // the two calls.
+  changePhone: (new_phone) => http.post('/user/change-phone', { new_phone }),
+  verifyChangePhone: (new_phone, code) =>
+    http.post('/user/change-phone/verify', { new_phone, code }),
+  // Irreversible: revokes every token, clears the profile and frees the phone
+  // number for re-registration. Always confirm before calling.
+  deleteAccount: () => http.delete('/user/account'),
 }

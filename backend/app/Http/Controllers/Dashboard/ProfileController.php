@@ -94,6 +94,8 @@ class ProfileController extends DashboardController
         $data = $this->validated($request, [
             'cr'                        => ['sometimes', 'regex:/^\d{10}$/'],
             'iban'                      => ['sometimes', 'regex:/^SA\d{22}$/'],
+            'crFileId'                  => ['sometimes', 'nullable', 'string'],
+            'nationalIdFileId'          => ['sometimes', 'nullable', 'string'],
             'authorizationLetterFileId' => ['sometimes', 'nullable', 'string'],
             'vatCertificateFileId'      => ['sometimes', 'nullable', 'string'],
             'operatorLicenseFileId'     => ['sometimes', 'nullable', 'string'],
@@ -103,7 +105,7 @@ class ProfileController extends DashboardController
         ]);
 
         // Each referenced file must be an upload owned by THIS partner (§0.2).
-        foreach (['authorizationLetterFileId', 'vatCertificateFileId', 'operatorLicenseFileId'] as $field) {
+        foreach (['authorizationLetterFileId', 'vatCertificateFileId', 'operatorLicenseFileId', 'nationalIdFileId', 'crFileId'] as $field) {
             if (! empty($data[$field]) && ! DashboardUpload::whereKey($data[$field])
                 ->where('user_id', $user->id)->where('status', 'stored')->exists()) {
                 $this->fail('VALIDATION', 'بيانات غير صالحة', 400, [$field => 'ملف غير موجود']);
@@ -112,7 +114,9 @@ class ProfileController extends DashboardController
 
         $user->partnerDetail()->updateOrCreate(['user_id' => $user->id], array_filter([
             'cr_number'                 => $data['cr'] ?? null,
+            'cr_file'                   => $data['crFileId'] ?? null,
             'iban'                      => $data['iban'] ?? null,
+            'national_id_file'          => $data['nationalIdFileId'] ?? null,
             'authorization_letter_file' => $data['authorizationLetterFileId'] ?? null,
             'vat_certificate_file'      => $data['vatCertificateFileId'] ?? null,
             'operator_license_file'     => $data['operatorLicenseFileId'] ?? null,
@@ -162,6 +166,24 @@ class ProfileController extends DashboardController
             ->count();
     }
 
+    /**
+     * Company payout-docs completeness.
+     *
+     * ⚠️ PHASE A WARNING (bank_details migration) — this is company-only by
+     * design, and the `iban` element below now also carries INDIVIDUAL partners'
+     * bank accounts, because PUT /me/company-docs has no type gate and the
+     * dashboard writes individual IBANs through it in the interim.
+     *
+     * So do NOT extend this check to individuals as-is:
+     *  - an individual who saved only an IBAN would read as "complete" (the four
+     *    company-only fields are legitimately null for them), and
+     *  - an individual with no IBAN would be blocked from submitting a unit with
+     *    no visible cause — the 409 names company docs.
+     *
+     * When completeness moves to `bank_details`, make it TYPE-AWARE: companies
+     * need CR + the three files + a verified bank account; individuals need only
+     * a bank account, and only if payout eligibility actually requires one.
+     */
     public static function docs(User $user): array
     {
         $d = $user->partnerDetail;
@@ -174,7 +196,20 @@ class ProfileController extends DashboardController
             'operatorLicenseFileId'     => $d?->operator_license_file,
         ];
 
+        // Computed BEFORE the identity scan is added: `complete` gates company
+        // unit submission, and a company is identified by its CR, not by a
+        // national id. Including it here would block every company from
+        // submitting a unit over a document they are never asked for.
         $docs['complete'] = ! in_array(null, $docs, true) && ! in_array('', $docs, true);
+
+        $docs['nationalIdFileId'] = $d?->national_id_file;
+
+        // Added AFTER `complete` is computed, like the identity scan above:
+        // every company already registered has a CR number and no scan, so
+        // folding it into completeness would freeze all of them out of unit
+        // submission on the day it deployed.
+        $docs['crFileId'] = $d?->cr_file;
+        $docs['crUrl']    = DashboardUpload::signedUrl($d?->cr_file);
 
         return $docs;
     }

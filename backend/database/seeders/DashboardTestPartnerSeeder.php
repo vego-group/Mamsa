@@ -24,7 +24,8 @@ use Spatie\Permission\Models\Role;
  * every lifecycle state, bookings across every status (with 2% commission +
  * payments), an iCal feed, manual blocks, and notifications.
  *
- * Login (staging): phone 0512345678, OTP 111222.
+ * Login (staging): phone 0512345678. The OTP is whatever OTP_FIXED_CODE is set
+ * to in that environment — never hardcode it here (public repository).
  *
  *   php artisan db:seed --class=DashboardTestPartnerSeeder
  */
@@ -101,7 +102,7 @@ class DashboardTestPartnerSeeder extends Seeder
 
         $this->notifications($partner, $approved);
 
-        $this->command?->info('Dashboard test partner ready: phone 0512345678, OTP 111222 (staging).');
+        $this->command?->info('Dashboard test partner ready: phone 0512345678 (OTP = OTP_FIXED_CODE in this environment).');
     }
 
     private function partner(): User
@@ -170,7 +171,10 @@ class DashboardTestPartnerSeeder extends Seeder
             $nights   = Carbon::parse($start)->diffInDays(Carbon::parse($end));
             $subtotal = $nights * (float) $unit->price;
             $cleaning = 100;
-            $commission = round($subtotal * 0.02, 2);
+            // Live rate, not a hardcoded 2%: seeded data should behave like a
+            // booking taken today.
+            $rate       = (float) config('booking.commission_rate');
+            $commission = round($subtotal * $rate, 2);
             $total    = $subtotal + $cleaning;
 
             $booking = $unit->bookings()->updateOrCreate(
@@ -183,8 +187,10 @@ class DashboardTestPartnerSeeder extends Seeder
                     'cleaning_fee'      => $cleaning,
                     'service_fee'       => 0,
                     'taxes'             => 0,
-                    'commission_rate'   => 0.02,
+                    'commission_rate'   => $rate,
                     'commission_amount' => $commission,
+                    // Stated explicitly: the column has no default any more.
+                    'partner_share'     => round($subtotal - $commission, 2),
                     'total_amount'      => $total,
                     'status'            => $status,
                     'cancellation_snapshot' => [

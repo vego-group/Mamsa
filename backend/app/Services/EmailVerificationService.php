@@ -41,14 +41,15 @@ class EmailVerificationService
      *
      * @throws EmailVerificationException RATE_LIMITED
      */
-    public function start(User $user, string $email): void
+    /** @return string the issued code — callers expose it only outside production. */
+    public function start(User $user, string $email): string
     {
         $this->assertCooldownPassed($user);
 
         // Changing the address invalidates any previous verification.
         $user->forceFill(['email' => $email, 'email_verified_at' => null])->save();
 
-        $this->issue($user);
+        return $this->issue($user);
     }
 
     /**
@@ -56,14 +57,16 @@ class EmailVerificationService
      *
      * @throws EmailVerificationException RATE_LIMITED / EMAIL_INVALID
      */
-    public function resendPending(User $user): void
+    /** @return string the issued code — callers expose it only outside production. */
+    public function resendPending(User $user): string
     {
         if (blank($user->email) || $user->email_verified_at) {
             throw EmailVerificationException::noPendingEmail();
         }
 
         $this->assertCooldownPassed($user);
-        $this->issue($user);
+
+        return $this->issue($user);
     }
 
     /**
@@ -77,7 +80,7 @@ class EmailVerificationService
             throw EmailVerificationException::noPendingEmail();
         }
 
-        $key  = $this->key($user);
+        $key = $this->key($user);
         $data = $this->cache()->get($key);
 
         if (! $data) {
@@ -185,26 +188,29 @@ class EmailVerificationService
     }
 
     /** Store a fresh code and email it to the user's current address. */
-    private function issue(User $user): void
+    /** @return string the code that was issued. */
+    private function issue(User $user): string
     {
-        $code       = $this->generateCode();
+        $code = $this->generateCode();
         $expMinutes = (int) config('otp.exp_minutes', 5);
 
         $this->cache()->put(
             $this->key($user),
             [
-                'code'       => $code,
-                'attempts'   => 0,
-                'sent_at'    => now()->timestamp,
+                'code' => $code,
+                'attempts' => 0,
+                'sent_at' => now()->timestamp,
                 // Real expiry lives in the payload; the cache TTL adds a grace
                 // window so an expired code reports OTP_EXPIRED, not OTP_INVALID.
                 'expires_at' => now()->timestamp + ($expMinutes * 60),
-                'email'      => $user->email,
+                'email' => $user->email,
             ],
             $this->graceTtl(),
         );
 
         Mail::to($user->email)->send(new EmailVerificationCode($code, $expMinutes));
+
+        return $code;
     }
 
     private function key(User $user): string
@@ -228,17 +234,18 @@ class EmailVerificationService
         return ((int) config('otp.exp_minutes', 5) * 60) + 1800;
     }
 
+    /**
+     * Always random. The fixed-code path is gone here too.
+     *
+     * This mirrored OtpService, and so it mirrored the flaw: one constant for
+     * every email on the environment, scoped to no address, defended only by a
+     * denylist on APP_ENV. Removing it from one service and leaving it in the
+     * other would have been worse than leaving both — a fix that reads as done.
+     */
     private function generateCode(): string
     {
-        // Deterministic code for non-production testing (staging fixed OTP),
-        // mirroring OtpService — NEVER active when APP_ENV=production.
-        $fixed = config('otp.fixed_code');
-        if ($fixed !== null && $fixed !== '' && ! app()->isProduction()) {
-            return (string) $fixed;
-        }
-
         $length = max(4, (int) config('otp.length', 6));
-        $max    = (10 ** $length) - 1;
+        $max = (10 ** $length) - 1;
 
         return str_pad((string) random_int(0, $max), $length, '0', STR_PAD_LEFT);
     }

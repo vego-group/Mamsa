@@ -54,7 +54,7 @@ class UserController extends Controller
     {
         $bookings = $request->user()
             ->bookings()
-            ->with(['unit.images', 'unit.owner.partnerDetail', 'payment', 'review'])
+            ->with(['unit.images', 'unit.owner.partnerDetail', 'user', 'payment', 'review'])
             ->latest()
             ->paginate(10);
 

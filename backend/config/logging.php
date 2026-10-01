@@ -1,5 +1,6 @@
 <?php
 
+use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -50,7 +51,39 @@ return [
     |
     */
 
+    /*
+     * Where RetiredEndpoint writes. A channel of its own so the evidence that
+     * decides whether a closed endpoint had real users is not buried in the
+     * application log — and so it can be read, or shipped, on its own.
+     */
+    'retired_channel' => env('LOG_RETIRED_CHANNEL', 'retired'),
+
+    /*
+    | The access log — one JSON line per request that reached the app
+    | (App\Http\Middleware\AccessLog). Off by default.
+    */
+    'access_log' => [
+        'enabled' => (bool) env('ACCESS_LOG_ENABLED', false),
+    ],
+
     'channels' => [
+
+        'access' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/access.log'),
+            'level' => 'info',
+            'days' => (int) env('ACCESS_LOG_DAYS', 14),
+            'formatter' => LineFormatter::class,
+            'formatter_with' => ['format' => "%message%\n", 'allowInlineLineBreaks' => false],
+        ],
+
+        'retired' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/retired.log'),
+            'level' => 'debug',
+            'days' => 90,
+            'replace_placeholders' => true,
+        ],
 
         'stack' => [
             'driver' => 'stack',

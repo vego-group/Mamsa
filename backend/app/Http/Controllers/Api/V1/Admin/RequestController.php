@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Support\Sql;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UnitResource;
 use App\Models\PartnerDetail;
@@ -91,15 +92,20 @@ class RequestController extends Controller
                 'city'        => $unit->city,
                 'is_verified' => $detail?->status === PartnerDetail::STATUS_APPROVED,
                 'rating'      => $rating !== null ? round((float) $rating, 1) : null,
-                'documents'   => $this->partnerDocuments($detail),
+                'documents'   => $this->partnerDocuments($detail, $unit),
             ],
             'submitted_at' => $unit->created_at?->toIso8601String(),
             'timeline'     => $timeline,
         ]);
     }
 
-    /** @return array<int, array{key: string, status: string}> */
-    private function partnerDocuments(?PartnerDetail $d): array
+    /**
+     * The three rows the review screen renders. `ownership` is about THIS unit;
+     * the other two are about the partner.
+     *
+     * @return array<int, array{key: string, status: string, fileUrl?: string}>
+     */
+    private function partnerDocuments(?PartnerDetail $d, Unit $unit): array
     {
         if (! $d) {
             return [];
@@ -107,11 +113,44 @@ class RequestController extends Controller
         $verified = $d->status === PartnerDetail::STATUS_APPROVED;
         $state = fn (bool $has) => ! $has ? 'missing' : ($verified ? 'verified' : 'pending');
 
-        return [
+        // The `ownership` row is labelled "مستندات ملكية العقار" on the review
+        // screen, but it used to be derived from the partner's authorisation
+        // letter, VAT certificate or operator licence — none of which is proof
+        // of owning a property. It reported on the wrong documents entirely, so
+        // uploading a real deed left it reading "غير متوفر" while an unrelated
+        // partner file could turn it green.
+        //
+        // It now reads the unit's own ownership document. A reviewer opening
+        // the row gets the file itself, not a badge standing in for one.
+        $ownership = $unit->ownership_doc_file;
+
+        return array_values(array_filter([
             ['key' => 'identity',  'status' => $state((bool) ($d->national_id || $d->cr_number))],
-            ['key' => 'bank',      'status' => $state((bool) $d->iban)],
-            ['key' => 'ownership', 'status' => $state((bool) ($d->authorization_letter_file || $d->vat_certificate_file || $d->operator_license_file))],
-        ];
+            // Was `iban` alone: a typed number with nothing behind it, so a
+            // reviewer approving a payout destination had no document to open.
+            // The IBAN is still required — a certificate without a number is
+            // not a usable account — but the row now carries the proof too.
+            array_filter([
+                'key'     => 'bank',
+                // Three states, not two. Nothing on file is `missing`; one of
+                // the two present is `pending` — incomplete, but there IS
+                // something to look at, and a row carrying a file link while
+                // reading "غير متوفر" contradicts itself.
+                'status'  => match (true) {
+                    filled($d->iban) && filled($d->bank_certificate_file) => $verified ? 'verified' : 'pending',
+                    filled($d->iban) || filled($d->bank_certificate_file) => 'pending',
+                    default => 'missing',
+                },
+                'fileUrl' => \App\Models\DashboardUpload::signedUrl($d->bank_certificate_file),
+            ], fn ($v) => $v !== null),
+            array_filter([
+                'key'     => 'ownership',
+                // Not $state(): an ownership document is verified when an admin
+                // has looked at THIS file, and approving the partner is not that.
+                'status'  => filled($ownership) ? 'pending' : 'missing',
+                'fileUrl' => \App\Models\DashboardUpload::signedUrl($ownership),
+            ], fn ($v) => $v !== null),
+        ]));
     }
 
     public function approve(Unit $unit): JsonResponse
@@ -175,7 +214,10 @@ class RequestController extends Controller
 
         // Avg hours from submission → review, for units already actioned.
         $avgHours = (float) Unit::whereIn('approval_status', ['approved', 'rejected'])
-            ->selectRaw('AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as h')
+            // Was TIMESTAMPDIFF(HOUR, …), which TRUNCATES: a 14.2-hour average
+            // reported as 14. Sql::avgHours uses MINUTE/60, so this is a
+            // correctness fix as well as a portability one.
+            ->selectRaw(Sql::avgHours('created_at', 'updated_at').' as h')
             ->value('h');
 
         return [

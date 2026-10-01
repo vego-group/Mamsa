@@ -43,4 +43,4 @@ When `available: true`, a `pricing` object is included: `nights, nightly_rate, s
 | `NEXTJS-BOOKING-PERCENT-FIELDS.md` | The frozen percent fields + dashboard invoice block, verified payloads |
 | `NEXTJS-API-FLOWS.md` | Master flow map — updated with all of the above |
 
-Test on `https://staging.mamsaa.com` (fixed OTP `111222`). If you PATCH the service fee while testing, restore it to `10` — staging is shared.
+Test on `https://staging.mamsaa.com` (fixed OTP `<staging-otp>`). If you PATCH the service fee while testing, restore it to `10` — staging is shared.

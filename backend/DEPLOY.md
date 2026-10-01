@@ -6,6 +6,11 @@ How the Laravel API is deployed to Hostinger **shared** hosting via SSH.
 > run on `file`/`database`/`sync` drivers. For the full documented stack
 > (Docker + Redis + Supervisor + Nginx) use a **VPS** instead.
 
+> ⚠️ Production is deployed **file-by-file over scp**, never by pulling — the
+> git checkout there is a reference, not the deploy mechanism. Before deploying,
+> check [`DEPLOY-HOLDBACKS.md`](DEPLOY-HOLDBACKS.md) for anything production is
+> deliberately not running (as of 2026-09-01: nothing).
+
 ## Server layout
 
 ```
@@ -123,7 +128,61 @@ cp -r public/. ../public_html/
 > Always re-run `config:cache` after editing `.env` — the cached config holds a
 > stale copy otherwise (this is what caused the "redis" errors on first deploy).
 
+### If `git subtree push` is rejected (non-fast-forward)
+
+`git subtree split` only reproduces the same commit SHAs on a clone that still
+holds the original subtree **cache** (`.git/subtree-cache`). From a fresh clone
+(or CI) the split recomputes **different** SHAs for byte-identical content, so
+`git subtree push --prefix=backend backend-api main` is refused as
+non-fast-forward — you'll see `5ecda5f` on `backend-api/main` but a fresh split
+labels the same commit `4239536`.
+
+**Do not force-push.** That rewrites the backend repo's history, which the server
+tracks (its `git pull` would then need a hard reset) and which breaks every other
+clone. Instead ship a safe **fast-forward overlay** — one commit whose *tree* is
+the fresh split, parented on the current `backend-api/main`:
+
+```bash
+# local monorepo, on the ref you want to ship (e.g. main with the merge)
+git fetch backend-api
+git subtree split --prefix=backend --branch=deploy-split HEAD
+
+# review the delta — it must be only what you intend to release
+git diff --name-status backend-api/main deploy-split
+
+TREE=$(git rev-parse deploy-split^{tree})
+NEW=$(git commit-tree "$TREE" -p backend-api/main \
+        -m "chore(deploy): sync backend subtree from monorepo main")
+git push backend-api "$NEW:main"          # fast-forward, +1 commit, no rewrite
+git branch -D deploy-split
+```
+
+> The overlay commit is not in the subtree cache of whatever machine normally
+> runs `git subtree push`, so **that machine's next push may also report
+> non-fast-forward** — reconcile it the same way (overlay), or on that machine
+> reset the local split base to `origin/main` after `git fetch backend-api`.
+
+### If the server pull is blocked by local edits
+
+When a hotfix was applied **directly on the server** — edited tracked files or
+new untracked files — `git pull` refuses ("local changes / untracked files would
+be overwritten by merge"). Revert the tracked edits and remove the untracked
+files first; the pull restores them from the release (verify the release adds the
+same files, so nothing is lost):
+
+```bash
+cd ~/domains/api.mamsaa.com/app_core
+git checkout -- <edited tracked files>       # drop the in-place hotfix
+rm -f <untracked files the release also adds>
+git pull --ff-only origin main               # --ff-only = fail loudly, never merge-commit
+# then the usual: config:clear && config:cache && route:cache
+```
+
 ## Troubleshooting
+
+**"The API timed out / didn't answer":** read `storage/logs/access-YYYY-MM-DD.log` for that minute first,
+with [the absence table](../docs/ops/access-log.md#reading-an-absence). No line from that client, but lines from
+others in the same minute, means the request died before PHP.
 
 | Symptom | Cause / fix |
 | --- | --- |
@@ -133,4 +192,6 @@ cp -r public/. ../public_html/
 | 403 Forbidden | Permissions. Dirs `755`, files `644`, never `777`; owner must be your user. |
 | 405 "GET method not supported" on a POST | http→https redirect downgrades POST→GET. Use `https://` in `base_url`, no trailing slash. |
 | `getaddrinfo for redis failed` / `Connection refused` | A Redis driver is still active. Set `CACHE_STORE/SESSION_DRIVER=file`, `QUEUE_CONNECTION=sync`, then `config:cache`. |
+| `git subtree push` rejected (non-fast-forward) | Fresh clone lacks the subtree cache → different split SHAs. **Don't force.** Use the fast-forward overlay (see [If `git subtree push` is rejected](#if-git-subtree-push-is-rejected-non-fast-forward)). |
+| `git pull` on server: "local changes would be overwritten" | An in-place hotfix. `git checkout --` the edited files + `rm` the untracked ones the release adds, then `git pull --ff-only` (see [If the server pull is blocked](#if-the-server-pull-is-blocked-by-local-edits)). |
 | `tail laravel.log` | `~/domains/api.mamsaa.com/app_core/storage/logs/laravel.log` |

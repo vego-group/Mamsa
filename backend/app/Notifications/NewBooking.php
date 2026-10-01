@@ -34,7 +34,8 @@ class NewBooking extends Notification
         // (email task doc §3): total − the commission frozen on the booking.
         if (! $notifiable->hasAnyRole(['Admin', 'SuperAdmin'])) {
             $total      = (float) $this->booking->total_amount;
-            $commission = (float) ($this->booking->commission_amount ?? round($total * 0.02, 2));
+            // Frozen at creation; never imputed.
+            $commission = (float) $this->booking->commission_amount;
 
             return (new MailMessage())
                 ->subject('حجز جديد مؤكد BK-'.$this->booking->id.' — مَمسَى')

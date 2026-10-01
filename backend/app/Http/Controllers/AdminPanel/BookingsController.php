@@ -10,8 +10,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Bookings — BACKEND_SPEC §5.8 (read-only for admin). commission = 2% of total,
- * partnerShare = total − commission; policySnapshot is frozen at payment time.
+ * Bookings — BACKEND_SPEC §5.8 (read-only for admin).
+ *
+ * Money is VAT-inclusive: `total` is gross, commission is 2% of the VAT-exclusive
+ * base, and partnerShare is the frozen per-booking column — never total minus
+ * commission, which would pay the partner the VAT. policySnapshot is frozen at
+ * payment time.
  */
 class BookingsController extends Controller
 {
@@ -27,7 +31,7 @@ class BookingsController extends Controller
         $query = Booking::query()->with(['unit.owner', 'user', 'payment']);
 
         if ($status = $this->cleanParam($request->query('status'))) {
-            $query->where('status', $status === 'pending_payment' ? 'pending' : $status);
+            $query->where('status', $status); // DB values are the spec literals since 2026-08-13
         }
         if ($unitId = $this->cleanParam($request->query('unitId'))) {
             $query->where('unit_id', $unitId);
@@ -36,7 +40,7 @@ class BookingsController extends Controller
             $query->where('user_id', $userId);
         }
         if ($city = $this->cleanParam($request->query('city'))) {
-            $query->whereHas('unit', fn ($u) => $u->where('city', $city));
+            $query->whereHas('unit', fn ($u) => \App\Support\City::filter($u, 'city', $city));
         }
         if ($partnerId = $this->cleanParam($request->query('partnerId'))) {
             $query->whereHas('unit', fn ($u) => $u->where('user_id', $partnerId));
@@ -48,13 +52,25 @@ class BookingsController extends Controller
             $query->whereDate('start_date', '<=', $to);
         }
         if ($args['search'] !== null) {
-            $s = $args['search'];
-            $query->where(function ($q) use ($s) {
-                if (ctype_digit($s)) {
-                    $q->orWhere('id', (int) $s);
-                }
-                $q->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$s}%")->orWhere('phone', 'like', "%{$s}%"))
-                  ->orWhereHas('unit', fn ($u) => $u->where('unit_name', 'like', "%{$s}%"));
+            $s     = $args['search'];
+            $id    = $this->codeTerm($s);      // accepts BKG-0231 as well as 231
+            $phone = $this->phoneTerm($s);
+
+            $query->where(function ($q) use ($s, $id, $phone) {
+                // Code first: an admin copies BKG-0231 off the row, and that
+                // string exists in no column — it is derived from the id.
+                $id !== null
+                    ? $q->where('bookings.id', $id)
+                    : $q->whereRaw('1 = 0');
+
+                $q->orWhereHas('user', function ($u) use ($s, $phone) {
+                    $u->where('name', 'like', "%{$s}%");
+                    $phone !== null
+                        ? $u->orWhere('phone', 'like', "%{$phone}")
+                        : $u->orWhere('phone', 'like', "%{$s}%");
+                })
+                    ->orWhereHas('unit', fn ($u) => $u->where('unit_name', 'like', "%{$s}%")
+                        ->orWhereHas('owner', fn ($o) => $o->where('name', 'like', "%{$s}%")));
             });
         }
 
@@ -70,7 +86,10 @@ class BookingsController extends Controller
 
         $out = ['all' => 0, 'pending_payment' => 0, 'confirmed' => 0, 'completed' => 0, 'cancelled' => 0];
         foreach ($raw as $status => $c) {
-            $out[$this->bookingStatus($status)] += (int) $c;
+            // DB values are the spec literals; ignore anything unexpected.
+            if (array_key_exists($status, $out)) {
+                $out[$status] += (int) $c;
+            }
             $out['all'] += (int) $c;
         }
 
@@ -107,8 +126,22 @@ class BookingsController extends Controller
     /** @return array<string, mixed> */
     private function row(Booking $b): array
     {
-        $total      = (float) $b->total_amount;
-        $commission = $this->commissionOf($total, $b->commission_amount);
+        $total = (float) $b->total_amount;
+
+        // Imputed from the SUBTOTAL, matching Booking::commissionExpr() and the
+        // commission total on the stats row above this table. Imputing from
+        // gross made a legacy row read 23.00 where the aggregate counted 20.00.
+        $commission = $this->commissionOf((float) $b->subtotal, $b->commission_amount);
+
+        // The partner's share is the frozen column, NOT total − commission.
+        // `total` is VAT-INCLUSIVE gross, and the VAT is remitted to ZATCA — it
+        // was never the partner's. Deriving it from gross overstated every
+        // booking by the VAT: 900 gross reported 884.35 where the wallet pays
+        // 766.96, so an admin quoting this figure contradicted what the partner
+        // was actually paid.
+        $partnerShare = $b->partner_share !== null
+            ? (float) $b->partner_share
+            : round((float) $b->subtotal - $commission, 2);
 
         return [
             'id'            => (string) $b->id,
@@ -126,8 +159,11 @@ class BookingsController extends Controller
             'nights'        => (int) $b->nights,
             'guests'        => (int) $b->guests,
             'total'         => $this->money($total),
-            'commission'    => $commission,
-            'partnerShare'  => $this->money($total - $commission),
+            'commission'     => $commission,
+            // Frozen per booking. Reports must sum the per-row amount rather
+            // than apply one rate to a total — see BookingsController::commissionSum.
+            'commissionRate' => (float) $b->commission_rate,
+            'partnerShare'   => $this->money($partnerShare),
             'nightlyRate'   => (float) $b->nightly_rate,
             'paymentMethod' => $b->payment?->payment_method ?? '',
             // Refunds are tracked via refunded_amount, not a 'refunded' status.
@@ -135,9 +171,12 @@ class BookingsController extends Controller
                 ? 'refunded'
                 : $this->paymentStatus($b->payment?->payment_status),
             'moyasarRef'    => $b->payment?->moyasar_id,
-            'status'        => $this->bookingStatus($b->status),
+            'status'        => (string) $b->status,
             'createdAt'     => $this->iso($b->created_at),
-            'mamsaOwned'    => false,
+            // Was a hardcoded `false`, so the admin panel's commission-split
+            // branch never fired once — including on genuinely Mamsa-owned
+            // units, which are exactly the rows it exists for.
+            'mamsaOwned'    => (bool) $b->unit?->mamsa_owned,
         ];
     }
 

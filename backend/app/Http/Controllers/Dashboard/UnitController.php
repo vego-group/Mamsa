@@ -4,16 +4,23 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dashboard;
 
-use App\Models\DashboardUpload;
-use App\Models\Feature;
+use App\Models\Permit;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\NewUnitRequest;
-use App\Support\Dashboard\Maps;
 use App\Support\Dashboard\UnitPresenter;
+use App\Support\Permits\PermitMode;
+use App\Support\Permits\PermitRenewal;
+use App\Support\Permits\PermitWriter;
+use App\Support\Units\ApartmentExpansion;
+use App\Support\Units\DoorName;
+use App\Support\Units\LicenseViolation;
+use App\Support\Units\UnitCloner;
+use App\Support\Units\UnitLicense;
+use App\Support\Units\UnitWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
@@ -32,7 +39,12 @@ class UnitController extends DashboardController
             ->with(['images', 'features', 'cancellationPolicy'])
             ->withCount('reviews')
             ->withAvg('reviews', 'rating')
-            ->latest();
+            // Newest first — and id breaks the tie. A building's doors are all
+            // created in one second, so created_at alone left their order to
+            // the database, and a page boundary falling inside a building could
+            // show a door twice or not at all.
+            ->latest()
+            ->orderByDesc('units.id');
 
         if ($status = $request->query('status')) {
             $query->where('approval_status', $status);
@@ -65,12 +77,25 @@ class UnitController extends DashboardController
             $this->toColumns($data),
             [
                 'approval_status' => 'draft',
-                'code'            => self::uniqueCode(),
-                'calendar_token'  => Str::random(60),
+                'code' => UnitWriter::uniqueCode(),
+                'calendar_token' => Str::random(60),
             ],
         ));
 
-        $this->syncAmenities($unit, $data['amenities'] ?? null);
+        // The permit is written after the row exists, by its own writer: the
+        // licence rules run there, so `tourist_facility` with no count is a
+        // named 422 instead of the CHECK violation the insert would raise.
+        if ($permit = UnitWriter::permitChanges($data)) {
+            try {
+                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
+            } catch (LicenseViolation $e) {
+                $unit->delete(); // the draft never existed as far as the partner is concerned
+
+                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+            }
+        }
+
+        UnitWriter::syncAmenities($unit, $data);
         $this->syncPhotos($request, $unit, $data);
 
         return $this->ok(UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])), 201);
@@ -87,7 +112,21 @@ class UnitController extends DashboardController
 
         $data = $this->validateUnit($request, required: false);
         $this->assertFilesOwned($request, $data);
-        $columns = $this->toColumns($data);
+
+        // The permit (number, file, type, count) is one record covering the
+        // whole scope, with a single writer — sending its fields through the
+        // ordinary update would hit the model guard. This is also the ONLY way
+        // a partner classifies a listing from this surface, and without a
+        // classification no building can ever be expanded.
+        if ($permit = UnitWriter::permitChanges($data)) {
+            try {
+                PermitWriter::apply($unit, $permit, (int) $request->user()->id);
+            } catch (LicenseViolation $e) {
+                $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+            }
+        }
+
+        $columns = UnitWriter::toColumns($data, withPermit: false);
 
         // §4 — an approved unit edited → back to pending + hidden from the site.
         $wasApproved = $unit->approval_status === 'approved';
@@ -96,7 +135,7 @@ class UnitController extends DashboardController
         }
 
         $unit->update($columns);
-        $this->syncAmenities($unit, $data['amenities'] ?? null);
+        UnitWriter::syncAmenities($unit, $data);
         $this->syncPhotos($request, $unit, $data);
 
         if ($wasApproved) {
@@ -120,6 +159,243 @@ class UnitController extends DashboardController
         return $this->ok();
     }
 
+    /**
+     * Turn one listing into a building of `count` identical apartments.
+     *
+     * The logic has existed and been tested since 2026-08-30, but only on the
+     * Bearer `/api/v1` surface — this dashboard had no route for it at all, so
+     * a partner with ten apartments could not reach the feature that exists for
+     * them. This is that route, on the surface they actually use.
+     *
+     * `count` is a TOTAL, not an addition. "I have 8" on a building of 5 adds
+     * three; sending 8 again adds nothing. The response says so in its own
+     * fields rather than leaving it to a document: `groupSize` is what the
+     * building now holds, and `added` is what this call created. The difference
+     * between "I have 8" and "add 8" is the difference between a building of
+     * eight and a building of thirteen.
+     *
+     * Only `count` is exposed here. The Bearer route also takes explicit door
+     * numbers and ranges; those stay there until a screen actually asks for
+     * them, rather than shipping three input shapes and discovering which one
+     * partners use afterwards.
+     */
+    public function apartments(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->ownUnit($request, self::rawId($id));
+
+        $data = $this->validated($request, self::apartmentRules(), [
+            'count.required' => 'عدد الوحدات مطلوب',
+            'count.max' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد',
+            'permits.*.number.required' => 'رقم التصريح مطلوب لكل وحدة',
+        ]);
+
+        $count = (int) $data['count'];
+        $permits = $data['permits'] ?? [];
+
+        // Shape, files and licence — the same checks /submit runs, so the two
+        // routes cannot drift into disagreeing about a valid expansion.
+        $this->assertExpansionShape($request, $unit, $data, $permits);
+
+        // The SOURCE must be publishable before it is copied.
+        //
+        // Every apartment inherits the source's fields, so a source missing its
+        // permit produces copies missing it too, and auto-submit then fails on
+        // rows the partner never saw — reporting a validation error about
+        // `tourismLicenseFileId` on apartments that do not exist yet. The
+        // partner reads that as "the system lost my documents".
+        //
+        // Checked here, the answer names the listing they actually have and the
+        // fields it actually lacks. Approval does not guarantee this: the gate
+        // lives in submitErrors() at SUBMIT time, so anything written straight
+        // to the database — a seeder, a migration, a fixture — can be approved
+        // without ever passing it.
+        if ($missing = UnitWriter::submitErrors($unit)) {
+            $this->fail(
+                'SOURCE_UNIT_INCOMPLETE',
+                'أكمل بيانات الوحدة الأصلية قبل إضافة وحدات إليها',
+                422,
+                $missing,
+                ['unit_id' => 'u_'.$unit->id],
+            );
+        }
+
+        /*
+         * Create AND file, in ONE transaction.
+         *
+         * The partner pressed "add apartments" and typed a number — that IS the
+         * declaration. Leaving the new rows as drafts to confirm three more
+         * times hands back part of the work this feature exists to remove, and
+         * doing those submits as separate calls from the browser means a
+         * failure halfway leaves apartments on nobody's screen: not the
+         * partner's, not the reviewer's queue.
+         *
+         * So it is atomic. If any apartment cannot be filed the whole expansion
+         * rolls back, rather than leaving a building half filed and half
+         * invisible.
+         *
+         * WHETHER THE DOCUMENTS TRAVEL is the licence mode's decision, not this
+         * method's: a facility permit is issued to the property and covers
+         * every door, so the clones copy it; a private permit names one unit,
+         * so each new door arrives with its own and nothing is copied.
+         * {@see ApartmentExpansion}
+         */
+        try {
+            $result = DB::transaction(function () use ($unit, $count, $permits, $request) {
+                $result = ApartmentExpansion::run($unit, $count, $permits, (int) $request->user()->id);
+
+                foreach ($result['added'] as $member) {
+                    if ($member->approval_status !== 'draft') {
+                        continue; // already approved, or already waiting
+                    }
+
+                    // The same gate a manual submit passes — a clone that could
+                    // not be filed on its own must not be filed in bulk either.
+                    $this->assertSubmittable($request->user(), $member->fresh());
+
+                    $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
+                }
+
+                return $result;
+            });
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
+
+        $before = $result['before'];
+        $group = $result['group'];
+
+        // Reload so the response reports state AFTER filing rather than the
+        // state the rows were created in — the client reads status, not assumes.
+        if ($groupId = $unit->fresh()->unit_group_id) {
+            $group = DoorName::order(Unit::where('unit_group_id', $groupId)->get());
+        }
+
+        // Outside the transaction: a mail failure must not undo a filing that
+        // actually happened.
+        foreach ($group->where('approval_status', 'pending') as $pending) {
+            $this->notifyAdmins($pending);
+        }
+
+        return $this->ok([
+            'groupId' => $unit->fresh()->unit_group_id,
+            // What the building holds now — not what was asked for. They differ
+            // whenever `count` is at or below the current size.
+            'groupSize' => $group->count(),
+            'added' => max(0, $group->count() - $before),
+            'units' => $group->map(fn (Unit $u) => [
+                'id' => 'u_'.$u->id,
+                'apartmentNo' => $u->apartment_no,
+                'status' => $u->approval_status,
+            ])->values()->all(),
+            'message' => $group->count() > $before
+                ? 'تمت إضافة '.($group->count() - $before).' وحدة وهي قيد المراجعة. مبناك الحالي يستمر في استقبال الحجوزات.'
+                : 'المبنى يحتوي بالفعل على هذا العدد',
+        ]);
+    }
+
+    /**
+     * POST /units/:id/permit-renewals — file a new permit without taking the
+     * listing down.
+     *
+     * The listing keeps selling on the permit in force, and its
+     * `approval_status` is untouched: a renewal is one document being reviewed,
+     * not the listing being reviewed again. {@see PermitRenewal}
+     */
+    public function renewPermit(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->ownUnit($request, self::rawId($id));
+
+        $data = $this->validated($request, [
+            'permitExpiresAt' => ['required', 'date_format:Y-m-d'],
+            // Verbatim, as typed. {@see UnitWriter::rules()}
+            'permitExpiresAtHijri' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'tourismLicenseNumber' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'tourismLicenseFileId' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'permitAddress' => ['sometimes', 'array'],
+            'permitAddress.city' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'permitAddress.district' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'permitAddress.building' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'permitAddress.unitNo' => ['sometimes', 'nullable', 'string', 'max:50'],
+        ], [
+            'permitExpiresAt.required' => 'تاريخ انتهاء التصريح الجديد مطلوب',
+            'permitExpiresAt.date_format' => 'صيغة التاريخ يجب أن تكون YYYY-MM-DD',
+        ]);
+
+        // A file must be the partner's own, stored, and of the licence kind —
+        // the same check every other attachment passes.
+        if (array_key_exists('tourismLicenseFileId', $data) && filled($data['tourismLicenseFileId'])
+            && ($errors = UnitWriter::fileErrors((int) $request->user()->id, ['tourismLicenseFileId' => $data['tourismLicenseFileId']]))) {
+            $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $errors);
+        }
+
+        $fields = array_filter([
+            'expires_at' => $data['permitExpiresAt'],
+            'number' => $data['tourismLicenseNumber'] ?? null,
+            'file' => $data['tourismLicenseFileId'] ?? null,
+            'addr_city' => $data['permitAddress']['city'] ?? null,
+            'addr_district' => $data['permitAddress']['district'] ?? null,
+            'addr_building' => $data['permitAddress']['building'] ?? null,
+            'addr_unit_no' => $data['permitAddress']['unitNo'] ?? null,
+        ], fn ($v) => $v !== null);
+
+        // Outside the filter on purpose: an explicit null is an answer ("typed
+        // in Gregorian"), not an absence, and must not let the old text through.
+        if (array_key_exists('permitExpiresAtHijri', $data)) {
+            $fields['expires_at_hijri'] = $data['permitExpiresAtHijri'];
+        }
+
+        try {
+            $renewal = PermitRenewal::open($unit, $fields, (int) $request->user()->id);
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
+
+        return $this->ok($this->renewalShape($renewal), 201);
+    }
+
+    /** GET /units/:id/permit-renewals — what this listing has filed, newest first. */
+    public function permitRenewals(Request $request, string $id): JsonResponse
+    {
+        $unit = $this->ownUnit($request, self::rawId($id));
+
+        $rows = Permit::query()->forUnit($unit)
+            ->whereIn('status', [Permit::STATUS_PENDING, Permit::STATUS_REJECTED, Permit::STATUS_SUPERSEDED])
+            ->orderByDesc('id')->get();
+
+        return $this->ok($rows->map(fn (Permit $p) => $this->renewalShape($p))->values()->all());
+    }
+
+    /** @return array<string, mixed> */
+    private function renewalShape(Permit $permit): array
+    {
+        return [
+            'id' => (string) $permit->id,
+            'status' => $permit->status,
+            'permitExpiresAt' => $permit->expires_at?->toDateString(),
+            'permitExpiresAtHijri' => $permit->expires_at_hijri,
+            'tourismLicenseNumber' => $permit->number,
+            'tourismLicenseFileId' => $permit->file,
+            'submittedAt' => $permit->created_at?->toIso8601ZuluString(),
+            'reviewedAt' => $permit->reviewed_at?->toIso8601ZuluString(),
+            // The reason is the partner's; the reviewer's notes are internal.
+            'rejectionReason' => $permit->rejection_reason,
+        ];
+    }
+
+    /**
+     * POST /units/:id/submit — file for review, and optionally become a
+     * building on the way in.
+     *
+     * `count` (and `permits` in per-unit mode) may ride along, and then the
+     * expansion and the filing happen in ONE transaction. Without that, a
+     * partner who typed "5 apartments" in the wizard would have the browser
+     * call /apartments and then /submit — and a failure on the second call
+     * leaves them with four pending apartments and a draft they still have to
+     * find and file. One call, or nothing.
+     *
+     * The body is optional and backward compatible: no `count`, or `count` at
+     * or below the current size, is exactly the old behaviour.
+     */
     public function submit(Request $request, string $id): JsonResponse
     {
         $unit = $this->ownUnit($request, self::rawId($id));
@@ -128,120 +404,156 @@ class UnitController extends DashboardController
             $this->fail('UNIT_NOT_SUBMITTABLE', 'لا يمكن تقديم هذه الوحدة', 409);
         }
 
+        $data = $this->validated($request, self::apartmentRules(countOptional: true), [
+            'count.max' => 'الحد الأقصى '.UnitCloner::MAX_GROUP.' وحدة في المبنى الواحد',
+            'permits.*.number.required' => 'رقم التصريح مطلوب لكل وحدة',
+            'permits.*.fileId.required' => 'ملف التصريح مطلوب لكل وحدة',
+        ]);
+
+        $count = isset($data['count']) ? (int) $data['count'] : 1;
+        $permits = $data['permits'] ?? [];
+        $expanding = $count > UnitLicense::groupSize($unit);
+
+        // The source is checked BEFORE anything is cloned, so the answer names
+        // the listing the partner actually has rather than rows that do not
+        // exist yet.
         $this->assertSubmittable($request->user(), $unit);
 
-        $unit->update(['approval_status' => 'pending', 'rejection_reason' => null]);
-        $this->notifyAdmins($unit);
+        if ($expanding) {
+            $this->assertExpansionShape($request, $unit, $data, $permits);
+        }
+
+        $group = DB::transaction(function () use ($unit, $count, $permits, $expanding, $request) {
+            if ($expanding) {
+                try {
+                    $result = ApartmentExpansion::run($unit, $count, $permits, (int) $request->user()->id);
+                } catch (LicenseViolation $e) {
+                    $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+                }
+
+                foreach ($result['added'] as $member) {
+                    $this->assertSubmittable($request->user(), $member->fresh());
+                    $member->update(['approval_status' => 'pending', 'rejection_reason' => null]);
+                }
+            }
+
+            $unit->update(['approval_status' => 'pending', 'rejection_reason' => null]);
+
+            return $unit->fresh()->unit_group_id
+                ? DoorName::order(Unit::where('unit_group_id', $unit->fresh()->unit_group_id)->get())
+                : collect([$unit->fresh()]);
+        });
+
+        // Outside the transaction: a mail failure must not undo a filing that
+        // actually happened.
+        foreach ($group->where('approval_status', 'pending') as $pending) {
+            $this->notifyAdmins($pending);
+        }
 
         return $this->ok([
-            'unit'    => UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])),
+            'unit' => UnitPresenter::make($unit->fresh(['images', 'features', 'cancellationPolicy'])),
+            // Present whenever the listing is a building — the client that sent
+            // a count needs to know what it got, and one that did not is
+            // unaffected by an extra key.
+            'groupId' => $unit->fresh()->unit_group_id,
+            'groupSize' => $group->count(),
+            'units' => $group->map(fn (Unit $u) => [
+                'id' => 'u_'.$u->id,
+                'apartmentNo' => $u->apartment_no,
+                'status' => $u->approval_status,
+            ])->values()->all(),
             'message' => 'سيصلك إشعار خلال 24–48 ساعة',
         ]);
+    }
+
+    /**
+     * The checks an expansion must pass before any row is written — shared by
+     * /apartments and /submit so the two cannot drift into disagreeing about
+     * what a valid expansion looks like.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<int, array<string, mixed>>  $permits
+     */
+    private function assertExpansionShape(Request $request, Unit $unit, array $data, array $permits): void
+    {
+        try {
+            PermitMode::guardShape($unit, array_key_exists('permits', $data));
+        } catch (LicenseViolation $e) {
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
+
+        $fileErrors = [];
+
+        foreach ($permits as $i => $permit) {
+            if ($errors = UnitWriter::fileErrors((int) $request->user()->id, ['tourismLicenseFileId' => $permit['fileId'] ?? null])) {
+                $fileErrors["permits.{$i}.fileId"] = reset($errors);
+            }
+        }
+
+        if ($fileErrors !== []) {
+            $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $fileErrors);
+        }
+
+        if ($nameErrors = ApartmentExpansion::nameErrors($unit, $permits)) {
+            $this->fail('VALIDATION', 'أرقام الشقق غير صالحة', 400, $nameErrors);
+        }
+
+        try {
+            UnitLicense::guardGroupSize($unit, (int) $data['count']);
+        } catch (LicenseViolation $e) {
+            // meta carries the numbers the message talks about — the dashboard
+            // renders "your permit covers 8 units" from the field rather than
+            // by reading the Arabic.
+            $this->fail($e->reason, $e->getMessage(), 422, null, $e->meta);
+        }
     }
 
     /* ---- validation ---- */
 
     private function validateUnit(Request $request, bool $required): array
     {
-        $req = $required ? 'required' : 'sometimes';
-
-        return $this->validated($request, [
-            'name'                 => [$req, 'string', 'min:2', 'max:150'],
-            'type'                 => [$req, 'in:apartment,studio,villa'],
-            'pricePerNight'        => [$req, 'numeric', 'gt:0'],
-            // cleaningFee (abolished 2026-07-18) is deliberately absent: an
-            // old client still sending it is silently ignored, not 422'd.
-            'cancellationPolicy'   => ['sometimes', 'in:flexible,moderate,strict'],
-            'capacity'             => [$req, 'integer', 'min:1'],
-            'bedrooms'             => ['sometimes', 'integer', 'min:0'],
-            // beds (عدد الأسرّة) / bathrooms (دورات المياه) — optional on
-            // draft, required at submit (assertSubmittable). Ranges per the
-            // frontend contract (2026-07-21).
-            'beds'                 => ['sometimes', 'nullable', 'integer', 'min:1', 'max:20'],
-            'bathrooms'            => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10'],
-            'city'                 => [$req, 'string', 'in:'.implode(',', array_keys(Maps::CITIES))],
-            'district'             => ['sometimes', 'nullable', 'string', 'max:150'],
-            'description'          => ['sometimes', 'nullable', 'string', 'max:500'],
-            'amenities'            => ['sometimes', 'array'],
-            'amenities.*'          => ['string', 'in:'.implode(',', array_keys(Maps::AMENITIES))],
-            'checkIn'              => ['sometimes', 'nullable', 'date_format:H:i'],
-            'checkOut'             => ['sometimes', 'nullable', 'date_format:H:i'],
-            'lat'                  => ['sometimes', 'nullable', 'numeric'],
-            'lng'                  => ['sometimes', 'nullable', 'numeric'],
-            'address'              => ['sometimes', 'nullable', 'string', 'max:255'],
-            'tourismLicenseNumber' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'tourismLicenseFileId' => ['sometimes', 'nullable', 'string'],
-            // Photos are attached by referencing fileIds from POST /uploads/presign,
-            // in display order; coverFileId marks the main image.
-            'photoFileIds'         => ['sometimes', 'array', 'max:10'],
-            'photoFileIds.*'       => ['string'],
-            'coverFileId'          => ['sometimes', 'nullable', 'string'],
-        ]);
+        return $this->validated($request, UnitWriter::rules($required));
     }
 
-    /** Map contract keys → DB columns; sanitize free text (§10.5). */
+    /**
+     * The expansion body. `permits` is per-unit mode only, one entry per NEW
+     * apartment; every field inside it is optional except the number, because
+     * a permit with no number is not a permit.
+     *
+     * @return array<string, mixed>
+     */
+    private static function apartmentRules(bool $countOptional = false): array
+    {
+        return [
+            'count' => [$countOptional ? 'sometimes' : 'required', 'integer', 'min:1', 'max:'.UnitCloner::MAX_GROUP],
+            'permits' => ['sometimes', 'array', 'max:'.UnitCloner::MAX_GROUP],
+            'permits.*.apartmentNo' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'permits.*.number' => ['required', 'string', 'max:50'],
+            // Required, not optional: nothing is copied in per-unit mode, so an
+            // apartment arriving without its own file cannot pass the submit
+            // gate — and failing there would roll the whole expansion back
+            // with an error about a row the partner never saw.
+            'permits.*.fileId' => ['required', 'string', 'max:64'],
+            'permits.*.expiresAt' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'permits.*.expiresAtHijri' => ['sometimes', 'nullable', 'string', 'max:50', 'prohibited_if:permits.*.expiresAt,null'],
+            'permits.*.address' => ['sometimes', 'array'],
+            'permits.*.address.city' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'permits.*.address.district' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'permits.*.address.building' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'permits.*.address.unitNo' => ['sometimes', 'nullable', 'string', 'max:50'],
+        ];
+    }
+
+    /** @param array<string, mixed> $data */
     private function toColumns(array $data): array
     {
-        $map = [
-            'name'                 => fn ($v) => ['unit_name' => strip_tags($v)],
-            'type'                 => fn ($v) => ['unit_type' => $v],
-            'pricePerNight'        => fn ($v) => ['price' => $v],
-            // Preset slug → FK. Only affects FUTURE bookings: paid bookings
-            // carry a frozen snapshot the engine reads exclusively (FR-036).
-            'cancellationPolicy'   => fn ($v) => [
-                'cancellation_policy_id' => \App\Models\CancellationPolicy::where('key', $v)->value('id'),
-            ],
-            'capacity'             => fn ($v) => ['capacity' => $v],
-            'bedrooms'             => fn ($v) => ['bedrooms' => $v],
-            'beds'                 => fn ($v) => ['beds' => $v],
-            'bathrooms'            => fn ($v) => ['bathrooms' => $v],
-            'city'                 => fn ($v) => ['city' => Maps::cityToArabic($v) ?? $v],
-            'district'             => fn ($v) => ['district' => $v === null ? null : strip_tags($v)],
-            'description'          => fn ($v) => ['description' => $v === null ? null : strip_tags($v)],
-            'checkIn'              => fn ($v) => ['checkin_time' => $v],
-            'checkOut'             => fn ($v) => ['checkout_time' => $v],
-            'lat'                  => fn ($v) => ['lat' => $v],
-            'lng'                  => fn ($v) => ['lng' => $v],
-            'address'              => fn ($v) => ['address' => $v === null ? null : strip_tags($v)],
-            'tourismLicenseNumber' => fn ($v) => ['tourism_permit_no' => $v],
-            'tourismLicenseFileId' => fn ($v) => ['tourism_permit_file' => $v],
-        ];
-
-        $columns = [];
-        foreach ($map as $key => $fn) {
-            if (array_key_exists($key, $data)) {
-                $columns = array_merge($columns, $fn($data[$key]));
-            }
-        }
-
-        return $columns;
+        return UnitWriter::toColumns($data);
     }
 
     /** Full submit-time validation (§4). Throws VALIDATION with field errors. */
     private function assertSubmittable(User $user, Unit $unit): void
     {
-        $fields = [];
-
-        if (Str::length((string) $unit->unit_name) < 2)                 $fields['name'] = 'الاسم مطلوب';
-        if (! in_array($unit->unit_type, Unit::SUPPORTED_TYPES, true))  $fields['type'] = 'نوع الوحدة غير صالح';
-        if ((float) $unit->price <= 0)                                  $fields['pricePerNight'] = 'السعر يجب أن يكون أكبر من صفر';
-        if ((int) $unit->capacity < 1)                                  $fields['capacity'] = 'السعة مطلوبة';
-        if ((int) $unit->beds < 1)                                      $fields['beds'] = 'عدد السراير مطلوب';
-        if ((int) $unit->bathrooms < 1)                                 $fields['bathrooms'] = 'عدد دورات المياه مطلوب';
-        if (! Maps::cityToSlug($unit->city) || ! in_array(Maps::cityToSlug($unit->city), array_keys(Maps::CITIES), true)) {
-            $fields['city'] = 'المدينة يجب أن تكون ضمن المدن المعتمدة';
-        }
-        $descLen = Str::length((string) $unit->description);
-        if ($descLen < 10 || $descLen > 500)                           $fields['description'] = 'الوصف يجب أن يكون بين 10 و 500 حرف';
-        if (blank($unit->address))                                     $fields['address'] = 'العنوان مطلوب';
-        if ($unit->lat === null || $unit->lng === null || ! Maps::insideSaudi((float) $unit->lat, (float) $unit->lng)) {
-            $fields['location'] = 'الموقع يجب أن يكون داخل حدود المملكة';
-        }
-        if (blank($unit->tourism_permit_no))                           $fields['tourismLicenseNumber'] = 'رقم رخصة السياحة مطلوب';
-        if (blank($unit->tourism_permit_file))                         $fields['tourismLicenseFileId'] = 'ملف الرخصة مطلوب';
-        if ($unit->images()->count() < 1)                              $fields['photos'] = 'أضف صورة واحدة على الأقل';
-
-        if ($fields) {
+        if ($fields = UnitWriter::submitErrors($unit)) {
             $this->fail('VALIDATION', 'بيانات غير مكتملة', 400, $fields);
         }
 
@@ -255,92 +567,24 @@ class UnitController extends DashboardController
     /* ---- files (§9.1 presign flow → unit) ---- */
 
     /**
-     * Every referenced upload must be a stored upload owned by THIS partner
-     * (§0.2), of the kind matching where it's used. Validated up-front so a bad
-     * fileId fails before any mutation — never leaves a half-attached unit.
+     * A bad fileId fails before any mutation — never leaves a half-attached unit.
+     *
+     * @param  array<string, mixed>  $data
      */
     private function assertFilesOwned(Request $request, array $data): void
     {
-        $errors = [];
-
-        if (! empty($data['tourismLicenseFileId'])
-            && ! $this->ownedUpload($request, $data['tourismLicenseFileId'], 'license_pdf')) {
-            $errors['tourismLicenseFileId'] = 'ملف الرخصة غير موجود';
-        }
-
-        foreach ($data['photoFileIds'] ?? [] as $i => $fileId) {
-            if (! $this->ownedUpload($request, $fileId, 'unit_photo')) {
-                $errors["photoFileIds.$i"] = 'الصورة غير موجودة';
-            }
-        }
-
-        if (! empty($data['coverFileId'])
-            && ! in_array($data['coverFileId'], $data['photoFileIds'] ?? [], true)) {
-            $errors['coverFileId'] = 'صورة الغلاف يجب أن تكون ضمن الصور المرفوعة';
-        }
-
-        if ($errors) {
+        if ($errors = UnitWriter::fileErrors((int) $request->user()->id, $data)) {
             $this->fail('VALIDATION', 'ملفات غير صالحة', 400, $errors);
         }
     }
 
-    private function ownedUpload(Request $request, string $fileId, string $kind): ?DashboardUpload
-    {
-        return DashboardUpload::whereKey($fileId)
-            ->where('user_id', $request->user()->id)
-            ->where('kind', $kind)
-            ->where('status', 'stored')
-            ->first();
-    }
-
-    /**
-     * Replace the unit's gallery from the ordered photoFileIds (§1 answer:
-     * photoFileIds[] + coverFileId). Absent key → gallery untouched; present
-     * (even empty) → authoritative replace. coverFileId marks the main image,
-     * else the first photo. Files are already stored (presign+PUT); we just
-     * link them as UnitImage rows in order.
-     */
+    /** @param array<string, mixed> $data */
     private function syncPhotos(Request $request, Unit $unit, array $data): void
     {
-        if (! array_key_exists('photoFileIds', $data)) {
-            return;
-        }
-
-        $cover = $data['coverFileId'] ?? ($data['photoFileIds'][0] ?? null);
-
-        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $unit, $data, $cover) {
-            $unit->images()->delete();
-
-            foreach ($data['photoFileIds'] as $fileId) {
-                $upload = $this->ownedUpload($request, $fileId, 'unit_photo');
-                if (! $upload) {
-                    continue; // already validated in assertFilesOwned; defensive
-                }
-
-                $unit->images()->create([
-                    'file_id' => $upload->id,
-                    'path'    => $upload->path,
-                    'is_main' => $fileId === $cover,
-                ]);
-            }
-        });
+        UnitWriter::syncPhotos((int) $request->user()->id, $unit, $data);
     }
 
     /* ---- helpers ---- */
-
-    private function syncAmenities(Unit $unit, ?array $keys): void
-    {
-        if ($keys === null) {
-            return;
-        }
-
-        $ids = collect($keys)
-            ->map(fn ($k) => Maps::amenityToArabic($k))
-            ->filter()
-            ->map(fn ($name) => Feature::firstOrCreate(['name' => $name])->id);
-
-        $unit->features()->sync($ids);
-    }
 
     private function notifyAdmins(Unit $unit): void
     {
@@ -352,15 +596,6 @@ class UnitController extends DashboardController
         } catch (\Throwable $e) {
             report($e);
         }
-    }
-
-    private static function uniqueCode(): string
-    {
-        do {
-            $code = 'MRN'.strtoupper(Str::random(5));
-        } while (Unit::where('code', $code)->exists());
-
-        return $code;
     }
 
     /** Accept both "u_1" (contract) and raw "1". */

@@ -112,6 +112,31 @@
     </Transition>
 
     <!-- Delete confirm -->
+      <!-- What is missing, listed. The server names the fields; this screen
+           only translates them into the labels the form uses. -->
+      <div v-if="incompleteUnit" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="incompleteUnit = null">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6" dir="rtl">
+          <h3 class="font-title-sm text-title-sm text-on-surface mb-1">الوحدة غير مكتملة</h3>
+          <p class="text-body-sm text-on-surface-variant mb-4">
+            أكمل البيانات دي في <strong>{{ incompleteUnit.name }}</strong> قبل الإرسال للمراجعة:
+          </p>
+          <ul class="space-y-2 mb-5">
+            <li v-for="(msg, i) in incompleteFields" :key="i" class="flex items-start gap-2 text-body-sm text-on-surface">
+              <span class="material-symbols-outlined text-[16px] text-error mt-0.5">error</span>
+              <span>{{ msg }}</span>
+            </li>
+          </ul>
+          <div class="flex gap-2">
+            <RouterLink :to="{ name: 'partner-unit-edit', params: { id: incompleteUnit.id } }"
+                        class="flex-1 py-3 bg-primary text-on-primary rounded-xl font-bold text-center hover:bg-primary-container transition-colors">
+              تعديل الوحدة
+            </RouterLink>
+            <button class="flex-1 py-3 border border-outline-variant rounded-xl font-bold text-on-surface hover:bg-surface-container transition-colors"
+                    @click="incompleteUnit = null">إغلاق</button>
+          </div>
+        </div>
+      </div>
+
     <Teleport to="body">
       <div v-if="deleteTarget" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl border border-outline-variant shadow-xl w-full max-w-sm p-6 text-center" dir="rtl">
@@ -192,6 +217,9 @@ async function load() {
   }
 }
 
+const incompleteUnit = ref(null)
+const incompleteFields = ref([])
+
 async function submitUnit(unit) {
   busyId.value = unit.id
   try {
@@ -199,7 +227,17 @@ async function submitUnit(unit) {
     unit.approval_status = 'pending'
     showToast('تم تقديم الوحدة للموافقة')
   } catch (e) {
-    showToast(e.response?.data?.message || 'تعذّر التقديم', 'error')
+    const res = e.response?.data
+    // UNIT_INCOMPLETE carries a field→message map. Showing only the generic
+    // sentence would tell a partner they are blocked without telling them by
+    // what — the difference between a gate and a wall.
+    if (res?.code === 'UNIT_INCOMPLETE' && res.errors) {
+      incompleteUnit.value = unit
+      incompleteFields.value = Object.entries(res.errors)
+        .map(([field, msgs]) => (Array.isArray(msgs) ? msgs[0] : String(msgs)))
+    } else {
+      showToast(res?.message || 'تعذّر التقديم', 'error')
+    }
   } finally {
     busyId.value = null
   }

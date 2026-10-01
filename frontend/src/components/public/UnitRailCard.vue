@@ -32,6 +32,16 @@
     <div class="p-4">
       <h3 class="font-title-sm text-[15px] text-on-surface mb-2 leading-snug line-clamp-2 h-[44px]">{{ unit.name }}</h3>
 
+      <!-- Scarcity, not inventory.
+           A count on every card is noise, and a HIGH one reads as "nobody wants
+           this" — so the badge stays silent above SCARCE_AT and speaks only
+           when the number is genuinely small. A standalone listing reports 1
+           and says nothing, because "1 متاحة" is true of the whole catalogue. -->
+      <p v-if="scarce" class="flex items-center gap-1 text-[12px] font-bold text-error mb-2">
+        <span class="material-symbols-outlined text-[15px]">local_fire_department</span>
+        {{ scarceLabel }}
+      </p>
+
       <div class="flex items-center flex-wrap gap-x-3 gap-y-1.5 text-on-surface-variant text-[12px] mb-3 pb-3 border-b border-outline-variant/50">
         <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">bed</span>{{ unit.bedrooms }} غرف</span>
         <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">group</span>{{ unit.capacity }} ضيوف</span>
@@ -53,6 +63,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useScarcity } from '@/composables/useScarcity'
 
 const props = defineProps({
   unit: { type: Object, required: true },
@@ -62,6 +73,8 @@ const props = defineProps({
   fluid: { type: Boolean, default: false },
 })
 defineEmits(['favorite'])
+
+const { scarce, scarceLabel } = useScarcity(() => props.unit)
 
 const image = computed(() => {
   const imgs = props.unit.images || []

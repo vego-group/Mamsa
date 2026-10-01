@@ -20,7 +20,7 @@ payloads and flow were **re-run end-to-end on staging 2026-07-16** (individual +
 | | Production | Staging (test bench) |
 |---|---|---|
 | API base | `https://api.mamsaa.com/api/v1` | `https://staging.mamsaa.com/api/v1` |
-| OTP delivery | Real SMS (FGC) | **Fixed code `111222`** + `debug_otp` field in the response |
+| OTP delivery | Real SMS (FGC) | **Fixed code `<staging-otp>`** + `debug_otp` field in the response |
 | Payments | Live Moyasar | Moyasar test keys |
 
 **Response envelope** — every endpoint returns:
@@ -138,7 +138,7 @@ Same two steps for both; `intent` + `needs_profile` do the branching.
 
 ```
 POST /auth/verify-otp                         (throttle: 10/min per IP)
-{ "phone": "0512345678", "code": "111222", "device": "web" }
+{ "phone": "0512345678", "code": "<staging-otp>", "device": "web" }
 ```
 
 Success `200`:
@@ -206,7 +206,7 @@ Individual owner — **`national_id` required, no `cr_number`**:
   "type": "individual",
   "name": "محمد أشرف",
   "phone": "0512345678",
-  "code": "111222",
+  "code": "<staging-otp>",
   "email": "partner@example.com",
   "national_id": "1012345678",
   "device": "partner-web"
@@ -220,7 +220,7 @@ Company — **`cr_number` required, no `national_id`**:
   "type": "company",
   "name": "شركة الضيافة",
   "phone": "0512345678",
-  "code": "111222",
+  "code": "<staging-otp>",
   "email": "info@company.sa",
   "cr_number": "4030123456",
   "device": "partner-web"
@@ -356,5 +356,5 @@ expose the refresh token to client JS.
 ### Staging test recipe (end-to-end, no real SMS)
 
 1. `POST https://staging.mamsaa.com/api/v1/auth/request-otp` with any `05…` number.
-2. Use code **`111222`** (also echoed in `data.debug_otp`).
+2. Use code **`<staging-otp>`** (also echoed in `data.debug_otp`).
 3. Partner email codes on staging arrive via the configured mailer — or check with the backend team if you need a fixed email code too.

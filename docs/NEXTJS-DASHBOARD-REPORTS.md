@@ -19,7 +19,7 @@ Powers the dashboard home cards + the 12-month spark charts. **No query params.*
 {
   "unitsCount": 4,            // partner's units EXCLUDING drafts (approved+pending+rejected)
   "bookingsCount": 12,        // confirmed + completed (cancelled excluded)
-  "totalRevenue": 84200.00,   // SAR, PARTNER SHARE (total − 2% commission)
+  "totalRevenue": 84200.00,   // SAR, PARTNER SHARE (total − commission)
   "bookingsByMonth": [ { "month": "2025-08", "count": 0 }, /* …exactly 12, oldest→newest */ ],
   "revenueByMonth":  [ { "month": "2025-08", "amount": 0 }, /* …exactly 12, PARTNER SHARE */ ],
   "thisMonthRevenue": 12400.00, // SAR partner share, current calendar month
@@ -28,7 +28,7 @@ Powers the dashboard home cards + the 12-month spark charts. **No query params.*
 }
 ```
 
-- **All Overview money is partner share** (after Mamsa's 2%), rounded to 2 decimals (SAR, never halalas).
+- **All Overview money is partner share** (after Mamsa's commission), rounded to 2 decimals (SAR, never halalas).
 - The two series are **always exactly 12 entries, oldest → newest, zero-filled**. Compute deltas,
   MoM %, and sparklines **on the client** — the API deliberately doesn't send them.
 - `occupancyRate` counts booked nights (confirmed+completed) across **approved** units only, clamped
@@ -60,7 +60,7 @@ units automatically; there is no unit-filter param.
 {
   "grossRevenue": 88500.00,  // SUM of booking totals (confirmed+completed) in range — the FULL total
   "bookingsCount": 14,
-  "commission": 1770.00,     // Mamsa 2% (frozen commission_amount, or 2% of total for legacy rows)
+  "commission": 1770.00,     // Mamsa's cut — the frozen commission_amount per booking
   "netProfit": 86730.00,     // grossRevenue − commission (a real SAR amount, NOT a count)
   "revenueByMonth":  [ { "month": "2026-05", "amount": 24498.00 } ], // GROSS; only months WITH data, ascending
   "bookingsByMonth": [ { "month": "2026-05", "count": 6 } ],         // only months WITH data
@@ -71,7 +71,7 @@ units automatically; there is no unit-filter param.
 ```
 
 > **Two revenue bases — don't reconcile them 1:1:**
-> - **Overview** `totalRevenue` / `revenueByMonth` = **partner share** (after the 2% commission).
+> - **Overview** `totalRevenue` / `revenueByMonth` = **partner share** (after commission).
 > - **Reports** `grossRevenue` / `revenueByMonth` / `perUnit.revenue` = **full total** (gross). The
 >   reports screen breaks commission out as its own line, so it starts from gross:
 >   `netProfit = grossRevenue − commission`.
@@ -91,9 +91,15 @@ export const getReportSummary = (from: string, to: string) =>
     .then(r => r.json()) as Promise<ReportSummary>;
 ```
 
-> ℹ️ **Commission is never blank on reports.** Legacy bookings created before the 2% feature shipped
-> have no stored `commission_amount`, but the summary falls back to `2% × total` for them — so
-> `commission` reflects the real 2% for every row and only reads `0` when `grossRevenue` itself is `0`.
+> ℹ️ **Commission is never blank on reports.** Bookings created before the frozen columns shipped
+> have no stored `commission_amount`, so the summary imputes 2% of their subtotal — the rate that was
+> live when they were taken. Every other row uses its own frozen amount, so a report stays correct
+> across a rate change instead of restating history. `commission` only reads `0` when `grossRevenue`
+> itself is `0`.
+
+> ⚠️ **The rate is not a constant.** It was 2% until 2026-08-27 and is **10%** now. Never derive
+> commission client-side by multiplying a total — read the `commission` the API returns, which is the
+> amount frozen on each booking.
 > (This changed from an earlier version of this doc, which incorrectly warned commission could read 0
 > on old data — the fallback makes that not happen.)
 

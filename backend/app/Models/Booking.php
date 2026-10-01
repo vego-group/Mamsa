@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\Pricing;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,9 +11,13 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Booking extends Model
 {
-    public const STATUS_PENDING   = 'pending';
+    /** Unpaid booking awaiting payment (renamed from 'pending' 2026-08-13). */
+    public const STATUS_PENDING = 'pending_payment';
+
     public const STATUS_CONFIRMED = 'confirmed';
+
     public const STATUS_COMPLETED = 'completed';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     /**
@@ -21,10 +27,28 @@ class Booking extends Model
      */
     public const REVENUE_STATUSES = [self::STATUS_CONFIRMED, self::STATUS_COMPLETED];
 
-    /** Mamsa's commission = 2% of the rental subtotal (frozen per booking). */
-    public const COMMISSION_RATE = 0.02;
+    /**
+     * The rate to IMPUTE for bookings that predate the frozen columns — not the
+     * rate charged today.
+     *
+     * Those rows were taken when the commission was 2%, so reconstructing them
+     * at the current rate would restate history: a report would claim Mamsa
+     * earned five times what it actually invoiced, and a partner's past
+     * earnings would shrink retroactively.
+     *
+     * The live rate lives in config('booking.commission_rate') and is read only
+     * by App\Support\Pricing, at the moment a booking is created. The two are
+     * separate on purpose and must not be merged.
+     *
+     * As of 2026-08-28 this is used ONLY by the `bookings:freeze-commission`
+     * repair command and the migration that backfilled the last implicit rows —
+     * both places where reconstructing the historical rate is the intent. No
+     * read path imputes any more: a zero commission is now read as zero,
+     * because the write side can no longer produce an unfrozen row.
+     */
+    public const LEGACY_COMMISSION_RATE = 0.02;
 
-    /** @param \Illuminate\Database\Eloquent\Builder $q */
+    /** @param Builder $q */
     public function scopeRevenue($q)
     {
         // Qualify the column — this scope is used in queries joined to `units`,
@@ -33,18 +57,62 @@ class Booking extends Model
     }
 
     /**
-     * SQL for a booking's effective commission: the frozen amount when it was
-     * captured, otherwise 2% of the subtotal (historical bookings predate the
-     * frozen column, so `SUM(commission_amount)` alone reads ~0).
+     * SQL for a booking's commission: simply the frozen amount.
+     *
+     * This used to impute the legacy rate whenever `commission_amount` was not
+     * greater than zero, and that test could not tell a booking with a
+     * LEGITIMATE zero commission — a promotional partner, a Mamsa-owned unit's
+     * counterpart — from one that was never frozen. It would have replaced a
+     * correct zero with 2% of the subtotal: a wrong number that looks right,
+     * which is worse than the silent zero it was guarding against.
+     *
+     * `IS NOT NULL` is not the fix either: both columns are NOT NULL, so that
+     * test is always true and the fallback becomes unreachable — the same
+     * outcome by a longer route.
+     *
+     * The ambiguity is not resolvable at read time, so it is removed at write
+     * time instead: the column defaults are dropped (see the 2026_08_28
+     * migration), so a row cannot be created without an explicit rate and
+     * amount, and an unfrozen row can no longer exist. Every row here is frozen
+     * by construction.
      */
     public static function commissionExpr(string $table = 'bookings'): string
     {
-        return "(CASE WHEN {$table}.commission_amount > 0 THEN {$table}.commission_amount"
-            ." ELSE ROUND(COALESCE({$table}.subtotal, 0) * ".self::COMMISSION_RATE.", 2) END)";
+        // No COALESCE: the column is NOT NULL and no caller LEFT JOINs bookings,
+        // so wrapping it would only suggest a nullability that does not exist.
+        return "{$table}.commission_amount";
+    }
+
+    /**
+     * Split a refund amount using THIS booking's frozen commission rate.
+     *
+     * The rate comes off the row, never from config. A booking taken when the
+     * commission was 2% must have its refund split at 2% even though the live
+     * rate is 10% — otherwise the partner is debited a share that was never
+     * his, and Mamsa hands back commission it never collected. That is the
+     * same reasoning that keeps {@see LEGACY_COMMISSION_RATE} separate from
+     * config('booking.commission_rate'), applied to the refund path.
+     *
+     * No imputation and no fallback: `commission_rate` is NOT NULL with the
+     * default dropped (2026_08_28 migration), so every row carries an explicit
+     * rate and a zero here means a genuine zero. A Mamsa-owned unit froze at
+     * 1.0, so its refund yields partner_share 0.00 and must post no ledger
+     * entry at all.
+     *
+     * @param  float  $refundGross  GROSS, VAT-inclusive amount being returned
+     * @return array{gross:float, net_base:float, vat:float, vat_rate:float,
+     *   commission_rate:float, commission_amount:float, partner_share:float}
+     */
+    public function splitRefund(float $refundGross): array
+    {
+        return Pricing::split($refundGross, (float) $this->commission_rate);
     }
 
     protected $fillable = [
         'unit_id',
+        'units_count',
+        'hold_expires_at',
+        'idempotency_key',
         'user_id',
         'start_date',
         'end_date',
@@ -59,6 +127,8 @@ class Booking extends Model
         'taxes',
         'commission_rate',
         'commission_amount',
+        'partner_share',
+        'payout_id',
         'total_amount',
         'status',
         'cancellation_snapshot',
@@ -69,20 +139,22 @@ class Booking extends Model
     ];
 
     protected $casts = [
-        'start_date'            => 'date',
-        'end_date'              => 'date',
-        'nightly_rate'          => 'float',
-        'subtotal'              => 'float',
-        'service_fee'           => 'float',
-        'service_fee_percent'   => 'float',
-        'tax_percent'           => 'float',
-        'cleaning_fee'          => 'float',
-        'taxes'                 => 'float',
-        'commission_rate'       => 'float',
-        'commission_amount'     => 'float',
-        'total_amount'          => 'float',
+        'hold_expires_at' => 'datetime',
+        'start_date' => 'date',
+        'end_date' => 'date',
+        'nightly_rate' => 'float',
+        'subtotal' => 'float',
+        'service_fee' => 'float',
+        'service_fee_percent' => 'float',
+        'tax_percent' => 'float',
+        'cleaning_fee' => 'float',
+        'taxes' => 'float',
+        'commission_rate' => 'float',
+        'commission_amount' => 'float',
+        'partner_share' => 'float',
+        'total_amount' => 'float',
         'cancellation_snapshot' => 'array',
-        'cancelled_at'          => 'datetime',
+        'cancelled_at' => 'datetime',
     ];
 
     public function unit(): BelongsTo
@@ -108,6 +180,12 @@ class Booking extends Model
     public function refunds(): HasMany
     {
         return $this->hasMany(Refund::class);
+    }
+
+    /** At most one complaint per booking in v1 (unique index on booking_id). */
+    public function complaint(): HasOne
+    {
+        return $this->hasOne(BookingComplaint::class);
     }
 
     public function getNightsAttribute(): int

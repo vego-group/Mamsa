@@ -1,0 +1,179 @@
+# Runbook — documents step two to production
+
+**Executed:** 2026-09-19, 15:40 UTC, in an open session. Step three followed
+in the same session. Both gates held: the inventory number (7) was sent and
+approved before anything moved; step zero passed before the seven verifications.
+
+**Two rules this runbook now carries permanently, from how it was learned:**
+
+1. **Windows are set by "first session", never by an hour.** The agent runs
+   when a session is open and someone says go — it has no clock. Two 06:00 slots
+   died of that, not of neglect. A time-of-day window is structurally impossible.
+2. **Step zero stays, on every deploy that emits URLs to a route.** On its first
+   real run it would have caught a runbook that said the route was on production
+   when it was not — every document link a 404, on a Saturday morning. Verify
+   the route exists BEFORE the code that mints links to it goes live.
+
+---
+
+**Window (historical):** **2026-09-19 (Saturday), 06:00 Asia/Riyadh — did not run.**
+*(The 2026-09-13 slot did not run and nobody noticed for five days — the gate
+was an inventory number that never arrived and was never chased.)*
+
+**Two commitments for this window, both hard:**
+1. **The production inventory number is in the owner's hands BEFORE anything
+   moves.** If it is not there by 06:15, the owner will treat the window as not
+   having run. Send it, then wait for the acknowledgement.
+2. **Step zero is an abort, not a hurdle.** If `route:list --name=documents`
+   does not show the route after the routes file is written, stop, restore the
+   snapshot, and report. Do not work around it inside the window.
+
+**Consoles:** unchanged since the 13th — admin `97716ab`, partner `7561eb0`,
+both pushed. Nothing on their side needs redoing.
+**Duration:** ~30 min
+**Precondition:** both consoles confirmed green on staging
+
+Step two flips two things in one deploy: compliance documents are written to the
+vault instead of the public disk, and every document URL becomes a signed link
+through `/documents/{uploadId}`. They cannot be separated — writes alone leave
+the review screen pointing at a path the file is no longer on; reads alone sign
+links to documents still sitting in the open.
+
+Unit photos are not affected and must stay on the public disk.
+
+---
+
+## 0a. Riders — named, because they go whether or not they are wanted
+
+`UnitResource.php` carries **one change beyond documents**: the Mamsa-owned
+host fix (`0005792`). A guest viewing a platform-owned unit currently sees the
+creating admin's personal name as host, typed `individual`, unverified; after
+this deploy they see `ممسى`, `type: "mamsa"`, verified. Confirmed live on
+production unit #34 on 2026-09-16. It is correct and already known to the
+frontend, but it arrives under a deploy about something else. The guest app has
+been told `owner.type` may now be `"mamsa"`.
+
+Everything else in the set is documents-only, or already on production
+(licence fields in `UnitResource` and `AdminPanel\UnitPresenter` — verified
+present 2026-09-18).
+
+**Not in this deploy, deliberately:** the admin-console licence writer fix and
+the reports commission split (both staged 2026-09-18). Separate features;
+separate approval.
+
+## 0b. Pre-staged on 2026-09-18
+
+The route insertion was rehearsed against a fresh copy of production's
+`routes/dashboard.php`: block inserted at line 39, immediately before the
+`auth:dashboard` group at line 42, `php -l` clean. **Re-fetch the production
+file at 06:00 and re-insert — do not deploy the 18/09 staged copy**, in case the
+file changed in between.
+
+## 0. Files in this deploy
+
+```
+config/documents.php
+app/Support/Documents/DocumentStorage.php
+app/Http/Controllers/DocumentController.php
+app/Http/Controllers/Dashboard/UploadController.php              writer
+app/Http/Controllers/Api/V1/Auth/PartnerAuthController.php       writer
+app/Http/Controllers/Api/V1/Partner/UnitDocumentController.php   writer
+app/Http/Resources/UnitResource.php                              reader
+app/Http/Controllers/AdminPanel/PartnersController.php           reader
+app/Http/Controllers/Dashboard/ProfileController.php             reader
+app/Http/Controllers/Api/V1/Admin/RequestController.php          reader
+app/Support/AdminPanel/UnitPresenter.php                         reader
+app/Models/DashboardUpload.php                                   signedUrl()
+routes/dashboard.php  (ONE route inserted by hand — see below, never copied)
+```
+
+**CORRECTION 2026-09-18.** An earlier version of this runbook said the
+`/documents` route "went to production with step one". **That was false** —
+step one was deployed to staging only. Verified on production 2026-09-18:
+`DocumentController.php` absent, `routes/dashboard.php` has no `documents/`
+route. Had this runbook been followed as written, every document URL would have
+pointed at a 404.
+
+So the route is PART of this deploy. Do NOT copy `routes/dashboard.php`
+wholesale — the branch version carries complaints routes production has no
+controllers for. Insert this block into production's own copy, INSIDE nothing
+(it is unauthenticated by design; the controller checks both guards itself):
+
+```php
+Route::get('documents/{upload}', \App\Http\Controllers\DocumentController::class)
+    ->middleware('signed')->name('documents.show');
+```
+
+placed before `Route::middleware(['auth:dashboard', ...])->group(`, beside the
+complaint-attachment route position. Then `route:cache` and confirm with
+`route:list --name=documents`.
+
+---
+
+## 1. Snapshot
+
+Copy the twelve files to `~/backup-docstep2-<stamp>/`, plus `route:list --json`
+and an md5 manifest. Record the path in `~/.last-docstep2`.
+
+## 2. Inventory BEFORE — this is the number to send
+
+Count public files under `config('documents.sensitive_dirs')`.
+
+**The count at deploy time is the number that moves at step three** — not the
+six counted on staging, not the five counted on 11/09. Send it before
+proceeding.
+
+## 3. Deploy
+
+`tar` the twelve files, then `config:clear && config:cache`,
+`route:clear && route:cache`, and `php -l` each file.
+
+## 4. Verify — in this order
+
+0. **`route:list --name=documents` shows the route** — if it does not, stop;
+   every signed URL about to be emitted points at nothing.
+1. `/api/v1/units` 200 · `/me` 401 · `/admin/me` 401 · `/units` 401
+2. An existing document's admin URL is now `/documents/…?expires=…&signature=…`
+3. That link **anonymous → 403** (the session check is live)
+4. The old `/storage/dashboard/license_pdf/<same file>.pdf` **still 200** —
+   unmigrated documents keep working; step three moves them
+5. A document uploaded now lands in the vault and **not** on the public disk
+6. A photo uploaded now lands on the public disk and **not** in the vault
+7. Inventory AFTER — unchanged apart from anything just uploaded
+
+## 5. Rollback — and its one hazard
+
+Reverting the twelve files sends reads back to `/storage`. **Any document
+uploaded between deploy and rollback is in the vault, so it becomes
+unreachable.** Rollback therefore has two parts, in this order:
+
+```
+a. Move vault files written during the window back to the public disk
+b. Restore the twelve files from the snapshot, then config:cache + route:cache
+```
+
+The reverse move was rehearsed on staging on 12/09 — copy, verify size, then
+delete — rather than improvised at 06:00:
+
+```php
+$root = 'secured-documents/';
+foreach (Storage::disk('local')->allFiles($root.'dashboard') as $f) {
+    $public = substr($f, strlen($root));
+    Storage::disk('public')->put($public, Storage::disk('local')->get($f));
+    if (Storage::disk('public')->size($public) === Storage::disk('local')->size($f)) {
+        Storage::disk('local')->delete($f);
+    }
+}
+```
+
+> Scope it to files newer than the deploy timestamp. **The nine moved on 11/09
+> are supposed to be in the vault and must NOT come back out.**
+
+**Rollback stops being clean once real documents are in the vault**, which is
+why verification step 5 runs immediately and why the window is 06:00.
+
+## 6. After
+
+- Tell the consoles it is live.
+- Step three stays unscheduled. Its count is computed at the time and approved
+  before anything moves.

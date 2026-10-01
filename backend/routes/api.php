@@ -2,10 +2,12 @@
 
 use App\Http\Controllers\Api\V1\Auth\AdminAuthController;
 use App\Http\Controllers\Api\V1\CalendarController;
+use App\Http\Controllers\Api\V1\ComplaintController;
 use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\OtpAuthController;
 use App\Http\Controllers\Api\V1\Auth\PartnerAuthController;
 use App\Http\Controllers\Api\V1\BookingController;
+use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OfferController;
@@ -23,6 +25,16 @@ use App\Http\Controllers\Api\V1\Admin;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+
+    /*
+     * Runtime flags. Public and unauthenticated — these are switches, not
+     * secrets, and the apps bake them in at build time today, which is how a
+     * server-side flip does nothing until three deploys happen.
+     *
+     * At the top of the v1 group and OUTSIDE `units`: inside it the path
+     * became /units/config, which the `{unit}` route swallowed.
+     */
+    Route::get('config', \App\Http\Controllers\RuntimeConfigController::class)->name('api.config');
 
     /* ===================== AUTH (public) ===================== */
     Route::prefix('auth')->name('api.auth.')->group(function () {
@@ -48,15 +60,24 @@ Route::prefix('v1')->group(function () {
     });
 
     /* ===================== PUBLIC ===================== */
+    // No throttle here on purpose: the guest app renders these server-side, so a
+    // per-IP limiter would throttle every visitor through a few Next.js server IPs.
+    // Exempt those calls FIRST (not by their header — it is forgeable), then enable.
+    // Full note: docs/ops/BACKLOG-deferred.md item 1.
     Route::prefix('units')->name('api.units.')->group(function () {
         Route::get('/', [UnitController::class, 'index'])->name('index');
         Route::get('popular', [UnitController::class, 'popular'])->name('popular');
+        // Complete list of indexable units for sitemap.xml — no pagination.
+        Route::get('sitemap', [UnitController::class, 'sitemap'])->name('sitemap');
         Route::get('categories', [UnitController::class, 'categories'])->name('categories');
         Route::get('cities', [UnitController::class, 'cities'])->name('cities');
         Route::get('budgets', [UnitController::class, 'budgets'])->name('budgets');
         Route::get('{unit}', [UnitController::class, 'show'])->name('show');
         Route::get('{unit}/reviews', [UnitController::class, 'reviews'])->name('reviews');
         Route::post('{unit}/availability', [UnitController::class, 'checkAvailability'])->name('availability');
+        // Calendar feed: the ranges a guest cannot pick, so a conflict is shown
+        // in the picker instead of at checkout.
+        Route::get('{unit}/blocked-dates', [UnitController::class, 'blockedDates'])->name('blocked-dates');
     });
 
     Route::get('offers', [OfferController::class, 'index'])->name('api.offers.index');
@@ -102,6 +123,7 @@ Route::prefix('v1')->group(function () {
             Route::get('profile', [UserController::class, 'profile'])->name('profile');
             Route::put('profile', [UserController::class, 'updateProfile'])->name('profile.update');
             Route::get('bookings', [UserController::class, 'bookings'])->name('bookings');
+            Route::get('complaints', [ComplaintController::class, 'index'])->name('complaints');
 
             // §7.2 / §7.3 — account management
             Route::post('change-phone', [UserController::class, 'changePhone'])
@@ -154,7 +176,17 @@ Route::prefix('v1')->group(function () {
             Route::post('/', [BookingController::class, 'store'])->name('store');
             Route::get('{booking}', [BookingController::class, 'show'])->name('show');
             Route::get('{booking}/cancellation-preview', [BookingController::class, 'cancellationPreview'])->name('cancellation-preview');
+            // The guest reading back the review they wrote.
+            Route::get('{booking}/review', [BookingController::class, 'review'])->name('review');
+            // Tax invoice — §7.1. Issued in Mamsa's name (supplier of record).
+            Route::get('{booking}/invoice', [InvoiceController::class, 'show'])->name('invoice');
             Route::post('{booking}/cancel', [BookingController::class, 'cancel'])->name('cancel');
+
+            /* Complaints — spec §5.1. Throttled: filing is a one-per-booking
+             * act, so a burst is either a double-tap or abuse. */
+            Route::post('{booking}/complaint', [ComplaintController::class, 'store'])
+                ->middleware('throttle:6,1')->name('complaint.store');
+            Route::get('{booking}/complaint', [ComplaintController::class, 'show'])->name('complaint.show');
         });
 
         /* Payments — throttled to blunt card-testing / abuse of the charge path */
@@ -176,27 +208,56 @@ Route::prefix('v1')->group(function () {
             Route::get('profile', [Partner\ProfileController::class, 'show'])->name('profile');
             Route::put('profile', [Partner\ProfileController::class, 'update'])->name('profile.update');
 
+            /*
+             * Units on the legacy Bearer surface.
+             *
+             * READS stay open — this is still a live surface for anything that
+             * only looks. Every WRITE is RETIRED (410 ENDPOINT_RETIRED, every
+             * call logged): the partner dashboard and the admin console are the
+             * two surfaces that get the permit rules, and keeping a third and
+             * fourth write path correct through uniqueness, expiry and
+             * per-apartment permits buys nothing — no client needs them.
+             *
+             * The routes stay registered rather than deleted so a caller gets
+             * an answer that names the reason, and so the log tells us within
+             * days whether anything real was using them. Reverting is removing
+             * `retired` from these lines.
+             */
             Route::prefix('units')->name('units.')->group(function () {
                 Route::get('/', [Partner\UnitController::class, 'index'])->name('index');
-                Route::post('/', [Partner\UnitController::class, 'store'])->name('store');
                 Route::get('{unit}', [Partner\UnitController::class, 'show'])->name('show');
-                Route::put('{unit}', [Partner\UnitController::class, 'update'])->name('update');
-                Route::delete('{unit}', [Partner\UnitController::class, 'destroy'])->name('destroy');
-                Route::post('{unit}/submit', [Partner\UnitController::class, 'submit'])->name('submit');
-
-                // Availability calendar (anti double-booking): manual closures + iCal sync.
                 Route::get('{unit}/calendar', [Partner\CalendarController::class, 'show'])->name('calendar.show');
-                Route::put('{unit}/calendar', [Partner\CalendarController::class, 'update'])->name('calendar.update');
-                Route::post('{unit}/blocked-dates', [Partner\CalendarController::class, 'storeBlock'])->name('blocked.store');
-                Route::delete('{unit}/blocked-dates/{block}', [Partner\CalendarController::class, 'destroyBlock'])->name('blocked.destroy');
 
-                // Unit gallery (multipart uploads to the public disk).
-                Route::post('{unit}/images', [Partner\UnitImageController::class, 'store'])->name('images.store');
-                Route::delete('{unit}/images/{image}', [Partner\UnitImageController::class, 'destroy'])->name('images.destroy');
-                Route::post('{unit}/images/{image}/main', [Partner\UnitImageController::class, 'setMain'])->name('images.main');
+                Route::middleware('retired')->group(function () {
+                    Route::post('/', [Partner\UnitController::class, 'store'])->name('store');
+                    Route::put('{unit}', [Partner\UnitController::class, 'update'])->name('update');
+                    Route::delete('{unit}', [Partner\UnitController::class, 'destroy'])->name('destroy');
+                    Route::post('{unit}/submit', [Partner\UnitController::class, 'submit'])->name('submit');
+
+                    // Multi-unit buildings: one built listing becomes every
+                    // apartment that shares its spec, grouped by unit_group_id.
+                    Route::post('{unit}/apartments', [Partner\UnitController::class, 'apartments'])->name('apartments');
+
+                    // Availability calendar (anti double-booking): manual closures + iCal sync.
+                    Route::put('{unit}/calendar', [Partner\CalendarController::class, 'update'])->name('calendar.update');
+                    Route::post('{unit}/blocked-dates', [Partner\CalendarController::class, 'storeBlock'])->name('blocked.store');
+                    Route::delete('{unit}/blocked-dates/{block}', [Partner\CalendarController::class, 'destroyBlock'])->name('blocked.destroy');
+
+                    // Unit gallery (multipart uploads to the public disk).
+                    Route::post('{unit}/images', [Partner\UnitImageController::class, 'store'])->name('images.store');
+                    Route::delete('{unit}/images/{image}', [Partner\UnitImageController::class, 'destroy'])->name('images.destroy');
+                    Route::post('{unit}/images/{image}/main', [Partner\UnitImageController::class, 'setMain'])->name('images.main');
+
+                    // Tourism licence + ownership proof.
+                    Route::post('{unit}/documents', [Partner\UnitDocumentController::class, 'store'])->name('documents.store');
+                    Route::delete('{unit}/documents/{type}', [Partner\UnitDocumentController::class, 'destroy'])->name('documents.destroy');
+                });
             });
 
             Route::get('bookings', [Partner\BookingController::class, 'index'])->name('bookings.index');
+            // Host cancellation — guest refunded 100%, partner forfeits their
+            // share. Same action the partner dashboard uses.
+            Route::post('bookings/{booking}/cancel', [Partner\BookingController::class, 'cancel'])->name('bookings.cancel');
 
             Route::prefix('notifications')->name('notifications.')->group(function () {
                 Route::get('/', [NotificationController::class, 'index'])->name('index');
@@ -228,16 +289,23 @@ Route::prefix('v1')->group(function () {
                 Route::post('{user}/revoke', [Admin\PartnerController::class, 'revoke'])->name('revoke');
             });
 
+            // Unit review on the legacy console. Reads open; the two DECISIONS
+            // are retired — an approval here bypasses the permit checks the
+            // admin console's own approve() runs. See RetiredEndpoint.
             Route::prefix('requests')->name('requests.')->group(function () {
                 Route::get('/', [Admin\RequestController::class, 'index'])->name('index');
                 Route::get('{unit}', [Admin\RequestController::class, 'show'])->name('show');
-                Route::post('{unit}/approve', [Admin\RequestController::class, 'approve'])->name('approve');
-                Route::post('{unit}/reject', [Admin\RequestController::class, 'reject'])->name('reject');
+
+                Route::middleware('retired')->group(function () {
+                    Route::post('{unit}/approve', [Admin\RequestController::class, 'approve'])->name('approve');
+                    Route::post('{unit}/reject', [Admin\RequestController::class, 'reject'])->name('reject');
+                });
             });
 
             Route::get('units', [Admin\UnitController::class, 'index'])->name('units.index');
             // Editorial "featured" toggle for the storefront home section.
-            Route::patch('units/{unit}/featured', [Admin\UnitController::class, 'setFeatured'])->name('units.featured');
+            Route::patch('units/{unit}/featured', [Admin\UnitController::class, 'setFeatured'])
+                ->middleware('retired')->name('units.featured');
             Route::get('bookings', [Admin\BookingController::class, 'index'])->name('bookings.index');
             Route::get('cancellations', [Admin\CancellationController::class, 'index'])->name('cancellations.index');
             Route::get('reports', [Admin\ReportController::class, 'index'])->name('reports');

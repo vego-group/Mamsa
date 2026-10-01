@@ -2,6 +2,12 @@
 
 namespace App\Http\Resources;
 
+use App\Models\CancellationPolicy;
+use App\Models\DashboardUpload;
+use App\Models\PartnerDetail;
+use App\Support\Dashboard\Maps;
+use App\Support\Media;
+use App\Support\Pricing;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -10,24 +16,62 @@ class UnitResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'                  => $this->id,
-            'name'                => $this->unit_name,
-            'type'                => $this->unit_type,
-            'code'                => $this->code,
-            'price'               => $this->price,
-            'capacity'            => $this->capacity,
-            'bedrooms'            => $this->bedrooms,
-            'beds'                => $this->beds,
-            'bathrooms'           => $this->bathrooms,
-            'area'                => $this->area,
-            'city'                => $this->city,
-            'district'            => $this->district,
-            'lat'                 => $this->lat,
-            'lng'                 => $this->lng,
-            'description'         => $this->description,
-            'checkin_time'        => $this->checkin_time,
-            'checkout_time'       => $this->checkout_time,
-            'cancellation_policy' => $this->cancellation_policy,
+            'id' => $this->id,
+            'name' => $this->unit_name,
+            'type' => $this->unit_type,
+            'code' => $this->code,
+            // The STABLE identity of a listing, for favourites, links and any
+            // client-side cache.
+            //
+            // `id` is not that for a building: the card shows whichever
+            // apartment is free, so the same building comes back as a different
+            // id once one is booked — and a favourited building then reads as
+            // unfavourited. Always present, so a client never has to branch:
+            // the group's ULID for a building, `u<id>` for a standalone unit.
+            'listing_id' => $this->unit_group_id ?: 'u'.$this->id,
+            // How many apartments in this building are bookable. 1 for a
+            // standalone listing, so a client can read it unconditionally.
+            // Present only where the controller computed it -- a resource that
+            // guessed would be guessing about availability.
+            'available_count' => $this->whenNotNull($this->available_count),
+            // How many apartments the building holds in total, so a card can
+            // say "4 of 6 available" rather than "4 available" and leave the
+            // guest to wonder 4 of what. Computed alongside available_count;
+            // absent where the controller did not compute it.
+            'group_size' => $this->whenNotNull($this->group_size),
+            // The door the guest actually got. Public ONLY on a booking's unit,
+            // where it is the answer to "which apartment am I in" — a question
+            // the confirmation page has no other way to answer, because the
+            // server picks the apartment out of the building. It stays out of
+            // the listing payload, where the card is the building and a door
+            // number would be noise.
+            'apartment_no' => $this->when(
+                $request->attributes->get('booking_allocation') === true,
+                fn () => $this->apartment_no,
+            ),
+            'price' => $this->price,
+            'capacity' => $this->capacity,
+            'bedrooms' => $this->bedrooms,
+            'beds' => $this->beds,
+            'bathrooms' => $this->bathrooms,
+            'area' => $this->area,
+            'city' => $this->city,
+            'district' => $this->district,
+            'lat' => $this->lat,
+            'lng' => $this->lng,
+            'description' => $this->description,
+            'checkin_time' => $this->checkin_time,
+            'checkout_time' => $this->checkout_time,
+            // The EFFECTIVE preset key, not the dead `cancellation_policy` enum
+            // column it used to echo. That column only ever held `no_cancel` /
+            // `48_hours` — neither of which is a policy the refund engine knows
+            // — so a client using it as a pre-payment fallback showed the guest
+            // a refund schedule the platform would never honour.
+            //
+            // Always one of the preset keys, and always the policy that would
+            // actually be applied. Same value as
+            // `cancellation_policy_details.template`.
+            'cancellation_policy' => $this->effectivePolicyKey(),
             // FR-021 — the unit's LIVE tiered policy for pre-booking display
             // (unit page / checkout). Same shape as the booking's
             // policy_snapshot (minus checkin_at) and same default-policy
@@ -39,57 +83,157 @@ class UnitResource extends JsonResource
                 $this->relationLoaded('cancellationPolicy'),
                 fn () => $this->policyDetails(),
             ),
-            'status'              => $this->status,
-            'is_featured'         => (bool) $this->is_featured,
+            'status' => $this->status,
+            'is_featured' => (bool) $this->is_featured,
             // Uniform KSA VAT rate applied to every unit (15%). Exposed so the
             // storefront never hardcodes it.
-            'tax_percent'         => \App\Support\Pricing::taxPercent(),
-            'approval_status'     => $this->approval_status,
-            'rejection_reason'    => $this->when(
+            'tax_percent' => Pricing::taxPercent(),
+            // Needed for a `newest` sort to mean anything client-side, and so a
+            // "new listing" badge is read from the record rather than invented.
+            'created_at' => $this->created_at?->toIso8601ZuluString(),
+            'approval_status' => $this->approval_status,
+            'rejection_reason' => $this->when(
                 in_array($this->approval_status, ['rejected']),
                 $this->rejection_reason
             ),
-            'images'              => $this->whenLoaded('images', function () {
+            // Compliance paperwork — the licence number, the CR number and the
+            // two document links. NEVER public: a title deed carries the owner's
+            // name and the property's registry details, and the licence number
+            // is not ours to publish either. Visible only to the partner who
+            // owns the unit and to admins.
+            $this->mergeWhen(
+                // `$request->user()` resolves the DEFAULT guard, which on this
+                // public route is never populated — the token is a sanctum one.
+                // Reading it that way made the block invisible to the owner too,
+                // so the fields silently never appeared for anyone.
+                // Default guard FIRST. Asking for 'sanctum' resolves that guard
+                // and caches its user on the app instance; in tests the instance
+                // is reused across requests, so resolving it during one request
+                // left a stale user authenticated for the next and turned a
+                // later admin call into a 403. Production makes a fresh app per
+                // request and never saw it — the suite did.
+                ($u = $request->user() ?: $request->user('sanctum'))
+                    && ($u->id === $this->user_id || $u->isAdmin()),
+                fn () => [
+                    // Gated with the compliance fields, NOT public: the exact
+                    // street of an occupied home is not something a guest needs
+                    // before booking, and the public payload stays byte-identical.
+                    // The edit form needs it, so the owner must get it back —
+                    // without this a saved address reloads blank and looks lost.
+                    'address' => $this->address,
+                    // Multi-unit building membership. Gated with the rest, not
+                    // because a door number is a secret, but because the PUBLIC
+                    // payload is a contract the frontend has signed off at
+                    // exactly 30 keys — and the guest card shows the building,
+                    // not the door. The partner's own list needs both to tell a
+                    // hundred otherwise identical listings apart.
+                    'unit_group_id' => $this->unit_group_id,
+                    'apartment_no' => $this->apartment_no,
+                    // Owner-only, like the rest of this block: which permit the
+                    // listing trades under is the partner's business and the
+                    // reviewer's, not a guest's.
+                    'license_type' => $this->license_type,
+                    'licensed_units_count' => $this->licensed_units_count !== null
+                        ? (int) $this->licensed_units_count : null,
+                    'tourism_permit_no' => $this->tourism_permit_no,
+                    'company_license_no' => $this->company_license_no,
+                    'tourism_permit_url' => DashboardUpload::signedUrl($this->tourism_permit_file),
+                    'ownership_doc_url' => DashboardUpload::signedUrl($this->ownership_doc_file),
+                    // Partner-scoped, surfaced here so the unit form can show
+                    // whether it is already on file without a second request.
+                    'bank_certificate_url' => DashboardUpload::signedUrl(
+                        $this->owner?->partnerDetail?->bank_certificate_file,
+                    ),
+                ],
+            ),
+
+            'images' => $this->whenLoaded('images', function () {
                 // Real photos only — ignore the generic default placeholder rows.
                 $real = $this->images->filter(
-                    fn ($img) => filled($img->path) && $img->path !== \App\Support\Media::defaultImagePath()
+                    fn ($img) => filled($img->path) && $img->path !== Media::defaultImagePath()
                 );
 
                 if ($real->isNotEmpty()) {
-                    return $real->values()->map(fn ($img) => [
-                        'id'      => $img->id,
-                        'url'     => $img->url,
-                        'is_main' => (bool) $img->is_main,
-                    ]);
+                    // Partner-controlled order. Falls back to id for rows
+                    // written before sort_order existed, which is the order
+                    // they were already coming back in.
+                    return $real
+                        ->sortBy([['sort_order', 'asc'], ['id', 'asc']])
+                        ->values()
+                        ->map(fn ($img) => [
+                            'id' => $img->id,
+                            'url' => $img->url,
+                            'is_main' => (bool) $img->is_main,
+                            // Null until the derivative set exists (legacy rows,
+                            // or a file the processor could not read). Clients
+                            // fall back to `url`.
+                            'width' => $img->width !== null ? (int) $img->width : null,
+                            'height' => $img->height !== null ? (int) $img->height : null,
+                            'variants' => $img->variant_urls,
+                        ]);
                 }
 
                 // No real photo yet → the single bundled default image.
                 return [[
-                    'id'      => 0,
-                    'url'     => \App\Support\Media::defaultImageUrl(),
+                    'id' => 0,
+                    'url' => Media::defaultImageUrl(),
                     'is_main' => true,
+                    'width' => null,
+                    'height' => null,
+                    'variants' => null,
                 ]];
             }),
             // Legacy Arabic-string list (kept for existing consumers)…
-            'features'            => $this->whenLoaded('features', fn () =>
-                $this->features->pluck('name')
+            'features' => $this->whenLoaded('features', fn () => $this->features->pluck('name')
             ),
             // …and the structured form: stable `key` (null → generic icon) + label.
-            'amenities'           => $this->whenLoaded('features', fn () =>
-                \App\Support\Dashboard\Maps::amenityPairs($this->features->pluck('name'))
+            'amenities' => $this->whenLoaded('features', fn () => Maps::amenityPairs($this->features->pluck('name'))
             ),
-            'avg_rating'          => round((float) $this->reviews()->avg('rating'), 1),
-            'reviews_count'       => $this->reviews()->count(),
-            'owner'               => $this->whenLoaded('owner', fn () => [
-                'id'          => $this->owner->id,
-                'name'        => $this->owner->name,
-                // individual | company — companies were showing as "مالك فردي".
-                'type'        => $this->owner->partnerDetail?->type ?? 'individual',
-                'is_verified' => $this->owner->partnerDetail?->status === \App\Models\PartnerDetail::STATUS_APPROVED,
-                // No avatar storage yet — null so the UI keeps its initials fallback.
-                'avatar_url'  => null,
-            ]),
+            // Prefer the eager-loaded aggregates. Computing these per row cost
+            // TWO queries per unit, so a 50-item page ran 100 extra queries to
+            // produce two numbers.
+            //
+            // `avg_rating` is 0 (never null) when there are no reviews, and
+            // `reviews_count` is the real count — so a client can tell "unrated"
+            // from "rated zero" by reading the count, not the average.
+            'avg_rating' => round((float) ($this->reviews_avg_rating ?? $this->reviews()->avg('rating')), 1),
+            'reviews_count' => (int) ($this->reviews_count ?? $this->reviews()->count()),
+            'owner' => $this->whenLoaded('owner', fn () => $this->mamsa_owned
+                // A platform-owned listing has no partner. `units.user_id` holds
+                // the ADMIN who created it — an employee — and presenting that
+                // row as the host put a staff member's personal name on the
+                // storefront, typed as an unverified individual. Verified live on
+                // production 2026-09-16 on unit #34. The host is the platform.
+                ? [
+                    'id' => $this->owner->id,
+                    'name' => 'ممسى',
+                    'type' => 'mamsa',
+                    'is_verified' => true,
+                    'avatar_url' => null,
+                ]
+                : [
+                    'id' => $this->owner->id,
+                    'name' => $this->owner->name,
+                    // individual | company — companies were showing as "مالك فردي".
+                    'type' => $this->owner->partnerDetail?->type ?? 'individual',
+                    'is_verified' => $this->owner->partnerDetail?->status === PartnerDetail::STATUS_APPROVED,
+                    // No avatar storage yet — null so the UI keeps its initials fallback.
+                    'avatar_url' => null,
+                ]),
         ];
+    }
+
+    /**
+     * The preset the refund engine would apply: the unit's own, else the
+     * platform default. Mirrors CancellationPolicyService::snapshotForBooking().
+     */
+    private function effectivePolicyKey(): ?string
+    {
+        $policy = $this->relationLoaded('cancellationPolicy')
+            ? ($this->cancellationPolicy ?? self::defaultPolicy())
+            : ($this->cancellationPolicy()->first() ?? self::defaultPolicy());
+
+        return $policy?->key;
     }
 
     /**
@@ -107,21 +251,21 @@ class UnitResource extends JsonResource
 
         return [
             'template' => $policy->key,
-            'name'     => $policy->name_ar,
-            'tiers'    => $policy->tiers->map(fn ($t) => [
+            'name' => $policy->name_ar,
+            'tiers' => $policy->tiers->map(fn ($t) => [
                 'min_hours_before_checkin' => (int) $t->min_hours_before_checkin,
-                'refund_percent'           => (int) $t->refund_percent,
-                'label'                    => $t->label_ar,
+                'refund_percent' => (int) $t->refund_percent,
+                'label' => $t->label_ar,
             ])->values()->all(),
         ];
     }
 
     /** Per-request memo so unit lists don't re-query the default policy N times. */
-    private static ?\App\Models\CancellationPolicy $defaultPolicy = null;
+    private static ?CancellationPolicy $defaultPolicy = null;
 
-    private static function defaultPolicy(): ?\App\Models\CancellationPolicy
+    private static function defaultPolicy(): ?CancellationPolicy
     {
-        return self::$defaultPolicy ??= \App\Models\CancellationPolicy::with('tiers')
+        return self::$defaultPolicy ??= CancellationPolicy::with('tiers')
             ->orderByDesc('is_default')
             ->first();
     }

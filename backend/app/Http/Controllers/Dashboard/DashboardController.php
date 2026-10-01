@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Dashboard;
 
 use App\Exceptions\DashboardException;
 use App\Http\Controllers\Controller;
+use App\Models\Booking;
 use App\Models\Unit;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
@@ -30,7 +31,7 @@ abstract class DashboardController extends Controller
         return response()->json([
             'data' => collect($paginator->items())->map($transform)->values(),
             'meta' => [
-                'page'  => $paginator->currentPage(),
+                'page' => $paginator->currentPage(),
                 'limit' => $paginator->perPage(),
                 'total' => $paginator->total(),
             ],
@@ -38,9 +39,15 @@ abstract class DashboardController extends Controller
     }
 
     /** @return never */
-    protected function fail(string $code, string $message, int $status = 400, ?array $fields = null): void
+    /**
+     * @param  array<string, string>|null  $fields
+     * @param  array<string, mixed>|null  $meta  numbers the message refers to,
+     *                                           so a client renders "your permit covers 8" from data rather than
+     *                                           by parsing the sentence.
+     */
+    protected function fail(string $code, string $message, int $status = 400, ?array $fields = null, ?array $meta = null): void
     {
-        throw new DashboardException($code, $message, $status, $fields);
+        throw new DashboardException($code, $message, $status, $fields, $meta);
     }
 
     /**
@@ -68,7 +75,7 @@ abstract class DashboardController extends Controller
     /** Contract pagination inputs with sane caps. @return array{0:int,1:int} */
     protected function pageArgs(Request $request): array
     {
-        $page  = max(1, (int) $request->query('page', '1'));
+        $page = max(1, (int) $request->query('page', '1'));
         $limit = min(100, max(1, (int) $request->query('limit', '20')));
 
         return [$page, $limit];
@@ -87,9 +94,9 @@ abstract class DashboardController extends Controller
     }
 
     /** The partner's own booking (via unit ownership) or a non-leaking 404. */
-    protected function ownBooking(Request $request, string $id): \App\Models\Booking
+    protected function ownBooking(Request $request, string $id): Booking
     {
-        $booking = \App\Models\Booking::whereKey($id)
+        $booking = Booking::whereKey($id)
             ->whereHas('unit', fn ($q) => $q->where('user_id', $request->user()->id))
             ->first();
 

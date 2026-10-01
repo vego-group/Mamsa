@@ -10,7 +10,9 @@ declare(strict_types=1);
  * Wrapped in the `dashboard-api` middleware group (bootstrap/app.php).
  */
 
+use App\Http\Controllers\ComplaintAttachmentController;
 use App\Http\Controllers\Dashboard;
+use App\Http\Controllers\DocumentController;
 use Illuminate\Support\Facades\Route;
 
 /* ---- Auth (public) ---- */
@@ -20,17 +22,47 @@ Route::post('auth/otp/resend', [Dashboard\AuthController::class, 'requestOtp'])
     ->middleware('throttle:pd-otp')->name('pd.otp.resend');
 Route::post('auth/otp/verify', [Dashboard\AuthController::class, 'verifyOtp'])
     ->middleware('throttle:10,1')->name('pd.otp.verify');
+// Runtime flags — same payload as /api/v1/config, on the host this console
+// already talks to. Unauthenticated: the login screen needs them too.
+Route::get('config', \App\Http\Controllers\RuntimeConfigController::class)->name('pd.config');
+
 Route::post('auth/logout', [Dashboard\AuthController::class, 'logout'])->name('pd.logout');
 
 /* ---- Signed upload target (auth via URL signature, not session) ---- */
 Route::put('uploads/{upload}', [Dashboard\UploadController::class, 'receive'])
     ->middleware('signed')->name('pd.uploads.receive');
 
+/* ---- Complaint photos ----
+ * Signed, not session-authenticated: the same link is rendered in the guest
+ * app (Bearer), the admin console and the partner dashboard — three guards on
+ * two hosts. A short-lived signature is the one credential all three can hold,
+ * and unlike a session it expires on its own if the link is forwarded. */
+/* ---- Compliance documents: signed AND authorised ----
+ *
+ * Unlike the attachment route above, a signature alone is not enough here. That
+ * one is read from three surfaces with three different guards, so a short-lived
+ * signature is the only credential all three can carry. These documents —
+ * permits, commercial registrations, national IDs — are read by exactly two
+ * people, the reviewer and the owner, and both have sessions. Identity is
+ * available, so it is required: the controller checks both cookie guards.
+ *
+ * Sits in this group for EncryptCookies + StartSession; DashboardApi only
+ * gates unsafe methods, so a GET passes through it untouched. */
+Route::get('documents/{upload}', DocumentController::class)
+    ->middleware('signed')->name('documents.show');
+
+Route::get('complaints/attachments/{attachment}', ComplaintAttachmentController::class)
+    ->middleware('signed')->name('complaints.attachment');
+
 /* ---- Moyasar webhook (secret-token verified in controller) ---- */
 Route::post('webhooks/moyasar', [Dashboard\WebhookController::class, 'moyasar'])->name('pd.webhook.moyasar');
 
 /* ---- Authenticated partner session ---- */
 Route::middleware(['auth:dashboard', 'throttle:120,1'])->group(function () {
+
+    /* Complaints against this partner's units — read-only (spec §5.3) */
+    Route::get('me/complaints', [Dashboard\ComplaintController::class, 'index'])->name('pd.complaints.index');
+    Route::get('me/complaints/{id}', [Dashboard\ComplaintController::class, 'show'])->name('pd.complaints.show');
 
     /* Profile */
     Route::get('me', [Dashboard\ProfileController::class, 'show'])->name('pd.me');
@@ -52,6 +84,20 @@ Route::middleware(['auth:dashboard', 'throttle:120,1'])->group(function () {
     Route::patch('units/{id}', [Dashboard\UnitController::class, 'update'])->name('pd.units.update');
     Route::delete('units/{id}', [Dashboard\UnitController::class, 'destroy'])->name('pd.units.destroy');
     Route::post('units/{id}/submit', [Dashboard\UnitController::class, 'submit'])->name('pd.units.submit');
+
+    /*
+     * Multi-unit buildings. The logic shipped on 2026-08-30 but only on the
+     * Bearer /api/v1 surface, so this dashboard — the one partners actually
+     * use — had no way to reach it. `count` is a TOTAL, and it is the only
+     * input shape here on purpose; door numbers and ranges stay on /api/v1
+     * until a screen asks for them.
+     */
+    Route::post('units/{id}/apartments', [Dashboard\UnitController::class, 'apartments'])->name('pd.units.apartments');
+
+    // Permit renewal — a new document reviewed on its own, while the listing
+    // keeps selling on the permit in force.
+    Route::get('units/{id}/permit-renewals', [Dashboard\UnitController::class, 'permitRenewals'])->name('pd.units.renewals.index');
+    Route::post('units/{id}/permit-renewals', [Dashboard\UnitController::class, 'renewPermit'])->name('pd.units.renewals.store');
 
     /* Calendar & availability */
     Route::get('units/{id}/calendar', [Dashboard\CalendarController::class, 'month'])->name('pd.calendar');
@@ -82,4 +128,13 @@ Route::middleware(['auth:dashboard', 'throttle:120,1'])->group(function () {
 
     /* Uploads */
     Route::post('uploads/presign', [Dashboard\UploadController::class, 'presign'])->name('pd.uploads.presign');
+
+    /* ---- Wallet, payouts & bank details (wallet contract §1–6) ----
+     * Real, database-backed. Replaced the non-prod fixture stubs. */
+    Route::get('wallet', [Dashboard\WalletController::class, 'summary'])->name('pd.wallet');
+    Route::get('wallet/ledger', [Dashboard\WalletController::class, 'ledger'])->name('pd.wallet.ledger');
+    Route::get('payouts', [Dashboard\PayoutController::class, 'index'])->name('pd.payouts');
+    Route::get('payouts/{id}', [Dashboard\PayoutController::class, 'show'])->name('pd.payouts.show');
+    Route::get('me/bank-details', [Dashboard\BankDetailsController::class, 'show'])->name('pd.bank-details.show');
+    Route::put('me/bank-details', [Dashboard\BankDetailsController::class, 'update'])->name('pd.bank-details.update');
 });

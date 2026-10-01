@@ -30,6 +30,62 @@ Schedule::command('bookings:checkin-reminders')
 // into unit blocked dates. 15 min = the industry-standard iCal sync window.
 Schedule::command('calendar:sync')->everyFifteenMinutes()->withoutOverlapping()->appendOutputTo($scheduleLog);
 
+// Nightly money check: the split arithmetic AND ledger coverage. --alert makes
+// a finding travel to a person; the gap that went unnoticed for three days on
+// staging did so while every surface reported healthy, so a result that lands
+// only in a log file is not a result. 02:30 Riyadh — after bookings:complete at
+// 00:30, so the stays that finished today are already credited and cannot be
+// reported as uncredited for the few hours in between.
+Schedule::command('bookings:check-consistency --alert')
+    ->dailyAt('02:30')->timezone('Asia/Riyadh')
+    ->withoutOverlapping()->appendOutputTo($scheduleLog);
+
 // Release dates held by abandoned checkouts: unpaid pending bookings expire
 // after 60 min (the frontend reuses a pending booking within that window).
+/* G1: a refund the gateway accepted but never confirmed is invisible — nothing
+ * failed, so nothing is logged. Ask Moyasar hourly about anything past the
+ * reconcile threshold, and alert once it passes the alert threshold. */
+Schedule::command('complaints:reconcile-refunds --alert')
+    ->hourly()->withoutOverlapping()->appendOutputTo($scheduleLog);
+
 Schedule::command('bookings:expire-pending')->everyFifteenMinutes()->withoutOverlapping()->appendOutputTo($scheduleLog);
+
+/*
+ * The licence lives on every row of a building rather than in one place, so
+ * agreement is maintained by code rather than by the schema. Ask daily whether
+ * it still holds — a query-builder update fires no model events and slips past
+ * the model's own guard.
+ */
+Schedule::command('units:check-licenses --alert')
+    ->dailyAt('03:00')->timezone('Asia/Riyadh')
+    ->withoutOverlapping()->appendOutputTo($scheduleLog);
+
+/*
+ * Arabic collation. Without ICU's Arabic data, Collator('ar') silently falls
+ * back to root (Latin first) and door names sort unlike the frontend. Asked
+ * daily and mailed, because the log warning alone is read by nobody.
+ */
+Schedule::command('ops:check-collation --alert')
+    ->dailyAt('03:10')->timezone('Asia/Riyadh')
+    ->withoutOverlapping()->appendOutputTo($scheduleLog);
+
+/*
+ * Permit expiry warnings — 60/30/14/7/1 days out, and the day itself.
+ *
+ * Morning local time, because these ask the partner to go and find a document.
+ * Missing a day costs nothing: the next run picks up whatever it finds, and
+ * the ledger makes a repeat impossible rather than unlikely. What protects the
+ * platform is the calendar cap, which needs no job at all.
+ */
+Schedule::command('permits:check-expiry')
+    ->dailyAt('09:00')->timezone('Asia/Riyadh')
+    ->withoutOverlapping()->appendOutputTo($scheduleLog);
+
+/*
+ * A payment webhook that never arrives used to be recovered only by the guest
+ * returning to the page. One who paid and closed the tab had no server-side
+ * path at all — and bookings:expire-pending reads the local row, not the
+ * gateway, so it would eventually cancel a paid stay. Ask Moyasar instead.
+ */
+Schedule::command('payments:reconcile-pending --alert')
+    ->everyTenMinutes()->withoutOverlapping()->appendOutputTo($scheduleLog);
