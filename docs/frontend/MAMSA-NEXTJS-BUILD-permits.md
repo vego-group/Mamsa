@@ -2,7 +2,7 @@
 
 **الأساس:** `docs/backend/permits-frontend-contract-phases-1-3.md`
 **والملحق:** `docs/backend/permits-frontend-contract-phases-4-6.md` (وضع أ + المرحلة ٦)
-**الكود المنشور:** `prod-2026-09-27` — **الاتنين بيوصفوا الإنتاج دلوقتي**
+**الكود المنشور:** العقد اتنشر بالكامل لحد `prod-2026-10-01-doors` — **الاتنين بيوصفوا الإنتاج دلوقتي** (التاجات اللي بعده — accesslog وcollation وmasktoken وseedguard — **مافيهاش أي تغيير في العقد**)
 **التاريخ:** 22/09/2026 · **آخر تحديث 01/10/2026** (الإنتاج: `prod-2026-10-01-doors`)
 
 > 🔴 **العَلَم هو الفرق الوحيد بين البيئتين:** `multiUnitEnabled` = `true` على staging
