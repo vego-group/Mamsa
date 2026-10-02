@@ -153,6 +153,28 @@ class PhaseSixContractTest extends TestCase
             ->assertJsonPath('group', null);
     }
 
+    public function test_the_detail_always_carries_permit_address_match_and_group(): void
+    {
+        // A standalone unit with no permit at all: the three keys are still
+        // there, so the screen reads them without optional chaining.
+        $unit = $this->unit(['approval_status' => 'pending']);
+
+        $body = $this->actingAs($this->admin, 'admin-panel')
+            ->getJson("/admin/approvals/{$unit->id}")->assertOk()->json();
+
+        $this->assertIsArray($body['permit'] ?? null, 'permit missing or null');
+        $this->assertSame(['address', 'expiresAt', 'expiresAtHijri', 'status'], array_keys($body['permit']));
+        $this->assertSame(['city', 'district', 'building', 'unitNo'], array_keys($body['permit']['address']));
+        $this->assertSame('unknown', $body['permit']['status']);
+
+        $this->assertIsArray($body['addressMatch'] ?? null, 'addressMatch missing or null');
+        $this->assertSame(['city', 'district'], array_keys($body['addressMatch']));
+
+        // group: the KEY is always there; its value is null for a standalone unit.
+        $this->assertArrayHasKey('group', $body);
+        $this->assertNull($body['group']);
+    }
+
     /* ---------- address comparison ---------- */
 
     public function test_the_city_is_compared_and_the_district_never_is(): void
