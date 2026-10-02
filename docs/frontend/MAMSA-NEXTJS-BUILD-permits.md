@@ -95,7 +95,7 @@ export const parseGuestError = (b: any): ApiError =>
 // components/PermitStatusBadge.tsx
 const MAP = {
   valid:    { label: 'سارٍ',            tone: 'success' },
-  expiring: { label: 'ينتهي قريباً',     tone: 'warning' },
+  expiring: { label: 'ينتهي قريبًا',     tone: 'warning' },
   expired:  { label: 'منتهي',           tone: 'danger'  },
   unknown:  { label: 'غير مسجّل',        tone: 'neutral' },  // مش خطأ
 };
@@ -269,7 +269,7 @@ const doorNumber = booking.unit.apartment_no   // "1" في مبنى · null في
 />
 ```
 
-**الاستثناء الوحيد: التجديد.** `POST /units/{id}/permit-renewals` **ما بيغيّرش حالة الوحدة** — وده بالظبط سبب وجوده. **قولوا ده صراحة في واجهة التجديد**: «الإعلان يظل ظاهراً أثناء مراجعة التجديد».
+**الاستثناء الوحيد: التجديد.** `POST /units/{id}/permit-renewals` **ما بيغيّرش حالة الوحدة** — وده بالظبط سبب وجوده. **قولوا ده صراحة في واجهة التجديد**: «الإعلان يظل ظاهرًا أثناء مراجعة التجديد».
 
 ### ٢.٣ بانر انتهاء التصريح
 
@@ -336,7 +336,7 @@ if (pending) {
 | الحقل | إلزامي | ملاحظة |
 |---|---|---|
 | `permitExpiresAt` | ✅ | لازم في المستقبل |
-| `tourismLicenseNumber` | ❌ | **اعرضوا الحالي كـplaceholder**: «يُستخدم الحالي إذا تُرك فارغاً» |
+| `tourismLicenseNumber` | ❌ | **اعرضوا الحالي كـplaceholder**: «يُستخدم الحالي إذا تُرك فارغًا» |
 | `tourismLicenseFileId` | ❌ | نفس presign الحالي، `kind: license_pdf` |
 | `permitAddress.{city,district,building,unitNo}` | ❌ | «العنوان المكتوب على التصريح» |
 
@@ -346,7 +346,7 @@ if (pending) {
 const HANDLERS: Record<string, string> = {
   RENEWAL_ALREADY_PENDING: 'لديك طلب تجديد قيد المراجعة بالفعل.',
   PERMIT_EXPIRED:          'التاريخ المدخل في الماضي. أدخل تاريخ انتهاء التصريح الجديد.',
-  NO_PERMIT_TO_RENEW:      'أضف تصريح الوحدة أولاً من صفحة التعديل.',
+  NO_PERMIT_TO_RENEW:      'أضف تصريح الوحدة أولًا من صفحة التعديل.',
   PERMIT_EXPIRY_REQUIRED:  'تاريخ انتهاء التصريح الجديد مطلوب.',
 };
 ```
