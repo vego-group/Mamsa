@@ -274,9 +274,22 @@ iCal). وفي **وضع أ** (تصريح لكل شقة) المستندات **ما
 > الداخلية `"pending"`: `units[]` في رد `POST /admin/units/{id}/apartments`، و`group.apartments[]` هنا.
 > **الاتنين اتصلّحوا**، ومثبّتين باختبارين: `ApartmentsTest::test_the_apartments_are_filed_for_review_and_owned_by_the_platform`
 > و`PhaseSixContractTest::test_the_reviewer_sees_the_whole_building`. **ولو أي مكان على سطح الأدمن رجّع `"pending"` تاني، الاختبار بيقع.**
-> *(العينة تحت اتعدّلت بإيدنا من `pending` لـ`pending_review` عشان تعكس الرد الحالي.)*
+> *(العينة تحت **مش لقطة حرفية**: اتاخدت من staging قبل 02/10، وقيمة `status` فيها اتعدّلت بإيدنا من `pending` لـ`pending_review` عشان تعكس الرد الحالي.)*
 
-### ٢.١ رد حقيقي من staging — شقة في مبنى **وضع أ**
+> **`permit` و`addressMatch` و`group` — المفاتيح التلاتة موجودة دايماً** (اتسجّل 02/10/2026): في **`GET /admin/approvals/{id}`**،
+> على مستوى الرد، **في كل رد**، حتى لوحدة مستقلة مالهاش تصريح خالص.
+>
+> | المفتاح | القيمة |
+> |---|---|
+> | `permit` | **دايماً كائن** `{ address, expiresAt, expiresAtHijri, status }`. و`address` دايماً بالأربع مفاتيح (`city` · `district` · `building` · `unitNo`)، كل واحد `null` لو مش متسجّل. و`status` دايماً قيمة (`unknown` لو مافيش تاريخ). `expiresAt` و`expiresAtHijri` ممكن `null` |
+> | `addressMatch` | **دايماً كائن** `{ city, district }`. `city` ممكن `null` (= «ما اتقارنش»)، و`district` دايماً `null` |
+> | `group` | **المفتاح موجود دايماً، وقيمته ممكن `null`** (للوحدة المستقلة) |
+>
+> **فاقروا `permit` و`addressMatch` من غير `?.`، و`group` بفحص `null`.** المصدر `ApprovalsController::show()`، والتلاتة بيتبنوا
+> من غير أي شرط. **ومثبّت باختبار** (`PhaseSixContractTest::test_the_detail_always_carries_permit_address_match_and_group`): وحدة مستقلة
+> مالهاش تصريح، ولو أي مفتاح من التلاتة اتشال من الرد، الاختبار بيقع.
+
+### ٢.١ شكل الرد — شقة في مبنى **وضع أ** (من staging، و`status` متعدّل بإيدنا)
 
 ```json
 {
