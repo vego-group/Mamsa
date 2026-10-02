@@ -79,6 +79,23 @@
 | `pendingRenewalId` | `string` أو `null` | لو مش `null`: فيه طلب تجديد في الطابور. **مهم للشاشة**: وحدة `permitStatus: "expired"` ومعاها `pendingRenewalId` يعني الإعلان هادي **بس حد اتصرّف بالفعل**، والعلاج في طابور المراجع نفسه |
 | `permitFileUrl` | رابط `/documents` موقّع، أو `null` | صلاحيته ساعتان |
 
+> **`permitAddress` — موجود دايماً هنا كمان** (اتسجّل 02/10/2026). العينة فوق اتاخدت قبل ما يدخل الرد، فمش ظاهر فيها،
+> **بس الرد الحالي فيه دايماً:**
+>
+> ```json
+> "permitExpiresAtHijri": null,
+> "permitAddress": { "city": null, "district": null, "building": null, "unitNo": null }
+> ```
+>
+> - **المفتاح موجود دايماً، والأربع مفاتيح جوّاه موجودين دايماً**، حتى لو الوحدة مالهاش تصريح خالص. **كل واحد منهم
+>   `null` لو مش متسجّل.** والمفتاح نفسه عمره ما بيرجع `null` ولا بيغيب.
+> - **فاقروه من غير `?.`:** `unit.permitAddress.city`. الـ`null` بيبقى في القيمة بس، مش في الكائن.
+> - **نفس الوعد** اللي على قراءة الشريك (الملحق §٣.٢) وعلى صفوف `/admin/permits` (§١.٤ تحت)، **ونفس الدالة**
+>   (`UnitPresenter::permitAddress()`).
+> - **مثبّت باختبار:** `ReadEndpointsTest::test_unit_detail_always_carries_the_four_permit_address_keys`. بيجرّب
+>   وحدة من غير تصريح (الأربعة `null`) ووحدة بتصريح، **ولو المفتاح اتشال، الاختبار بيقع.**
+> - و`permitExpiresAtHijri` كمان **موجود دايماً** هنا، و`null` لو مافيش (الملحق §٣.١).
+
 ### ١.٢ `PATCH /admin/units/{id}` — كتابة حقول التصريح
 
 **الصلاحية:** `units.manage`

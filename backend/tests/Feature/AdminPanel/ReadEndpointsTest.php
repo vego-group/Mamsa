@@ -8,6 +8,7 @@ use App\Models\Booking;
 use App\Models\PartnerDetail;
 use App\Models\Unit;
 use App\Models\User;
+use App\Support\Permits\PermitWriter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -197,6 +198,31 @@ class ReadEndpointsTest extends TestCase
             ->assertOk()
             ->assertJsonStructure(['description', 'images', 'amenities', 'lat', 'lng', 'publicUrl', 'tourismPermitNo'])
             ->assertJsonPath('id', (string) $this->unit->id);
+    }
+
+    /**
+     * The unit screen reads permitAddress without `?.`, so the key and its four
+     * sub-keys must exist whether or not the unit has a permit. Same promise as
+     * the partner read (appendix §3.2), now pinned for the admin read too.
+     */
+    public function test_unit_detail_always_carries_the_four_permit_address_keys(): void
+    {
+        $keys = ['city', 'district', 'building', 'unitNo'];
+
+        $none = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/units/'.$this->unit->id)->assertOk()->json('permitAddress');
+        $this->assertIsArray($none, 'permitAddress missing or null on a unit with no permit');
+        $this->assertSame($keys, array_keys($none));
+        $this->assertSame([null, null, null, null], array_values($none));
+
+        PermitWriter::apply($this->unit->fresh(), ['number' => 'ADDR-1', 'addr_city' => 'الرياض', 'addr_district' => 'النرجس']);
+
+        $set = $this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/units/'.$this->unit->id)->assertOk()->json('permitAddress');
+        $this->assertSame($keys, array_keys($set));
+        $this->assertSame('الرياض', $set['city']);
+        $this->assertSame('النرجس', $set['district']);
+        $this->assertNull($set['building']);
     }
 
     /* ---------- bookings §5.8 ---------- */
