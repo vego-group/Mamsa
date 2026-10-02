@@ -176,9 +176,11 @@ class ApartmentsTest extends TestCase
             ->assertJsonPath('groupSize', 4)
             ->assertJsonPath('added', 3)
             ->assertJsonCount(4, 'units')
+            // The admin surface's word for a filed door, as GET /admin/units/{id}
+            // and the lists say it — not the internal 'pending'.
             ->assertJsonPath('units.0.status', 'approved')   // the source
-            ->assertJsonPath('units.1.status', 'pending')
-            ->assertJsonPath('units.3.status', 'pending');
+            ->assertJsonPath('units.1.status', 'pending_review')
+            ->assertJsonPath('units.3.status', 'pending_review');
 
         $this->assertNotNull($r->json('groupId'));
 

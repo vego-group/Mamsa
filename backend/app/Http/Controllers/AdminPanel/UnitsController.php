@@ -491,7 +491,7 @@ class UnitsController extends Controller
             'units' => $group->map(fn (Unit $u) => [
                 'id' => (string) $u->id,
                 'apartmentNo' => $u->apartment_no,
-                'status' => $u->approval_status,
+                'status' => $this->units->specStatus($u->approval_status),
             ])->values()->all(),
             'message' => $added > 0
                 ? 'تمت إضافة '.$added.' وحدة وهي قيد المراجعة. الوحدة الأصلية تستمر في استقبال الحجوزات.'

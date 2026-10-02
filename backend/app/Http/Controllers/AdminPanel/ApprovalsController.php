@@ -224,7 +224,7 @@ class ApprovalsController extends Controller
             'apartments' => $members->map(fn (Unit $m) => [
                 'id' => (string) $m->id,
                 'apartmentNo' => $m->apartment_no,
-                'status' => $m->approval_status,
+                'status' => $this->units->specStatus($m->approval_status),
                 'permitNumber' => $m->tourism_permit_no,
                 'permitExpiresAt' => PermitExpiry::on($m)?->toDateString(),
                 'permitExpiresAtHijri' => \App\Models\Permit::currentFor($m)?->expires_at_hijri,
