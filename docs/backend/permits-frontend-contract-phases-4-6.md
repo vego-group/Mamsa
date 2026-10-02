@@ -258,6 +258,11 @@ iCal). وفي **وضع أ** (تصريح لكل شقة) المستندات **ما
 
 **الصلاحية:** `approvals.view` · **تلات مفاتيح جديدة على مستوى الرد** (مش جوّه `unit`).
 
+> **`mamsaOwned` — موجود، وفي المسارين** (اتسجّل 02/10/2026): **`GET /admin/approvals`** (كل صف في `items`) و**`GET /admin/approvals/{id}`**
+> (على مستوى الرد)، **دايماً `boolean`**، ومابيغيبش ولا بيبقى `null`. مصدره `UnitPresenter::approvalRow()`، وهو نفس الدالة
+> للمسارين. **ومثبّت باختبار** (`ApprovalsTest::test_queue_and_detail_always_carry_mamsa_owned`): لو اتشال من أي
+> مسار، الاختبار بيقع. ومش موجود جوّه `unit` بس، يعني الشاشة ماتحتاجش تقراه من `unit.mamsaOwned`.
+
 ### ٢.١ رد حقيقي من staging — شقة في مبنى **وضع أ**
 
 ```json

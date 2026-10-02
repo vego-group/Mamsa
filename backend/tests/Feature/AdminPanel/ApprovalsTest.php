@@ -87,6 +87,31 @@ class ApprovalsTest extends TestCase
         return $this->adminUser;
     }
 
+    /**
+     * The review screen tells Mamsa's own listings apart by this key. If it
+     * went missing, every row would read `undefined` and render as a third
+     * party's listing, so its presence is a contract on both endpoints.
+     */
+    public function test_queue_and_detail_always_carry_mamsa_owned(): void
+    {
+        $this->newUnit->forceFill(['mamsa_owned' => true])->save();
+
+        $items = collect($this->actingAs($this->admin(), 'admin-panel')
+            ->getJson('/admin/approvals')->assertOk()->json('items'))->keyBy('id');
+
+        foreach ($items as $row) {
+            $this->assertArrayHasKey('mamsaOwned', $row);
+            $this->assertIsBool($row['mamsaOwned']);
+        }
+        $this->assertTrue($items[(string) $this->newUnit->id]['mamsaOwned']);
+        $this->assertFalse($items[(string) $this->resubmitted->id]['mamsaOwned']);
+
+        $this->actingAs($this->admin(), 'admin-panel')->getJson("/admin/approvals/{$this->newUnit->id}")
+            ->assertOk()->assertJsonPath('mamsaOwned', true);
+        $this->actingAs($this->admin(), 'admin-panel')->getJson("/admin/approvals/{$this->resubmitted->id}")
+            ->assertOk()->assertJsonPath('mamsaOwned', false);
+    }
+
     public function test_queue_lists_pending_units_oldest_first(): void
     {
         $res = $this->actingAs($this->admin(), 'admin-panel')->getJson('/admin/approvals')
