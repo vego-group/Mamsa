@@ -669,6 +669,8 @@ POST /admin/units/{id}/apartments      { count, permits }
 نفس الـbody والقواعد. الاختلافات:
 
 1. **الغلاف:** `{ message, code, fields?, meta? }` و`VALIDATION_ERROR` بـ**422** (مش `VALIDATION` بـ400).
+   **والحالة:** الأبواب الجديدة في `units[]` بترجع **`"pending_review"`** (كلمة سطح الأدمن)، **مش** `"pending"`
+   زي لوحة الشريك. الملحق §٢.
 2. **لوحدات ممسى بس** (`mamsaOwned: true`) — الصلاحية `units.manage`.
 3. **✅ بقى ورا `MULTI_UNIT_ENABLED` زي مسار الشريك** (قرار المالك 27/09) — فعلى الإنتاج
    بيرجّع **`422 MULTI_UNIT_DISABLED`**. ⚠️ **ما تبنوش على ترتيب الأخطاء**: الحارس بيجي

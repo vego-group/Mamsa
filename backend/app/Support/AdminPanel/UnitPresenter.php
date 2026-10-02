@@ -42,6 +42,16 @@ class UnitPresenter
                 ->where('start_date', '>=', $since)]);
     }
 
+    /**
+     * Internal approval_status → the admin surface's UnitStatus. Public so a
+     * controller building its own rows says the same word as every read here
+     * ('pending_review', never the internal 'pending').
+     */
+    public function specStatus(?string $approval): string
+    {
+        return $this->unitStatus($approval);
+    }
+
     /** Spec UnitStatus → internal approval_status (for filtering). */
     public function internalStatus(string $spec): string
     {

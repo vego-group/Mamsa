@@ -130,6 +130,14 @@ class PhaseSixContractTest extends TestCase
 
         // Each door's OWN permit number — the reviewer has to see that they
         // differ, because in this mode they must.
+        // The admin surface's word for a door under review, everywhere on it:
+        // 'pending_review', never the internal 'pending'.
+        // The source stays approved; the two new doors are under review.
+        $this->assertSame(
+            ['approved', 'pending_review', 'pending_review'],
+            collect($body['group']['apartments'])->pluck('status')->all(),
+        );
+
         $numbers = collect($body['group']['apartments'])->pluck('permitNumber')->all();
         $this->assertCount(3, array_unique($numbers));
     }

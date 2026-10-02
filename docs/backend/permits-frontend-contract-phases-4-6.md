@@ -263,6 +263,19 @@ iCal). وفي **وضع أ** (تصريح لكل شقة) المستندات **ما
 > للمسارين. **ومثبّت باختبار** (`ApprovalsTest::test_queue_and_detail_always_carry_mamsa_owned`): لو اتشال من أي
 > مسار، الاختبار بيقع. ومش موجود جوّه `unit` بس، يعني الشاشة ماتحتاجش تقراه من `unit.mamsaOwned`.
 
+> **🔤 كلمة «قيد المراجعة» — كل سطح ليه كلمته** (اتسجّل 02/10/2026، بقرار أحمد):
+>
+> | السطح | الباب قيد المراجعة بيظهر كـ | فين بالظبط |
+> |---|---|---|
+> | **الأدمن (`/admin/*`)** | **`"pending_review"` في كل مكان** | `GET /admin/units/{id}`، والقوايم، و`group.apartments[].status` هنا في `/admin/approvals/{id}`، **و`units[].status` في رد `POST /admin/units/{id}/apartments`** |
+> | **الشريك (`/units/*`)** | **`"pending"` في كل مكان** | قراية الوحدة، و`units[]` في رد `/submit` و`/apartments` |
+>
+> **مش بنوحّد السطحين، بنوحّد كل سطح جوّه نفسه.** لحد 02/10 كان فيه مكانين على سطح الأدمن بيطلّعوا القيمة
+> الداخلية `"pending"`: `units[]` في رد `POST /admin/units/{id}/apartments`، و`group.apartments[]` هنا.
+> **الاتنين اتصلّحوا**، ومثبّتين باختبارين: `ApartmentsTest::test_the_apartments_are_filed_for_review_and_owned_by_the_platform`
+> و`PhaseSixContractTest::test_the_reviewer_sees_the_whole_building`. **ولو أي مكان على سطح الأدمن رجّع `"pending"` تاني، الاختبار بيقع.**
+> *(العينة تحت اتعدّلت بإيدنا من `pending` لـ`pending_review` عشان تعكس الرد الحالي.)*
+
 ### ٢.١ رد حقيقي من staging — شقة في مبنى **وضع أ**
 
 ```json
@@ -278,9 +291,9 @@ iCal). وفي **وضع أ** (تصريح لكل شقة) المستندات **ما
     "size": 3,
     "mode": "per_unit",
     "apartments": [
-      { "id": "68", "apartmentNo": "1", "status": "pending", "permitNumber": "TL-ONESTEP-1", "permitExpiresAt": null },
-      { "id": "69", "apartmentNo": "2", "status": "pending", "permitNumber": "MA-ONESTEP-2", "permitExpiresAt": "2027-09-23" },
-      { "id": "70", "apartmentNo": "3", "status": "pending", "permitNumber": "MA-ONESTEP-3", "permitExpiresAt": "2027-09-23" }
+      { "id": "68", "apartmentNo": "1", "status": "pending_review", "permitNumber": "TL-ONESTEP-1", "permitExpiresAt": null },
+      { "id": "69", "apartmentNo": "2", "status": "pending_review", "permitNumber": "MA-ONESTEP-2", "permitExpiresAt": "2027-09-23" },
+      { "id": "70", "apartmentNo": "3", "status": "pending_review", "permitNumber": "MA-ONESTEP-3", "permitExpiresAt": "2027-09-23" }
     ]
   }
 }
