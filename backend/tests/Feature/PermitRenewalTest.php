@@ -471,6 +471,16 @@ class PermitRenewalTest extends TestCase
         $admin->getJson('/admin/permit-renewals/999999')->assertStatus(404)->assertJsonPath('code', 'NOT_FOUND');
     }
 
+    public function test_the_page_size_is_capped_at_100_and_the_response_says_so(): void
+    {
+        $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/permit-renewals?pageSize=500')
+            ->assertOk()->assertJsonPath('pageSize', 100);
+        $this->actingAs($this->admin, 'admin-panel')
+            ->getJson('/admin/permit-renewals?pageSize=100')
+            ->assertOk()->assertJsonPath('pageSize', 100);
+    }
+
     public function test_reading_one_renewal_needs_approvals_view(): void
     {
         $unit = $this->unit(expires: now()->addDays(20)->toDateString());

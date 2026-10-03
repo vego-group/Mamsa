@@ -206,7 +206,11 @@
 ### ١.٥ `GET /admin/permit-renewals` — طابور التجديدات
 
 **الصلاحية:** `approvals.view`
-**الباراميترات:** `status=pending` (الافتراضي) \| `current` \| `rejected` \| `superseded` · `page` · `pageSize` · `sortBy=submittedAt`
+**الباراميترات:** `status=pending` (الافتراضي) \| `current` \| `rejected` \| `superseded` · `page` · `pageSize` (≤100) · `sortBy=submittedAt`
+
+> **سقف `pageSize` = 100** على كل قوايم سطح الأدمن (من 03/10/2026 مكتوب هنا). أكبر من كده **مابيرجّعش خطأ**: بيتقص لـ100
+> **والرد بيقول `pageSize: 100`**. فاقروا `pageSize` و`total` من الرد، مش من الطلب، عشان تعرفوا لو فيه صفحات تانية.
+> **مثبّت باختبار:** `PermitRenewalTest::test_the_page_size_is_capped_at_100_and_the_response_says_so`.
 
 نفس شكل الصف اللي فوق، **وزيادة `currentPermit`**:
 

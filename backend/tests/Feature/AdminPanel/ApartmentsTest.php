@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\AdminPanel;
 
+use App\Models\DashboardUpload;
+use App\Models\Permit;
 use App\Models\Unit;
 use App\Models\User;
 use App\Support\Units\UnitLicense;
@@ -285,12 +287,93 @@ class ApartmentsTest extends TestCase
             ->assertJsonPath('meta.licensed_units_count', 2);
     }
 
+    /* ---------- per-unit cards: check order and APARTMENT_INCOMPLETE ---------- */
+
+    public function test_a_door_name_conflict_is_refused_before_the_rollout_flag(): void
+    {
+        // Names are judged with the fields: off flag or not, a card named "1"
+        // (reserved for the source) comes back on the card itself.
+        config()->set('units.multi_unit_enabled', false);
+        $unit = $this->perUnit();
+
+        $this->cards($unit, 2, [$this->card(['apartmentNo' => '1'])])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonStructure(['fields' => ['permits.0.apartmentNo']]);
+    }
+
+    public function test_an_expired_or_repeated_card_is_judged_after_the_rollout_flag(): void
+    {
+        config()->set('units.multi_unit_enabled', false);
+        $unit = $this->perUnit();
+
+        $this->cards($unit, 2, [$this->card(['expiresAt' => now()->subDay()->toDateString()])])
+            ->assertStatus(422)->assertJsonPath('code', 'MULTI_UNIT_DISABLED');
+
+        $this->cards($unit, 3, [$this->card(['number' => 'SAME-1']), $this->card(['number' => 'SAME-1'])])
+            ->assertStatus(422)->assertJsonPath('code', 'MULTI_UNIT_DISABLED');
+
+        // With the flag on, the repeated number is its own refusal.
+        config()->set('units.multi_unit_enabled', true);
+        $this->cards($unit, 3, [$this->card(['number' => 'SAME-1']), $this->card(['number' => 'SAME-1'])])
+            ->assertStatus(422)->assertJsonPath('code', 'DUPLICATE_PERMIT_NUMBER');
+
+        $this->assertSame(1, Unit::count());
+    }
+
+    public function test_an_expired_card_rolls_the_building_back_as_apartment_incomplete(): void
+    {
+        config()->set('units.multi_unit_enabled', true);
+        $unit = $this->perUnit();
+        $permits = Permit::count();
+
+        $this->cards($unit, 3, [
+            $this->card(['number' => 'OK-2']),
+            $this->card(['number' => 'OLD-3', 'apartmentNo' => '3', 'expiresAt' => now()->subDay()->toDateString()]),
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'APARTMENT_INCOMPLETE')
+            ->assertJsonPath('message', 'تعذّر إنشاء الوحدات — إحدى النسخ غير مكتملة')
+            ->assertJsonPath('meta.apartmentNo', '3')
+            ->assertJsonStructure(['fields' => ['permitExpiresAt']]);
+
+        // Nothing half-built: no doors, no permits, the source untouched.
+        $this->assertSame(1, Unit::count());
+        $this->assertSame($permits, Permit::count());
+        $this->assertNull($unit->fresh()->unit_group_id);
+    }
+
     /* ---------- fixtures ---------- */
 
     private function expand(Unit $unit, int $count): TestResponse
     {
         return $this->actingAs($this->admin, 'admin-panel')
             ->postJson("/admin/units/{$unit->id}/apartments", ['count' => $count]);
+    }
+
+    /** @param array<int, array<string, mixed>> $permits */
+    private function cards(Unit $unit, int $count, array $permits): TestResponse
+    {
+        return $this->actingAs($this->admin, 'admin-panel')
+            ->postJson("/admin/units/{$unit->id}/apartments", ['count' => $count, 'permits' => $permits]);
+    }
+
+    /** @param array<string, mixed> $overrides */
+    private function card(array $overrides = []): array
+    {
+        $id = 'file_'.strtolower((string) str()->ulid());
+        DashboardUpload::create([
+            'id' => $id, 'user_id' => $this->admin->id, 'kind' => 'license_pdf',
+            'original_name' => 'p.pdf', 'mime' => 'application/pdf', 'size' => 512,
+            'status' => 'stored', 'path' => "dashboard/license_pdf/{$id}.pdf",
+        ]);
+
+        return array_merge(['number' => 'MA-'.fake()->unique()->numerify('######'), 'fileId' => $id], $overrides);
+    }
+
+    private function perUnit(): Unit
+    {
+        return $this->unit(['license_type' => UnitLicense::PRIVATE_HOSPITALITY, 'licensed_units_count' => 1]);
     }
 
     /** @param array<string, mixed> $extra */

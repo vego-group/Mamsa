@@ -681,6 +681,49 @@ POST /admin/units/{id}/apartments      { count, permits }
    هو الجواب**، مش شكل الخطأ.
 4. ومافيش `/submit` هنا: الأدمن بيوافق بنفسه.
 
+**ترتيب الفحص كامل على `POST /admin/units/{id}/apartments`** (مقاس من الكود، 03/10/2026). أول واحد يقع هو اللي بيرجع:
+
+| # | الفحص | الرد |
+|---|---|---|
+| ١ | الوحدة مش موجودة | `404 NOT_FOUND` |
+| ٢ | الوحدة مش لممسى | `403 NOT_MAMSA_OWNED` |
+| ٣ | الوحدة مش `approved` | `409 SOURCE_NOT_APPROVED` |
+| ٤ | شكل الحقول: `count`، و`permits.*.number` و`fileId` إلزاميين، وصيغة التاريخ | `422 VALIDATION_ERROR` |
+| ٥ | الكروت مع وضع الترخيص | `422 PERMIT_MODE_MIXED` |
+| ٦ | ملف كل كارت (موجود ومرفوع من الأدمن نفسه) | `422 VALIDATION_ERROR` · `fields["permits.{i}.fileId"]` |
+| ٧ | **اسم الباب**: موجود في المبنى، أو مكرر في الطلب، أو `"1"` | `422 VALIDATION_ERROR` · `fields["permits.{i}.apartmentNo"]` |
+| ٨ | **العَلَم والترخيص** | `422 MULTI_UNIT_DISABLED` · `MULTI_UNIT_REQUIRES_FACILITY_LICENSE` · `QUANTITY_EXCEEDS_LICENSED_UNITS` |
+| ٩ | الوحدة الأصلية ناقصة | `422 SOURCE_UNIT_INCOMPLETE` |
+| ١٠ | عدد الكروت ≠ الأبواب الجديدة · **رقم مكرر جوّه الطلب** | `422 PERMITS_COUNT_MISMATCH` · `422 DUPLICATE_PERMIT_NUMBER` |
+| ١١ | جوّه الـtransaction: **رقم مستعمل في إعلان تاني** | `422 DUPLICATE_PERMIT_NUMBER` |
+| ١٢ | جوّه الـtransaction: **كل باب جديد بيعدّي على بوابة الإرسال**، ومنها **التاريخ المنتهي** | **`422 APARTMENT_INCOMPLETE`** ↓ |
+
+**يعني:** تضارب اسم الباب (٧) **قبل** العَلَم (٨)، والرقم المكرر (١٠، ١١) والتاريخ المنتهي (١٢) **بعده**. فعلى الإنتاج
+(العَلَم مقفول)، كارت بتاريخ منتهي أو رقم مكرر بيرجّع **`MULTI_UNIT_DISABLED`**، وكارت باسم `"1"` بيرجّع **`VALIDATION_ERROR`**.
+
+**`APARTMENT_INCOMPLETE`** موجود على سطح الأدمن بس:
+
+```json
+// 422
+{
+  "message": "تعذّر إنشاء الوحدات — إحدى النسخ غير مكتملة",
+  "code": "APARTMENT_INCOMPLETE",
+  "fields": { "permitExpiresAt": "تصريح الوحدة منتهي — جدّده قبل الإرسال للمراجعة" },
+  "meta": { "apartmentNo": "3" }
+}
+```
+
+- **إمتى:** باب جديد اتعمل جوّه الـtransaction ومعدّاش بوابة الإرسال (نفس فحص `submit`). **عملياً سببه الوحيد كارت تاريخه فات**
+  (أو كارت من غير تاريخ لما `permitExpiryRequired` يبقى `true`). الكروت التانية الناقصة بتقع قبل كده في (٤)، والأصل الناقص في (٩).
+- **`fields`** بمفاتيح الويزارد، **من غير رقم الكارت**. **و`meta.apartmentNo`** = اسم الباب اللي وقع، فطابقوه على الكارت اللي
+  `apartmentNo` بتاعه نفس القيمة. ولو الكارت ماكانش مسمّي، الاسم ده هو الرقم التلقائي اللي كان هياخده.
+- **المبنى كله بيترجع:** مافيش ولا باب ولا تصريح اتكتب، والأصل زي ما هو.
+- **على لوحة الشريك نفس الحالة** بترجع `400 VALIDATION` + `fields.permitExpiresAt` من غير `meta` (الملحق §١.٢).
+
+**مثبّت باختبارات:** `ApartmentsTest::test_a_door_name_conflict_is_refused_before_the_rollout_flag` ·
+`ApartmentsTest::test_an_expired_or_repeated_card_is_judged_after_the_rollout_flag` ·
+`ApartmentsTest::test_an_expired_card_rolls_the_building_back_as_apartment_incomplete`.
+
 ### ٨.٧ شاشة المراجعة — اللي بيتغيّر فيها
 
 `GET /admin/approvals/{id}` بقى فيه `permit` و`addressMatch` و`group` (§٢ في الملحق). التلات قواعد اللي بتوقع الشاشة لو اتكسرت:
