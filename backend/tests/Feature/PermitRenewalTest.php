@@ -390,6 +390,100 @@ class PermitRenewalTest extends TestCase
     /* ---------- fixtures ---------- */
 
     /** @param array<string, mixed> $extra */
+    /* ---------- admin: check order, currentPermit, single read ---------- */
+
+    public function test_reject_validates_the_body_before_it_looks_up_the_renewal(): void
+    {
+        $unit = $this->unit(expires: now()->addDays(20)->toDateString());
+        $renewal = PermitRenewal::open($unit, ['expires_at' => now()->addYear()->toDateString()]);
+        $admin = $this->actingAs($this->admin, 'admin-panel');
+
+        // No reason: 422 even for an id that does not exist.
+        $admin->postJson('/admin/permit-renewals/999999/reject', [])
+            ->assertStatus(422)->assertJsonPath('code', 'VALIDATION_ERROR');
+        // With a reason: the missing id is 404.
+        $admin->postJson('/admin/permit-renewals/999999/reject', ['reason' => 'x'])
+            ->assertStatus(404)->assertJsonPath('code', 'NOT_FOUND');
+
+        $admin->postJson("/admin/permit-renewals/{$renewal->id}/reject", ['reason' => 'x'])->assertOk();
+
+        // Already decided, no reason: still 422 first.
+        $admin->postJson("/admin/permit-renewals/{$renewal->id}/reject", [])
+            ->assertStatus(422)->assertJsonPath('code', 'VALIDATION_ERROR');
+        // Already decided, with a reason: 409.
+        $admin->postJson("/admin/permit-renewals/{$renewal->id}/reject", ['reason' => 'x'])
+            ->assertStatus(409)->assertJsonPath('code', 'RENEWAL_NOT_PENDING');
+    }
+
+    public function test_approve_has_no_body_so_it_is_404_then_409(): void
+    {
+        $unit = $this->unit(expires: now()->addDays(20)->toDateString());
+        $renewal = PermitRenewal::open($unit, ['expires_at' => now()->addYear()->toDateString()]);
+        $admin = $this->actingAs($this->admin, 'admin-panel');
+
+        $admin->postJson('/admin/permit-renewals/999999/approve')
+            ->assertStatus(404)->assertJsonPath('code', 'NOT_FOUND');
+        $admin->postJson("/admin/permit-renewals/{$renewal->id}/approve")->assertOk();
+        $admin->postJson("/admin/permit-renewals/{$renewal->id}/approve")
+            ->assertStatus(409)->assertJsonPath('code', 'RENEWAL_NOT_PENDING');
+    }
+
+    public function test_current_permit_is_what_is_in_force_now_not_at_the_decision(): void
+    {
+        $unit = $this->unit(expires: now()->addDays(20)->toDateString());
+        $original = Permit::currentFor($unit);
+        $rejected = PermitRenewal::open($unit, ['expires_at' => now()->addMonths(6)->toDateString()]);
+        $admin = $this->actingAs($this->admin, 'admin-panel');
+        $admin->postJson("/admin/permit-renewals/{$rejected->id}/reject", ['reason' => 'x'])->assertOk();
+
+        $first = PermitRenewal::open($unit->fresh(), ['expires_at' => now()->addYear()->toDateString()]);
+        $admin->postJson("/admin/permit-renewals/{$first->id}/approve")->assertOk();
+
+        $row = fn (string $status, Permit $p) => collect($admin->getJson("/admin/permit-renewals?status={$status}&pageSize=100")
+            ->assertOk()->json('items'))->firstWhere('id', (string) $p->id);
+
+        // Rejected while the original was in force, read now: currentPermit is
+        // the permit that replaced it later, not the one at the decision.
+        $this->assertSame((string) $first->id, $row('rejected', $rejected)['currentPermit']['id']);
+        // The superseded original points at its successor.
+        $this->assertSame((string) $first->id, $row('superseded', $original)['currentPermit']['id']);
+        // An approved renewal is now current, so it points at itself.
+        $this->assertSame((string) $first->id, $row('current', $first)['currentPermit']['id']);
+    }
+
+    public function test_one_renewal_can_be_read_by_id_in_the_list_shape(): void
+    {
+        $unit = $this->unit(expires: now()->addDays(20)->toDateString());
+        $renewal = PermitRenewal::open($unit, ['expires_at' => now()->addYear()->toDateString()]);
+        $admin = $this->actingAs($this->admin, 'admin-panel');
+
+        $listed = collect($admin->getJson('/admin/permit-renewals')->assertOk()->json('items'))
+            ->firstWhere('id', (string) $renewal->id);
+        $one = $admin->getJson("/admin/permit-renewals/{$renewal->id}")->assertOk()->json();
+
+        $this->assertSame($listed, $one);
+        $this->assertSame((string) Permit::currentFor($unit)->id, $one['currentPermit']['id']);
+
+        // Still readable once decided — the reason the endpoint exists.
+        $admin->postJson("/admin/permit-renewals/{$renewal->id}/reject", ['reason' => 'x'])->assertOk();
+        $admin->getJson("/admin/permit-renewals/{$renewal->id}")->assertOk()->assertJsonPath('status', Permit::STATUS_REJECTED);
+
+        $admin->getJson('/admin/permit-renewals/999999')->assertStatus(404)->assertJsonPath('code', 'NOT_FOUND');
+    }
+
+    public function test_reading_one_renewal_needs_approvals_view(): void
+    {
+        $unit = $this->unit(expires: now()->addDays(20)->toDateString());
+        $renewal = PermitRenewal::open($unit, ['expires_at' => now()->addYear()->toDateString()]);
+        Role::findOrCreate('finance', 'web');
+        $finance = User::factory()->create(['is_active' => true]);
+        $finance->assignRole('finance');
+
+        $this->actingAs($finance, 'admin-panel')
+            ->getJson("/admin/permit-renewals/{$renewal->id}")
+            ->assertStatus(403)->assertJsonPath('code', 'INSUFFICIENT_PERMISSION');
+    }
+
     private function unit(?string $expires, array $extra = [], ?User $owner = null): Unit
     {
         $owner ??= $this->partner;

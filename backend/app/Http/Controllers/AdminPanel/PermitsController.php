@@ -66,6 +66,24 @@ class PermitsController extends Controller
     }
 
     /** POST /admin/permit-renewals/:id/approve — it becomes the permit in force. */
+    /**
+     * GET /admin/permit-renewals/:id — one row, in exactly the list's shape.
+     *
+     * Any status: a decided renewal must stay readable by id, or a detail page
+     * built on the list loses it once rejected and superseded rows pile up
+     * ahead of it in the pages.
+     */
+    public function renewal(string $id): JsonResponse
+    {
+        $permit = Permit::find($id);
+
+        if (! $permit) {
+            $this->fail('NOT_FOUND', 'طلب التجديد غير موجود', 404);
+        }
+
+        return response()->json($this->shape($permit, withCurrent: true));
+    }
+
     public function approve(Request $request, string $id): JsonResponse
     {
         $renewal = $this->pending($id);
