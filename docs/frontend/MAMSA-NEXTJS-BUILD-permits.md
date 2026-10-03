@@ -2,8 +2,8 @@
 
 **الأساس:** `docs/backend/permits-frontend-contract-phases-1-3.md`
 **والملحق:** `docs/backend/permits-frontend-contract-phases-4-6.md` (وضع أ + المرحلة ٦)
-**الكود المنشور:** العقد اتنشر بالكامل لحد `prod-2026-10-02-pendingreview` — **الاتنين بيوصفوا الإنتاج دلوقتي** (التاجات اللي بين `prod-2026-10-01-doors` والتاج ده — accesslog وcollation وmasktoken وseedguard — **مافيهاش أي تغيير في العقد**)
-**التاريخ:** 22/09/2026 · **آخر تحديث 02/10/2026** (الإنتاج: `prod-2026-10-02-pendingreview`)
+**الكود المنشور:** العقد اتنشر بالكامل لحد `prod-2026-10-03-renewalshow` — **الاتنين بيوصفوا الإنتاج دلوقتي** (التاجات اللي بين `prod-2026-10-01-doors` و`prod-2026-10-02-pendingreview` — accesslog وcollation وmasktoken وseedguard — **مافيهاش أي تغيير في العقد**)
+**التاريخ:** 22/09/2026 · **آخر تحديث 03/10/2026** (الإنتاج: `prod-2026-10-03-renewalshow`)
 
 > 🔴 **العَلَم هو الفرق الوحيد بين البيئتين:** `multiUnitEnabled` = `true` على staging
 > و**`false` على الإنتاج**. كل حاجة في الملف ده **منشورة**، بس **§٨ (وضع أ)** مقفول
@@ -427,6 +427,9 @@ const multiUnit = flags.multiUnitEnabled;      // false على الإنتاج د
 ### ٣.٤ شاشة جديدة: `/permit-renewals` — طابور التجديدات
 
 **طابور مستقل، مش جوّه `/approvals`.** `GET /admin/permit-renewals?status=pending`
+
+**صفحة التفاصيل تقرا الطلب بالـid:** `GET /admin/permit-renewals/{id}` (من 03/10، العقد §١.٥ب)، **مش من القايمة**، لأن القايمة
+بتكبر بالصفوف المحسومة والطلب بيخرج من الصفحات الأولى. و`currentPermit` = الساري **دلوقتي** (§١.٥)، فسمّوه كده على الشاشة.
 
 **شاشة التفاصيل — الحاجة الوحيدة اللي المراجع محتاجها: المقارنة.**
 

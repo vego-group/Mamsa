@@ -2,7 +2,7 @@
 
 **مكتوب من الكود المنشور على الإنتاج:** `prod-2026-09-27`
 **الأمثلة:** طلبات حقيقية على staging والإنتاج (نفس كود التصاريح بالظبط)
-**تاريخ:** 22/09/2026 · **آخر تحديث 02/10/2026** (الإنتاج: `prod-2026-10-02-pendingreview`)
+**تاريخ:** 22/09/2026 · **آخر تحديث 03/10/2026** (الإنتاج: `prod-2026-10-03-renewalshow`)
 
 > 📌 **الملف ده هو الأساس.** المراحل ٤ و٦ اتنشرت على الإنتاج يوم 27/09، وعقدها في
 > [`permits-frontend-contract-phases-4-6.md`](permits-frontend-contract-phases-4-6.md).
@@ -248,6 +248,36 @@
 
 **`currentPermit`** هو اللي هيتبدّل. المراجع بيقارن `permitExpiresAt` بتاع الطلب مع `currentPermit.permitExpiresAt`.
 
+> **`currentPermit` = التصريح الساري للوحدة دلوقتي، وقت القراية** (اتسجّل 03/10/2026). **مش** اللي كان ساري لحظة القرار:
+> بيتحسب في كل رد، ومش متخزّن مع الطلب. و`permitStatus` نفس الكلام: حالة الوحدة دلوقتي.
+>
+> | حالة الصف | `currentPermit` بيشاور على |
+> |---|---|
+> | `pending` | التصريح الساري اللي الطلب هيبدّله |
+> | `current` (يعني **اتعتمد**) | **الصف نفسه** (`currentPermit.id` = `id`) |
+> | `rejected` | الساري **دلوقتي**. لو اتعتمد تجديد بعده، **بيشاور على التجديد ده**، مش على اللي كان ساري يوم الرفض |
+> | `superseded` | **اللي حلّ محله** (أو اللي بعده لو اتجدّد تاني) |
+> | الوحدة مالهاش تصريح ساري | `null` |
+>
+> **ومافيش حالة اسمها `approved`:** الطلب المعتمد بيبقى **`current`**، ولما يتجدّد بعده بيبقى **`superseded`**.
+> فالقيم الأربعة بس: `pending` · `current` · `rejected` · `superseded`. وفلتر `status=current` بيرجّع **كل** التصاريح السارية،
+> مش التجديدات المعتمدة بس (التصريح الأول اللي اتسجّل مع الوحدة بيظهر فيه كمان).
+>
+> **مثبّت باختبار:** `PermitRenewalTest::test_current_permit_is_what_is_in_force_now_not_at_the_decision`. ولو الحساب
+> اتغيّر لـ«وقت القرار»، الاختبار بيقع.
+
+### ١.٥ب 🆕 `GET /admin/permit-renewals/{id}` — طلب واحد (03/10/2026)
+
+**الصلاحية:** `approvals.view` · ✅ **staging** · ✅ **الإنتاج** (`prod-2026-10-03-renewalshow`)
+
+- **نفس شكل الصف في القايمة بالظبط، ومعاه `currentPermit`.** الكائن مباشرة، مش جوّه `items`.
+- **أي حالة:** `pending` و`current` و`rejected` و`superseded`، فصفحة التفاصيل بتفضل شغّالة بعد القرار ومهما الصفحات زادت.
+- `404` `{ "message": "طلب التجديد غير موجود", "code": "NOT_FOUND" }` لو مش موجود · `403 INSUFFICIENT_PERMISSION` من غير `approvals.view`.
+- ⚠️ **`permitFileUrl` رابط موقّع جديد في كل نداء**، فقيمته بتختلف بين القايمة والنداء ده. **ماتقارنوش الصفين بيه.**
+
+**مثبّت باختبار:** `PermitRenewalTest::test_one_renewal_can_be_read_by_id_in_the_list_shape` (نفس الصف بالظبط، وبيفضل يتقري
+بعد الرفض، و`404` للمش موجود) و`PermitRenewalTest::test_reading_one_renewal_needs_approvals_view` (`403`).
+
 ### ١.٦ `POST /admin/permit-renewals/{id}/approve`
 
 **الصلاحية:** `approvals.manage` · **Body:** فاضي
@@ -299,6 +329,18 @@
 // 403 — صلاحية
 { "message": "…", "code": "INSUFFICIENT_PERMISSION" }
 ```
+
+**ترتيب الفحص — مقاس ومثبّت باختبار** (اتسجّل 03/10/2026). الصلاحية (`401`/`403`) قبل الكل، وبعدها:
+
+| المسار | الترتيب |
+|---|---|
+| `POST …/{id}/reject` | **`422 VALIDATION_ERROR` (الـbody) ← `404 NOT_FOUND` ← `409 RENEWAL_NOT_PENDING`** |
+| `POST …/{id}/approve` | (مالوش body) **`404 NOT_FOUND` ← `409 RENEWAL_NOT_PENDING`** |
+
+**يعني في الرفض، الـbody بيتفحص الأول:** طلب رفض من غير `reason` بيرجّع **`422`** حتى لو الـid مش موجود أو الطلب اتحسم خلاص.
+`404` و`409` بيظهروا بس لما الـbody سليم.
+**مثبّت باختبارين:** `PermitRenewalTest::test_reject_validates_the_body_before_it_looks_up_the_renewal` (ولو البحث اتنقل قبل
+التحقق، الاختبار بيقع) و`PermitRenewalTest::test_approve_has_no_body_so_it_is_404_then_409`.
 
 ### ١.٩ `GET /admin/approvals/{id}` — اللي اتغيّر فيه
 
